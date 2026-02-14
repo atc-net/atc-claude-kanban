@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup Label="Metadata configuration">
+    <OrganizationName>atc-net</OrganizationName>
+    <RepositoryName>atc-claude-kanban</RepositoryName>
+  </PropertyGroup>
+
+  <!-- Solution wide properties -->
+  <PropertyGroup Label="Assembly Naming">
+    <Company>$(OrganizationName)</Company>
+    <Authors>$(OrganizationName)</Authors>
+    <NeutralLanguage>en</NeutralLanguage>
+    <DefaultLanguage>en-US</DefaultLanguage>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Versioning">
+    <!-- The 'x-release-please-' comments are used to inform the release-please action that it should update the semver version here -->
+    <!-- x-release-please-start-version -->
+    <Version>1.0.0</Version>
+    <!-- x-release-please-end -->
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Compile settings">
+    <Nullable>enable</Nullable>
+    <LangVersion>14.0</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>1573,1591,1712,CA1014</NoWarn>
+
+    <!-- Used by code coverage -->
+    <DebugType>full</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Analyzer settings">
+    <AnalysisLevel>latest-All</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+  </PropertyGroup>
+
+  <!-- Treat warnings as errors are always on when building in release -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+  </PropertyGroup>
+
+  <!-- Shared code analyzers used for all projects in the solution -->
+  <ItemGroup Label="Code Analyzers">
+    <PackageReference Include="Atc.Analyzer" Version="0.1.22" PrivateAssets="All" />
+    <PackageReference Include="AsyncFixer" Version="2.1.0" PrivateAssets="All" />
+    <PackageReference Include="Asyncify" Version="0.9.7" PrivateAssets="All" />
+    <PackageReference Include="Meziantou.Analyzer" Version="2.0.301" PrivateAssets="All" />
+    <PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7" PrivateAssets="All" />
+    <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.507" PrivateAssets="All" />
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.19.0.132793" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>

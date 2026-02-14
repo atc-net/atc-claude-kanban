@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Atc.Claude.Kanban/Atc.Claude.Kanban.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Atc.Claude.Kanban.Tests/Atc.Claude.Kanban.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Atc.Claude.Kanban": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:57682;http://localhost:57683"
+    }
+  }
+}

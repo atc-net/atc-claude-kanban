@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <PackageId>atc-claude-kanban</PackageId>
+    <PackageTags>claude;claude-code;kanban;dashboard</PackageTags>
+    <Description>Real-time Kanban dashboard for monitoring Claude Code agent tasks, sessions, and subagents via a browser-based board with SSE live updates.</Description>
+    <Title>ATC Claude Kanban</Title>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>atc-claude-kanban</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <DebugType>pdbonly</DebugType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Link="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Atc.Rest.MinimalApi" Version="2.0.37" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.3" />
+  </ItemGroup>
+
+</Project>
