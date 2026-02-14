@@ -1,0 +1,50 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - name: 🛒 Checkout repository
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - name: ⚙️ Setup dotnet 10.0.x
+        if: ${{ steps.release.outputs.release_created }}
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: 🧹 Clean
+        if: ${{ steps.release.outputs.release_created }}
+        run: dotnet clean -c Release && dotnet nuget locals all --clear
+
+      - name: 🔁 Restore packages
+        if: ${{ steps.release.outputs.release_created }}
+        run: dotnet restore
+
+      - name: 🛠️ Building library in release mode
+        if: ${{ steps.release.outputs.release_created }}
+        run: dotnet build -c Release --no-restore /p:UseSourceLink=true
+
+      - name: 🗳️ Creating library package for release
+        if: ${{ steps.release.outputs.release_created }}
+        run: dotnet pack -c Release --no-restore -o ${GITHUB_WORKSPACE}/packages /p:PublicRelease=true
+
+      - name: 📦 Push packages to NuGet
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          dotnet nuget push ${GITHUB_WORKSPACE}/packages/*.nupkg -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate --no-symbols
