@@ -3,14 +3,18 @@
 Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.com/en/docs/claude-code) agent tasks, sessions, and subagents through a browser-based board.
 
 - 📊 **Real-time Kanban board** — tasks flow through Pending → In Progress → Completed as Claude works
+- 📈 **Timeline view** — horizontal bar chart showing task durations, colored by status, with hover tooltips
+- 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
+- 📦 **Auto-archive** — stale sessions (>7 days, no active tasks) collapse into an "Archived" section
 - 🤖 **Agent team support** — color-coded team members, owner filtering, member badges
 - 🧩 **Subagent visibility** — see active subagents spawned via the Task tool, parsed from JSONL transcripts
-- 🔗 **Task dependencies** — visual blockedBy/blocks relationships
+- 🔗 **Task dependencies** — visual blockedBy/blocks relationships with smart badge clearing
 - 📡 **Server-Sent Events** — instant updates via file watching, no polling
 - ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
 - 🌙 **Dark/light themes** — system preference detection
 - 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
 - 📝 **Plan viewer** — view and open Claude Code plans directly from the dashboard
+- 🔌 **Auto-port discovery** — automatically finds an available port when the default is taken
 
 ## 📋 Requirements
 
@@ -33,7 +37,7 @@ atc-claude-kanban
 # Start and open browser automatically
 atc-claude-kanban --open
 
-# Custom port
+# Custom port (fails fast if port is unavailable)
 atc-claude-kanban --port 8080
 
 # Custom Claude directory
@@ -41,6 +45,8 @@ atc-claude-kanban --dir ~/.claude-work
 ```
 
 Then open your browser to `http://localhost:3456` and watch your Claude Code tasks in real time.
+
+> **Auto-port:** When using the default port and it's already in use, the tool automatically tries up to 10 consecutive ports (3456, 3457, ...). When `--port` is specified explicitly, the tool fails fast.
 
 ## ✨ Features
 
@@ -53,6 +59,35 @@ Three-column board showing task status with live updates:
 | **Pending** | Tasks waiting to start |
 | **In Progress** | Tasks Claude is actively working on (pulsing indicator) |
 | **Completed** | Finished tasks |
+
+### 📈 Timeline View
+
+Toggle between Kanban and Timeline views using the view toggle buttons in the header:
+
+- Horizontal bars show each task's duration from creation to last update
+- Color-coded by status: gray (pending), orange with glow (in-progress), green (completed)
+- Hover tooltips show task name, status, duration, and start time
+- Click any bar to open the task detail panel
+- Time axis adapts to data range (seconds/minutes/hours/days)
+- View preference persists across page reloads
+
+### 🔔 Desktop Notifications
+
+Click the bell icon in the header to enable browser notifications:
+
+- Fires when a task transitions from **in_progress** to **completed**
+- Includes a two-tone audio chime (synthesized via Web Audio API — no audio files)
+- Click the notification to focus the window and open the completed task
+- Preference saved in localStorage
+
+### 📦 Auto-Archive
+
+Sessions older than 7 days with no in-progress tasks are automatically archived:
+
+- Archived sessions appear in a collapsible "Archived (N)" section at the bottom of the sidebar
+- Dimmed to 50% opacity for visual distinction
+- Expand/collapse state persists across page reloads
+- Hidden during search or when filtering to active sessions
 
 ### 🤖 Agent Teams
 
