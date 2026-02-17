@@ -4538,25 +4538,25 @@
 
         const row = document.createElement('div');
         row.className = 'timeline-row';
+        row.dataset.action = 'showTaskDetail';
+        row.dataset.taskId = task.id;
+        row.dataset.sessionId = task.sessionId || currentSessionId;
+        row.dataset.title = task.subject;
+        row.dataset.created = task.createdAt;
+        row.dataset.updated = task.updatedAt || task.createdAt;
+        row.dataset.status = task.status;
+        row.style.cursor = 'pointer';
         row.innerHTML = `
           <span class="timeline-label" title="${escapeHtml(task.subject)}">#${escapeHtml(task.id)} ${escapeHtml(task.subject)}</span>
           <div class="timeline-bar-container">
             <div class="timeline-bar ${statusClass}"
-                 style="left: ${left}%; width: ${width}%"
-                 data-action="showTaskDetail"
-                 data-task-id="${task.id}"
-                 data-session-id="${task.sessionId || currentSessionId}"
-                 data-title="${escapeHtml(task.subject)}"
-                 data-created="${task.createdAt}"
-                 data-updated="${task.updatedAt || task.createdAt}"
-                 data-status="${task.status}">
+                 style="left: ${left}%; width: ${width}%">
             </div>
           </div>`;
 
-        const bar = row.querySelector('.timeline-bar');
-        bar.addEventListener('mouseenter', showTimelineTooltip);
-        bar.addEventListener('mouseleave', hideTimelineTooltip);
-        bar.addEventListener('mousemove', moveTimelineTooltip);
+        row.addEventListener('mouseenter', showTimelineTooltip);
+        row.addEventListener('mouseleave', hideTimelineTooltip);
+        row.addEventListener('mousemove', moveTimelineTooltip);
         rowsEl.appendChild(row);
       }
     }
@@ -4575,17 +4575,17 @@
     }
 
     function showTimelineTooltip(e) {
-      const bar = e.currentTarget;
+      const row = e.currentTarget;
       const tooltip = document.getElementById('timeline-tooltip');
       const titleEl = document.getElementById('tooltip-title');
       const timeEl = document.getElementById('tooltip-time');
 
-      titleEl.textContent = bar.dataset.title;
+      titleEl.textContent = row.dataset.title;
 
-      const created = new Date(bar.dataset.created);
-      const updated = new Date(bar.dataset.updated);
+      const created = new Date(row.dataset.created);
+      const updated = new Date(row.dataset.updated);
       const duration = updated - created;
-      const status = bar.dataset.status.replace('_', ' ');
+      const status = row.dataset.status.replace('_', ' ');
 
       let durationStr;
       if (duration < 1000) {
@@ -4603,9 +4603,8 @@
       timeEl.textContent = `${status} · ${durationStr} · ${created.toLocaleTimeString()}`;
       tooltip.classList.add('visible');
 
-      const rect = bar.getBoundingClientRect();
       tooltip.style.left = `${e.clientX + 12}px`;
-      tooltip.style.top = `${rect.top - 40}px`;
+      tooltip.style.top = `${e.clientY - 40}px`;
     }
 
     function moveTimelineTooltip(e) {
