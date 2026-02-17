@@ -2155,6 +2155,47 @@
       width: 0;
     }
 
+    /* Archived sessions */
+    .archived-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      transition: color 0.15s;
+      user-select: none;
+    }
+
+    .archived-header:hover {
+      color: var(--text-secondary);
+    }
+
+    .archived-header svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 0.2s;
+    }
+
+    .archived-header.expanded svg {
+      transform: rotate(90deg);
+    }
+
+    .archived-sessions {
+      display: none;
+    }
+
+    .archived-sessions.visible {
+      display: block;
+    }
+
+    .session-item.archived {
+      opacity: 0.5;
+    }
+
     #toast {
       position: fixed;
       bottom: 24px;
@@ -2398,6 +2439,8 @@
     let allTasksCache = []; // Cache all tasks for search
     let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
     let previousTaskStatuses = new Map();
+    const ARCHIVE_DAYS = 7;
+    let archivedExpanded = localStorage.getItem('archivedExpanded') === 'true';
     let bulkDeleteSessionId = null; // Track session for bulk delete
     let ownerFilter = '';
     let selectedTaskId = null;
@@ -2977,6 +3020,67 @@
       renderKanban();
     }
 
+    function isSessionStale(session) {
+      if (session.inProgress > 0) return false;
+      const modifiedAt = new Date(session.modifiedAt);
+      const daysAgo = (Date.now() - modifiedAt.getTime()) / (1000 * 60 * 60 * 24);
+      return daysAgo > ARCHIVE_DAYS;
+    }
+
+    function toggleArchived() {
+      archivedExpanded = !archivedExpanded;
+      localStorage.setItem('archivedExpanded', String(archivedExpanded));
+      const header = document.querySelector('.archived-header');
+      const container = document.querySelector('.archived-sessions');
+      if (header) header.classList.toggle('expanded', archivedExpanded);
+      if (container) container.classList.toggle('visible', archivedExpanded);
+    }
+
+    function renderSessionItem(session, isArchived) {
+      const total = session.taskCount;
+      const percent = total > 0 ? Math.round((session.completed / total) * 100) : 0;
+      const isActive = session.id === currentSessionId && viewMode === 'session';
+      const hasInProgress = session.inProgress > 0;
+      const sessionName = session.name || session.id;
+      const projectName = session.project ? session.project.split(/[/\\]/).pop() : null;
+      const primaryName = projectName || sessionName;
+      const secondaryName = projectName && projectName !== sessionName ? sessionName : null;
+      const gitBranch = session.gitBranch ? escapeHtml(session.gitBranch) : null;
+      const createdDisplay = session.createdAt ? formatDate(session.createdAt) : '';
+      const modifiedDisplay = formatDate(session.modifiedAt);
+      const timeDisplay = session.createdAt && createdDisplay !== modifiedDisplay
+        ? `Created ${createdDisplay} · Modified ${modifiedDisplay}`
+        : modifiedDisplay;
+      const tooltip = [timeDisplay, gitBranch ? `Branch: ${gitBranch}` : ''].filter(Boolean).join(' | ');
+      const isTeam = session.isTeam;
+      const memberCount = session.memberCount || 0;
+      const archivedClass = isArchived ? ' archived' : '';
+
+      return `
+        <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass} ${isActive ? 'active' : ''}" title="${tooltip}">
+          <div class="session-name">${escapeHtml(primaryName)}</div>
+          ${secondaryName ? `<div class="session-secondary">${escapeHtml(secondaryName)}</div>` : ''}
+          ${gitBranch ? `<div class="session-branch">${gitBranch}</div>` : ''}
+          ${session.project ? `<div class="session-project" title="${escapeHtml(session.project)}">${escapeHtml(session.project)}</div>` : ''}
+          ${session.planTitle ? `<div class="session-plan">${escapeHtml(session.planTitle)}</div>` : ''}
+          <div class="session-progress">
+            <span class="session-indicators">
+              ${isTeam ? `<span class="team-badge" title="${memberCount} team members"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${memberCount}</span>` : ''}
+              <span class="team-info-btn" data-action="showSessionInfoModal" data-session-id="${session.id}" title="View session info">ℹ</span>
+              ${session.isCompleted ? `<span class="completed-badge" title="Completed (${session.peakTaskCount} tasks)">Done ${session.peakTaskCount}</span>` : ''}
+              ${session.activeSubagentCount > 0 ? `<span class="subagent-badge" title="${session.activeSubagentCount} active subagent${session.activeSubagentCount !== 1 ? 's' : ''} (${session.subagentCount} total)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>${session.activeSubagentCount}</span>` : ''}
+              ${session.hasPlan ? `<span class="plan-indicator" data-action="openPlanForSession" data-session-id="${session.slug || session.id}" title="View plan"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>` : ''}
+              ${session.project ? `<span class="session-project-actions"><span class="session-project-btn" data-action="copyPath" data-path="${escapeHtml(session.project)}" title="Copy path"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="session-project-btn" data-action="openFolder" data-path="${escapeHtml(session.project)}" title="Open in explorer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span></span>` : ''}
+              ${hasInProgress ? '<span class="pulse"></span>' : ''}
+            </span>
+            <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div></div>
+            <span class="progress-text">${session.isCompleted ? 'Done' : `${session.completed}/${total}`}</span>
+          </div>
+          <div class="session-time">${formatDate(session.modifiedAt)}</div>
+        </button>
+      `;
+    }
+
     function renderSessions() {
       // Update project dropdown
       updateProjectDropdown();
@@ -3017,7 +3121,20 @@
         });
       }
 
-      if (filteredSessions.length === 0) {
+      // Split into active and archived sessions
+      const activeSessions = [];
+      const archivedSessions = [];
+      for (const session of filteredSessions) {
+        if (searchQuery || sessionFilter === 'active') {
+          activeSessions.push(session);
+        } else if (isSessionStale(session)) {
+          archivedSessions.push(session);
+        } else {
+          activeSessions.push(session);
+        }
+      }
+
+      if (activeSessions.length === 0 && archivedSessions.length === 0) {
         let emptyMsg = 'No sessions found';
         let emptyHint = 'Tasks appear when you use Claude Code';
 
@@ -3043,56 +3160,22 @@
         return;
       }
 
-      sessionsList.innerHTML = filteredSessions.map(session => {
-        const total = session.taskCount;
-        const percent = total > 0 ? Math.round((session.completed / total) * 100) : 0;
-        const isActive = session.id === currentSessionId && viewMode === 'session';
-        const hasInProgress = session.inProgress > 0;
-        const sessionName = session.name || session.id;
-        const projectName = session.project ? session.project.split(/[/\\]/).pop() : null;
-        const primaryName = projectName || sessionName;
-        const secondaryName = projectName && projectName !== sessionName ? sessionName : null;
+      sessionsList.innerHTML = activeSessions.map(s => renderSessionItem(s)).join('');
 
-        // Format git branch for display
-        const gitBranch = session.gitBranch ? escapeHtml(session.gitBranch) : null;
-
-        // Format timestamps for display
-        const createdDisplay = session.createdAt ? formatDate(session.createdAt) : '';
-        const modifiedDisplay = formatDate(session.modifiedAt);
-        const timeDisplay = session.createdAt && createdDisplay !== modifiedDisplay
-          ? `Created ${createdDisplay} · Modified ${modifiedDisplay}`
-          : modifiedDisplay;
-
-        // Build tooltip
-        const tooltip = [timeDisplay, gitBranch ? `Branch: ${gitBranch}` : ''].filter(Boolean).join(' | ');
-
-        const isTeam = session.isTeam;
-        const memberCount = session.memberCount || 0;
-
-        return `
-          <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item ${isActive ? 'active' : ''}" title="${tooltip}">
-            <div class="session-name">${escapeHtml(primaryName)}</div>
-            ${secondaryName ? `<div class="session-secondary">${escapeHtml(secondaryName)}</div>` : ''}
-            ${gitBranch ? `<div class="session-branch">${gitBranch}</div>` : ''}
-            ${session.project ? `<div class="session-project" title="${escapeHtml(session.project)}">${escapeHtml(session.project)}</div>` : ''}
-            ${session.planTitle ? `<div class="session-plan">${escapeHtml(session.planTitle)}</div>` : ''}
-            <div class="session-progress">
-              <span class="session-indicators">
-                ${isTeam ? `<span class="team-badge" title="${memberCount} team members"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${memberCount}</span>` : ''}
-                <span class="team-info-btn" data-action="showSessionInfoModal" data-session-id="${session.id}" title="View session info">ℹ</span>
-                ${session.isCompleted ? `<span class="completed-badge" title="Completed (${session.peakTaskCount} tasks)">Done ${session.peakTaskCount}</span>` : ''}
-                ${session.activeSubagentCount > 0 ? `<span class="subagent-badge" title="${session.activeSubagentCount} active subagent${session.activeSubagentCount !== 1 ? 's' : ''} (${session.subagentCount} total)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>${session.activeSubagentCount}</span>` : ''}
-                ${session.hasPlan ? `<span class="plan-indicator" data-action="openPlanForSession" data-session-id="${session.slug || session.id}" title="View plan"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>` : ''}
-                ${session.project ? `<span class="session-project-actions"><span class="session-project-btn" data-action="copyPath" data-path="${escapeHtml(session.project)}" title="Copy path"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="session-project-btn" data-action="openFolder" data-path="${escapeHtml(session.project)}" title="Open in explorer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span></span>` : ''}
-                ${hasInProgress ? '<span class="pulse"></span>' : ''}
-              </span>
-              <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div></div>
-              <span class="progress-text">${session.isCompleted ? 'Done' : `${session.completed}/${total}`}</span>
-            </div>
-            <div class="session-time">${formatDate(session.modifiedAt)}</div>
-          </button>
+      // Append archived section if there are stale sessions
+      if (archivedSessions.length > 0) {
+        sessionsList.innerHTML += `
+          <div class="archived-header ${archivedExpanded ? 'expanded' : ''}" data-action="toggleArchived">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 18l6-6-6-6"/>
+            </svg>
+            <span>Archived (${archivedSessions.length})</span>
+          </div>
+          <div class="archived-sessions ${archivedExpanded ? 'visible' : ''}">
+            ${archivedSessions.map(session => renderSessionItem(session, true)).join('')}
+          </div>
         `;
-      }).join('');
+      }
 
       const items = getSessionItems();
       const activeIdx = items.findIndex(el => el.classList.contains('active'));
@@ -4740,6 +4823,7 @@
         case 'clearSearch': clearSearch(); break;
         case 'resetState': resetState(); break;
         case 'toggleNotifications': toggleNotifications(); break;
+        case 'toggleArchived': toggleArchived(); break;
         case 'toggleTheme': toggleTheme(); break;
         case 'showHelpModal': showHelpModal(); break;
 
