@@ -26,7 +26,7 @@ dotnet run --project src/Atc.Claude.Kanban -- --port 8080
 
 ```
 src/Atc.Claude.Kanban/
-  Program.cs                    # Entry point, CLI args, WebApplication wiring
+  Program.cs                    # Entry point, CLI args, auto-port discovery, WebApplication wiring
   EndpointDefinitions/          # Atc.Rest.MinimalApi IEndpointDefinition implementations
     SessionEndpointDefinition   # /api/sessions, /api/sessions/{id}, /api/sessions/{id}/agents
     TaskEndpointDefinition      # /api/tasks/all, PUT/DELETE/POST task operations
@@ -53,7 +53,7 @@ src/Atc.Claude.Kanban/
     ClaudeDirectoryWatcher      # BackgroundService with 4 FileSystemWatchers (extension-filtered)
     SseClientManager            # SSE client connection manager (singleton)
   wwwroot/
-    index.html                  # Single-page Kanban dashboard (embedded resource)
+    index.html                  # Single-page Kanban + Timeline dashboard (embedded resource)
     images/icon.png             # ATC logo (favicon + sidebar)
   GlobalUsings.cs               # All using directives centralized here
 test/Atc.Claude.Kanban.Tests/
@@ -75,12 +75,16 @@ test/Atc.Claude.Kanban.Tests/
 ## Known Pitfalls
 
 - **`System.Math.Round`** must be fully qualified — `Atc.Math` namespace conflict shadows `Math.Round`
+- **`System.Console.WriteLine`** must be fully qualified — `Atc.Console` namespace conflict shadows `Console`
 - **AsyncFixer02** false positives on in-memory LINQ chains after `await` — suppress with `#pragma warning disable AsyncFixer02`
 - **SSE must use unnamed events** (no `event:` line) — `EventSource.onmessage` only receives unnamed events
 - **SSE must write raw UTF-8 bytes** to `Stream` — `StreamWriter` with `AutoFlush = true` triggers synchronous `Flush()` which Kestrel rejects
 - **JSON options via DI** — use `Atc.Serialization.JsonSerializerOptionsFactory.Create()` registered as singleton, never allocate `JsonSerializerOptions` per-request
 - **Session/task snapshots** — `ConcurrentDictionary` caches keep sessions and tasks visible after Claude Code deletes task directories; cleared on page reload via `POST /api/cache/clear`
 - **File watcher extension filtering** — tasks/teams fire on `.json`, projects on `.jsonl`, plans on `.md` only; other file types are ignored to avoid spurious SSE events
+- **Task timestamps** — Claude Code task JSON files don't store `createdAt`/`updatedAt`; enriched at read time from `File.GetCreationTimeUtc`/`File.GetLastWriteTimeUtc`
+- **Blocked badge** — must check actual status of blocking tasks, not just presence of `blockedBy` array (completed blockers should clear the badge)
+- **Auto-port** — only when using the default port; explicit `--port` fails fast. Catches `IOException` wrapping `SocketException(AddressAlreadyInUse)`
 
 ## Coding Conventions
 
@@ -102,3 +106,7 @@ test/Atc.Claude.Kanban.Tests/
 - **Delegated event listeners** — use `data-action` attributes, not inline `onclick` handlers
 - **Log gating** — use `log.debug()`/`log.error()` wrapper (only logs on localhost/127.0.0.1)
 - **Single file** — all CSS/HTML/JS in `wwwroot/index.html` (deliberate: simplifies embedded resource distribution)
+- **localStorage persistence** — user preferences (theme, view, notifications, archived expanded) survive page reloads
+- **View toggle** — Kanban vs Timeline views with `currentView` state; both render on data updates, visibility controlled by `applyView()`
+- **Notification API** — request permission on first bell-icon click; `previousTaskStatuses` Map tracks `in_progress → completed` transitions
+- **Web Audio API** — synthesized chime (C5 523Hz + E5 659Hz sine waves), no audio files
