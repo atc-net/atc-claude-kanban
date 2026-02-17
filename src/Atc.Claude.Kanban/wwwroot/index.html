@@ -3317,6 +3317,11 @@
         });
       }
 
+      // When "Active Only" is selected, exclude stale sessions entirely
+      if (sessionFilter === 'active') {
+        filteredSessions = filteredSessions.filter(s => !isSessionStale(s));
+      }
+
       // Split into active and archived sessions
       const activeSessions = [];
       const archivedSessions = [];
