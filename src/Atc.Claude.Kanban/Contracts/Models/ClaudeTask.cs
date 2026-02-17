@@ -78,6 +78,18 @@ public sealed class ClaudeTask
     public string? Project { get; set; }
 
     /// <summary>
+    /// Gets or sets the task creation timestamp (derived from file creation time).
+    /// </summary>
+    [JsonPropertyName("createdAt")]
+    public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// Gets or sets the task last-updated timestamp (derived from file modification time).
+    /// </summary>
+    [JsonPropertyName("updatedAt")]
+    public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
     /// Returns <see langword="true"/> if this task is an internal agent lifecycle task
     /// (has metadata key "_internal" set to <see langword="true"/>).
     /// </summary>
