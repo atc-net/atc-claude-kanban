@@ -6,13 +6,35 @@ namespace Atc.Claude.Kanban;
 public static partial class Program
 {
     private const int DefaultPort = 3456;
+    private const int MaxPortAttempts = 10;
 
     public static void Main(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        var (port, openBrowser, claudeDir) = ParseArguments(args);
+        var (port, explicitPort, openBrowser, claudeDir) = ParseArguments(args);
 
+        for (var attempt = 0; attempt < MaxPortAttempts; attempt++)
+        {
+            try
+            {
+                RunServer(port, openBrowser, claudeDir, args);
+                return;
+            }
+            catch (IOException ex) when (!explicitPort && attempt < MaxPortAttempts - 1 && IsAddressInUse(ex))
+            {
+                System.Console.WriteLine($"Port {port} is in use, trying {port + 1}...");
+                port++;
+            }
+        }
+    }
+
+    private static void RunServer(
+        int port,
+        bool openBrowser,
+        string claudeDir,
+        string[] args)
+    {
         var builder = WebApplication.CreateSlimBuilder(args);
         builder.WebHost.UseUrls($"http://localhost:{port}");
 
@@ -58,10 +80,11 @@ public static partial class Program
         ILogger logger,
         string claudeDir);
 
-    private static (int Port, bool OpenBrowser, string ClaudeDir) ParseArguments(
+    private static (int Port, bool ExplicitPort, bool OpenBrowser, string ClaudeDir) ParseArguments(
         string[] args)
     {
         var port = DefaultPort;
+        var explicitPort = false;
         var openBrowser = false;
         var claudeDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -76,6 +99,7 @@ public static partial class Program
                     if (int.TryParse(args[i + 1], out var parsedPort))
                     {
                         port = parsedPort;
+                        explicitPort = true;
                     }
 
                     i += 2;
@@ -97,7 +121,31 @@ public static partial class Program
             }
         }
 
-        return (port, openBrowser, claudeDir);
+        return (port, explicitPort, openBrowser, claudeDir);
+    }
+
+    private static bool IsAddressInUse(Exception ex)
+    {
+        // Kestrel wraps SocketException in IOException
+        if (ex is IOException ioEx && ioEx.InnerException is System.Net.Sockets.SocketException socketEx)
+        {
+            return socketEx.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse;
+        }
+
+        // Walk inner exceptions in case of deeper wrapping
+        var inner = ex.InnerException;
+        while (inner is not null)
+        {
+            if (inner is System.Net.Sockets.SocketException se &&
+                se.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse)
+            {
+                return true;
+            }
+
+            inner = inner.InnerException;
+        }
+
+        return false;
     }
 
     private static void TryOpenBrowser(string url)
