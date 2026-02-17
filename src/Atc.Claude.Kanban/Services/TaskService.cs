@@ -69,10 +69,15 @@ public sealed class TaskService
         {
             try
             {
+                var createdAt = File.GetCreationTimeUtc(file);
+                var updatedAt = File.GetLastWriteTimeUtc(file);
+
                 var json = await File.ReadAllTextAsync(file, cancellationToken);
                 var task = JsonSerializer.Deserialize<ClaudeTask>(json, jsonSerializerOptions);
                 if (task is not null && !task.IsInternal)
                 {
+                    task.CreatedAt = createdAt;
+                    task.UpdatedAt = updatedAt;
                     tasks.Add(task);
                 }
             }
@@ -130,10 +135,15 @@ public sealed class TaskService
         {
             try
             {
+                var createdAt = File.GetCreationTimeUtc(file);
+                var updatedAt = File.GetLastWriteTimeUtc(file);
+
                 var json = await File.ReadAllTextAsync(file, cancellationToken);
                 var task = JsonSerializer.Deserialize<ClaudeTask>(json, jsonSerializerOptions);
                 if (task is not null && task.IsInternal)
                 {
+                    task.CreatedAt = createdAt;
+                    task.UpdatedAt = updatedAt;
                     tasks.Add(task);
                 }
             }

@@ -683,6 +683,44 @@
       background: var(--accent-dim);
     }
 
+    /* View toggle */
+    .view-toggle {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-toggle-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 5px 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: all 0.15s;
+    }
+
+    .view-toggle-btn:hover {
+      color: var(--text-secondary);
+      background: var(--bg-hover);
+    }
+
+    .view-toggle-btn.active {
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .view-toggle-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .view-toggle-btn + .view-toggle-btn {
+      border-left: 1px solid var(--border);
+    }
+
     .icon-btn-danger {
       color: #ef4444;
     }
@@ -2196,6 +2234,139 @@
       opacity: 0.5;
     }
 
+    /* Timeline view */
+    .timeline {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      padding: 20px;
+      overflow-y: auto;
+      height: calc(100vh - 140px);
+    }
+
+    .timeline.visible {
+      display: flex;
+    }
+
+    .timeline-axis {
+      display: flex;
+      justify-content: space-between;
+      padding: 0 140px 8px 140px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+
+    .timeline-axis-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .timeline-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 0;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+
+    .timeline-row:hover {
+      background: var(--bg-hover);
+    }
+
+    .timeline-label {
+      width: 130px;
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: right;
+      padding-right: 8px;
+    }
+
+    .timeline-bar-container {
+      flex: 1;
+      height: 20px;
+      position: relative;
+      background: var(--bg-elevated);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .timeline-bar {
+      position: absolute;
+      height: 100%;
+      border-radius: 3px;
+      min-width: 3px;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .timeline-bar:hover {
+      opacity: 0.85;
+    }
+
+    .timeline-bar.pending {
+      background: var(--text-muted);
+    }
+
+    .timeline-bar.in-progress {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    .timeline-bar.completed {
+      background: var(--success);
+    }
+
+    .timeline-tooltip {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .timeline-tooltip.visible {
+      display: block;
+    }
+
+    .timeline-tooltip-title {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .timeline-tooltip-time {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .timeline-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+      font-size: 13px;
+      gap: 8px;
+    }
+
+    .timeline-empty svg {
+      width: 32px;
+      height: 32px;
+      opacity: 0.4;
+    }
+
     #toast {
       position: fixed;
       bottom: 24px;
@@ -2324,6 +2495,20 @@
               </div>
               <span id="progress-percent" class="progress-text">0%</span>
             </div>
+            <div class="view-toggle">
+              <button id="view-kanban-btn" class="view-toggle-btn active" data-action="switchToKanban" title="Kanban view" aria-label="Kanban view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="5" height="18" rx="1"/>
+                  <rect x="10" y="3" width="5" height="12" rx="1"/>
+                  <rect x="17" y="3" width="5" height="15" rx="1"/>
+                </svg>
+              </button>
+              <button id="view-timeline-btn" class="view-toggle-btn" data-action="switchToTimeline" title="Timeline view" aria-label="Timeline view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M3 12h12M3 18h16"/>
+                </svg>
+              </button>
+            </div>
             <button id="notifications-toggle" class="icon-btn" data-action="toggleNotifications" title="Notifications off (click to enable)" aria-label="Toggle notifications">
               <svg id="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
@@ -2386,6 +2571,14 @@
             <div id="completed-tasks" class="column-tasks" role="list"></div>
           </div>
         </div>
+        <div id="timeline-view" class="timeline">
+          <div id="timeline-axis" class="timeline-axis"></div>
+          <div id="timeline-rows"></div>
+        </div>
+        <div id="timeline-tooltip" class="timeline-tooltip">
+          <div id="tooltip-title" class="timeline-tooltip-title"></div>
+          <div id="tooltip-time" class="timeline-tooltip-time"></div>
+        </div>
         <div id="subagent-section" class="subagent-section" style="display: none;">
           <div class="subagent-header" data-action="toggleSubagents">
             <svg class="toggle-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
@@ -2441,6 +2634,7 @@
     let previousTaskStatuses = new Map();
     const ARCHIVE_DAYS = 7;
     let archivedExpanded = localStorage.getItem('archivedExpanded') === 'true';
+    let currentView = localStorage.getItem('currentView') || 'kanban';
     let bulkDeleteSessionId = null; // Track session for bulk delete
     let ownerFilter = '';
     let selectedTaskId = null;
@@ -3018,6 +3212,8 @@
       progressBar.style.width = `${percent}%`;
 
       renderKanban();
+      if (currentView === 'timeline') renderTimeline();
+      applyView();
     }
 
     function isSessionStale(session) {
@@ -3254,6 +3450,10 @@
 
       updateOwnerFilter();
       renderKanban();
+      if (currentView === 'timeline') {
+        renderTimeline();
+      }
+      applyView();
       renderSessions();
     }
 
@@ -3681,6 +3881,7 @@
             const tasksRes = await fetch('/api/tasks/all');
             currentTasks = await tasksRes.json();
             renderKanban();
+            if (currentView === 'timeline') renderTimeline();
           } else {
             await fetchTasks(sessionId);
           }
@@ -4229,6 +4430,178 @@
       } catch (e) { /* Audio not available */ }
     }
 
+    function applyView() {
+      const kanbanBtn = document.getElementById('view-kanban-btn');
+      const timelineBtn = document.getElementById('view-timeline-btn');
+      const kanbanEl = document.getElementById('main-content');
+      const timelineEl = document.getElementById('timeline-view');
+
+      if (currentView === 'timeline') {
+        kanbanBtn.classList.remove('active');
+        timelineBtn.classList.add('active');
+        kanbanEl.style.display = 'none';
+        timelineEl.classList.add('visible');
+      } else {
+        timelineBtn.classList.remove('active');
+        kanbanBtn.classList.add('active');
+        timelineEl.classList.remove('visible');
+        kanbanEl.style.display = '';
+      }
+    }
+
+    function switchView(view) {
+      currentView = view;
+      localStorage.setItem('currentView', view);
+      applyView();
+      if (view === 'timeline') {
+        renderTimeline();
+      }
+    }
+
+    function renderTimeline() {
+      const axisEl = document.getElementById('timeline-axis');
+      const rowsEl = document.getElementById('timeline-rows');
+
+      let filtered = currentTasks.filter(t => !t.metadata?._internal);
+      if (ownerFilter) {
+        filtered = filtered.filter(t => t.owner === ownerFilter);
+      }
+
+      if (filtered.length === 0) {
+        axisEl.innerHTML = '';
+        rowsEl.innerHTML = `
+          <div class="timeline-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 6h18M3 12h12M3 18h16"/>
+            </svg>
+            <div>No tasks to display</div>
+          </div>`;
+        return;
+      }
+
+      const tasksWithTime = filtered.filter(t => t.createdAt);
+      if (tasksWithTime.length === 0) {
+        axisEl.innerHTML = '';
+        rowsEl.innerHTML = `
+          <div class="timeline-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 6h18M3 12h12M3 18h16"/>
+            </svg>
+            <div>No timestamp data available</div>
+          </div>`;
+        return;
+      }
+
+      tasksWithTime.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+      const minTime = new Date(tasksWithTime[0].createdAt).getTime();
+      const maxTime = Math.max(
+        ...tasksWithTime.map(t => new Date(t.updatedAt || t.createdAt).getTime()),
+        Date.now()
+      );
+      const totalSpan = maxTime - minTime || 1;
+
+      // Render axis labels
+      const labelCount = 5;
+      axisEl.innerHTML = '';
+      for (let i = 0; i < labelCount; i++) {
+        const t = minTime + (totalSpan * i / (labelCount - 1));
+        const label = document.createElement('span');
+        label.className = 'timeline-axis-label';
+        label.textContent = formatTimelineLabel(t, totalSpan);
+        axisEl.appendChild(label);
+      }
+
+      // Render rows
+      rowsEl.innerHTML = '';
+      for (const task of tasksWithTime) {
+        const created = new Date(task.createdAt).getTime();
+        const updated = new Date(task.updatedAt || task.createdAt).getTime();
+        const left = ((created - minTime) / totalSpan) * 100;
+        const width = Math.max(((updated - created) / totalSpan) * 100, 0.5);
+        const statusClass = task.status.replace('_', '-');
+
+        const row = document.createElement('div');
+        row.className = 'timeline-row';
+        row.innerHTML = `
+          <span class="timeline-label" title="${escapeHtml(task.subject)}">#${escapeHtml(task.id)} ${escapeHtml(task.subject)}</span>
+          <div class="timeline-bar-container">
+            <div class="timeline-bar ${statusClass}"
+                 style="left: ${left}%; width: ${width}%"
+                 data-action="showTaskDetail"
+                 data-task-id="${task.id}"
+                 data-session-id="${task.sessionId || currentSessionId}"
+                 data-title="${escapeHtml(task.subject)}"
+                 data-created="${task.createdAt}"
+                 data-updated="${task.updatedAt || task.createdAt}"
+                 data-status="${task.status}">
+            </div>
+          </div>`;
+
+        const bar = row.querySelector('.timeline-bar');
+        bar.addEventListener('mouseenter', showTimelineTooltip);
+        bar.addEventListener('mouseleave', hideTimelineTooltip);
+        bar.addEventListener('mousemove', moveTimelineTooltip);
+        rowsEl.appendChild(row);
+      }
+    }
+
+    function formatTimelineLabel(timestamp, totalSpan) {
+      const date = new Date(timestamp);
+      const hours = totalSpan / (1000 * 60 * 60);
+
+      if (hours < 1) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } else if (hours < 24) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else {
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      }
+    }
+
+    function showTimelineTooltip(e) {
+      const bar = e.currentTarget;
+      const tooltip = document.getElementById('timeline-tooltip');
+      const titleEl = document.getElementById('tooltip-title');
+      const timeEl = document.getElementById('tooltip-time');
+
+      titleEl.textContent = bar.dataset.title;
+
+      const created = new Date(bar.dataset.created);
+      const updated = new Date(bar.dataset.updated);
+      const duration = updated - created;
+      const status = bar.dataset.status.replace('_', ' ');
+
+      let durationStr;
+      if (duration < 1000) {
+        durationStr = 'just started';
+      } else if (duration < 60000) {
+        durationStr = `${Math.round(duration / 1000)}s`;
+      } else if (duration < 3600000) {
+        durationStr = `${Math.round(duration / 60000)}m`;
+      } else {
+        const h = Math.floor(duration / 3600000);
+        const m = Math.round((duration % 3600000) / 60000);
+        durationStr = `${h}h ${m}m`;
+      }
+
+      timeEl.textContent = `${status} · ${durationStr} · ${created.toLocaleTimeString()}`;
+      tooltip.classList.add('visible');
+
+      const rect = bar.getBoundingClientRect();
+      tooltip.style.left = `${e.clientX + 12}px`;
+      tooltip.style.top = `${rect.top - 40}px`;
+    }
+
+    function moveTimelineTooltip(e) {
+      const tooltip = document.getElementById('timeline-tooltip');
+      tooltip.style.left = `${e.clientX + 12}px`;
+    }
+
+    function hideTimelineTooltip() {
+      document.getElementById('timeline-tooltip').classList.remove('visible');
+    }
+
     const ownerColors = [
       { bg: 'rgba(37, 99, 235, 0.14)',  color: '#1d5bbf' },  // blue
       { bg: 'rgba(168, 85, 247, 0.14)', color: '#7c3aed' },  // purple
@@ -4723,6 +5096,9 @@
       select.style.backgroundColor = c ? c.bg : '';
       updateUrl();
       renderKanban();
+      if (currentView === 'timeline') {
+        renderTimeline();
+      }
     }
 
     // Sync sidebar header height with view header
@@ -4824,6 +5200,8 @@
         case 'resetState': resetState(); break;
         case 'toggleNotifications': toggleNotifications(); break;
         case 'toggleArchived': toggleArchived(); break;
+        case 'switchToKanban': switchView('kanban'); break;
+        case 'switchToTimeline': switchView('timeline'); break;
         case 'toggleTheme': toggleTheme(); break;
         case 'showHelpModal': showHelpModal(); break;
 
