@@ -677,6 +677,12 @@
       height: 16px;
     }
 
+    .icon-btn.notifications-active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
     .icon-btn-danger {
       color: #ef4444;
     }
@@ -2277,6 +2283,11 @@
               </div>
               <span id="progress-percent" class="progress-text">0%</span>
             </div>
+            <button id="notifications-toggle" class="icon-btn" data-action="toggleNotifications" title="Notifications off (click to enable)" aria-label="Toggle notifications">
+              <svg id="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
+              </svg>
+            </button>
             <button id="theme-toggle" class="icon-btn" data-action="toggleTheme" title="Toggle theme" aria-label="Toggle theme">
               <svg id="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
@@ -2385,6 +2396,8 @@
     let recentProjects = new Set();
     let searchQuery = ''; // Search query for fuzzy search
     let allTasksCache = []; // Cache all tasks for search
+    let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
+    let previousTaskStatuses = new Map();
     let bulkDeleteSessionId = null; // Track session for bulk delete
     let ownerFilter = '';
     let selectedTaskId = null;
@@ -2524,6 +2537,25 @@
 
         sessions = [...knownSessions.values()];
         allTasksCache = [...newTasks, ...completedTasksCache];
+
+        // Detect task completions and fire notifications
+        const newStatuses = new Map();
+        for (const task of allTasksCache) {
+          if (task.sessionId && task.id) {
+            newStatuses.set(`${task.sessionId}:${task.id}`, task.status);
+          }
+        }
+        if (notificationsEnabled && previousTaskStatuses.size > 0) {
+          for (const task of allTasksCache) {
+            const key = `${task.sessionId}:${task.id}`;
+            const oldStatus = previousTaskStatuses.get(key);
+            if (oldStatus === 'in_progress' && task.status === 'completed') {
+              fireTaskNotification(task);
+            }
+          }
+        }
+        previousTaskStatuses = newStatuses;
+
         log.debug('[fetchSessions] Sessions loaded:', sessions.length, '(known:', knownSessions.size, ')');
         renderSessions();
         log.debug('[fetchSessions] Render complete');
@@ -4042,6 +4074,78 @@
       }).catch(() => {});
     }
 
+    // --- Notification functions ---
+
+    function toggleNotifications() {
+      if (!notificationsEnabled && Notification.permission !== 'granted') {
+        Notification.requestPermission().then(perm => {
+          if (perm === 'granted') {
+            notificationsEnabled = true;
+            localStorage.setItem('notificationsEnabled', 'true');
+            updateNotificationButton();
+          }
+        });
+      } else {
+        notificationsEnabled = !notificationsEnabled;
+        localStorage.setItem('notificationsEnabled', String(notificationsEnabled));
+        updateNotificationButton();
+      }
+    }
+
+    function updateNotificationButton() {
+      const btn = document.getElementById('notifications-toggle');
+      if (notificationsEnabled) {
+        btn.classList.add('notifications-active');
+        btn.title = 'Notifications on (click to mute)';
+      } else {
+        btn.classList.remove('notifications-active');
+        btn.title = 'Notifications off (click to enable)';
+      }
+    }
+
+    function fireTaskNotification(task) {
+      if (Notification.permission === 'granted') {
+        const n = new Notification('Task completed', {
+          body: task.subject,
+          tag: `task-${task.sessionId}-${task.id}`,
+        });
+        n.onclick = () => {
+          window.focus();
+          openLiveTask(task.sessionId, task.id);
+          n.close();
+        };
+      }
+      playChime();
+    }
+
+    function playChime() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = ctx.currentTime;
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.frequency.value = 523;
+        osc1.type = 'sine';
+        gain1.gain.setValueAtTime(0.15, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.15);
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.frequency.value = 659;
+        osc2.type = 'sine';
+        gain2.gain.setValueAtTime(0.15, now + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.1);
+        osc2.stop(now + 0.25);
+        setTimeout(() => ctx.close(), 500);
+      } catch (e) { /* Audio not available */ }
+    }
+
     const ownerColors = [
       { bg: 'rgba(37, 99, 235, 0.14)',  color: '#1d5bbf' },  // blue
       { bg: 'rgba(168, 85, 247, 0.14)', color: '#7c3aed' },  // purple
@@ -4578,6 +4682,7 @@
     searchQuery = urlState.search || '';
 
     loadPreferences();
+    updateNotificationButton();
     setupEventSource();
 
     if (urlState.search) {
@@ -4634,6 +4739,7 @@
         case 'showAllTasks': showAllTasks(); break;
         case 'clearSearch': clearSearch(); break;
         case 'resetState': resetState(); break;
+        case 'toggleNotifications': toggleNotifications(); break;
         case 'toggleTheme': toggleTheme(); break;
         case 'showHelpModal': showHelpModal(); break;
 
