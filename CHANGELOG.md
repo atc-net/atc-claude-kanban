@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.0...v1.1.1) (2026-02-18)
+
+
+### Bug Fixes
+
+* Added .kanban:has(.owner-filter-bar.visible) { padding-top: 60px; } so the column headers are pushed down when the "All Members" dropdown is visible ([226209e](https://github.com/atc-net/atc-claude-kanban/commit/226209e97e74e3a36d7415af7fb8af33915c5167))
+* auto-select session when project filter matches exactly one ([17581a8](https://github.com/atc-net/atc-claude-kanban/commit/17581a8b12fc9b9af55c8373d60920bc972216b4))
+* inherit project and branch from lead session for team sessions ([fc9dd68](https://github.com/atc-net/atc-claude-kanban/commit/fc9dd68c674eb4739aa743ddd0bf2d25040ef007))
+* invalidate subagent cache on metadata-update SSE events ([aa95015](https://github.com/atc-net/atc-claude-kanban/commit/aa95015e28db8cbed2484afcc1bb911a727ae5b5))
+* merge team lead sessions so subagents appear on the team row ([828c3ba](https://github.com/atc-net/atc-claude-kanban/commit/828c3ba96687050210dc6f779bc45f279489e673))
+* remove dead TeamName property from TeamConfig ([c91173c](https://github.com/atc-net/atc-claude-kanban/commit/c91173c2f15f0571535ddca72295c7c103ef254e))
+* TeamConfig JSON property names use camelCase to match Claude Code ([bcc013e](https://github.com/atc-net/atc-claude-kanban/commit/bcc013e572c43bfcd0acf2c26b80d91e87636c9f))
+
 ## [1.1.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.0.0...v1.1.0) (2026-02-18)
 
 
