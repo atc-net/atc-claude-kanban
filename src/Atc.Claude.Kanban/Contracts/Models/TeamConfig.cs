@@ -6,12 +6,6 @@ namespace Atc.Claude.Kanban.Contracts.Models;
 public sealed class TeamConfig
 {
     /// <summary>
-    /// Gets or sets the team name (from <c>team_name</c> field in older configs).
-    /// </summary>
-    [JsonPropertyName("team_name")]
-    public string? TeamName { get; set; }
-
-    /// <summary>
     /// Gets or sets the team display name.
     /// </summary>
     [JsonPropertyName("name")]
