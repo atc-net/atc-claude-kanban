@@ -23,10 +23,22 @@ public sealed class SubagentEndpointDefinition : IEndpointDefinition
 
     internal static async Task<Ok<IReadOnlyList<SubagentInfo>>> GetSubagents(
         [FromServices] SubagentService subagentService,
+        [FromServices] TeamService teamService,
         [AsParameters] SessionIdParameters parameters,
         CancellationToken cancellationToken)
     {
         var subagents = await subagentService.GetSubagentsForSessionAsync(parameters.SessionId, cancellationToken);
+
+        // For team sessions, subagent files live under the lead session's UUID
+        if (subagents.Count == 0)
+        {
+            var teamConfig = await teamService.GetTeamConfigAsync(parameters.SessionId, cancellationToken);
+            if (teamConfig?.LeadSessionId is not null)
+            {
+                subagents = await subagentService.GetSubagentsForSessionAsync(teamConfig.LeadSessionId, cancellationToken);
+            }
+        }
+
         return TypedResults.Ok(subagents);
     }
 }

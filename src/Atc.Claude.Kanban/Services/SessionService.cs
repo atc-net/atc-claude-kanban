@@ -135,6 +135,10 @@ public sealed class SessionService
         // Discover sessions that have subagents but no tasks
         DiscoverSubagentOnlySessions(sessions, sessionIndexes, discoveredIds);
 
+        // Merge lead sessions into their team sessions so subagents and metadata
+        // appear on the team row instead of a separate subagent-only row
+        await MergeLeadSessionsAsync(sessions, cancellationToken);
+
         // Snapshot all discovered sessions that have tasks
         foreach (var session in sessions)
         {
@@ -209,6 +213,57 @@ public sealed class SessionService
                 });
                 discoveredIds.Add(sessionId);
             }
+        }
+    }
+
+    /// <summary>
+    /// Merges lead (parent) sessions into their team sessions so that subagent counts,
+    /// project paths, and git branches appear on the team row in the sidebar.
+    /// Lead sessions that have no tasks of their own are removed from the list.
+    /// </summary>
+    private async Task MergeLeadSessionsAsync(
+        List<SessionInfo> sessions,
+        CancellationToken cancellationToken)
+    {
+        var leadIdsToRemove = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var session in sessions)
+        {
+            if (!session.IsTeam)
+            {
+                continue;
+            }
+
+            var teamConfig = await TryLoadTeamConfigAsync(session.Id, cancellationToken);
+            if (teamConfig?.LeadSessionId is null)
+            {
+                continue;
+            }
+
+            var lead = sessions.Find(s => s.Id == teamConfig.LeadSessionId);
+            if (lead is null)
+            {
+                continue;
+            }
+
+            // Transfer subagent counts from lead to team session
+            session.SubagentCount += lead.SubagentCount;
+            session.ActiveSubagentCount += lead.ActiveSubagentCount;
+
+            // Inherit metadata the team session may be missing
+            session.Project ??= lead.Project;
+            session.GitBranch ??= lead.GitBranch;
+
+            // Remove the lead session if it has no tasks (subagent-only entry)
+            if (lead.TaskCount == 0)
+            {
+                leadIdsToRemove.Add(lead.Id);
+            }
+        }
+
+        if (leadIdsToRemove.Count > 0)
+        {
+            sessions.RemoveAll(s => leadIdsToRemove.Contains(s.Id));
         }
     }
 
