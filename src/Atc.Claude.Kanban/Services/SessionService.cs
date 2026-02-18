@@ -250,9 +250,22 @@ public sealed class SessionService
             session.SubagentCount += lead.SubagentCount;
             session.ActiveSubagentCount += lead.ActiveSubagentCount;
 
-            // Inherit metadata the team session may be missing
-            session.Project ??= lead.Project;
-            session.GitBranch ??= lead.GitBranch;
+            // Inherit metadata the team session may be missing.
+            // Use IsNullOrEmpty to also catch empty strings from deserialization.
+            if (string.IsNullOrEmpty(session.Project))
+            {
+                session.Project = lead.Project;
+            }
+
+            if (string.IsNullOrEmpty(session.GitBranch))
+            {
+                session.GitBranch = lead.GitBranch;
+            }
+
+            if (string.IsNullOrEmpty(session.Description))
+            {
+                session.Description = lead.Description;
+            }
 
             // Remove the lead session if it has no tasks (subagent-only entry)
             if (lead.TaskCount == 0)
@@ -290,17 +303,26 @@ public sealed class SessionService
         var index = sessionIndexes.GetValueOrDefault(sessionId);
         var teamConfig = await TryLoadTeamConfigAsync(sessionId, cancellationToken);
 
+        // For team sessions, look up the lead session's metadata
+        SessionIndex? leadIndex = null;
+        if (teamConfig?.LeadSessionId is not null)
+        {
+            sessionIndexes.TryGetValue(teamConfig.LeadSessionId, out leadIndex);
+        }
+
         SessionInfo session;
         if (taskFiles.Length == 0)
         {
-            var slug = index?.Slug ?? sessionId;
+            var slug = index?.Slug ?? leadIndex?.Slug ?? sessionId;
             session = new SessionInfo
             {
                 Id = sessionId,
                 Name = ResolveSessionName(sessionId, index, teamConfig),
-                Project = index?.ProjectPath ?? index?.Cwd ?? teamConfig?.WorkingDir,
-                Description = index?.Description,
-                GitBranch = index?.GitBranch,
+                Project = index?.ProjectPath ?? index?.Cwd
+                          ?? leadIndex?.ProjectPath ?? leadIndex?.Cwd
+                          ?? teamConfig?.WorkingDir,
+                Description = index?.Description ?? leadIndex?.Description,
+                GitBranch = index?.GitBranch ?? leadIndex?.GitBranch,
                 HasPlan = PlanExistsForSession(slug),
                 IsTeam = teamConfig is not null,
                 MemberCount = teamConfig?.Members?.Count ?? 0,
@@ -315,8 +337,8 @@ public sealed class SessionService
                 sessionId,
                 taskFiles,
                 index,
+                leadIndex,
                 teamConfig,
-                sessionIndexes,
                 cancellationToken);
         }
 
@@ -332,18 +354,11 @@ public sealed class SessionService
         string sessionId,
         string[] taskFiles,
         SessionIndex? index,
+        SessionIndex? leadIndex,
         TeamConfig? teamConfig,
-        Dictionary<string, SessionIndex> sessionIndexes,
         CancellationToken cancellationToken)
     {
         var (tasks, latestModified) = await ReadTaskFilesAsync(taskFiles, cancellationToken);
-
-        // Inherit metadata from lead session for team sessions
-        SessionIndex? leadIndex = null;
-        if (teamConfig?.LeadSessionId is not null)
-        {
-            sessionIndexes.TryGetValue(teamConfig.LeadSessionId, out leadIndex);
-        }
 
         var project = index?.ProjectPath
                       ?? index?.Cwd
@@ -358,8 +373,8 @@ public sealed class SessionService
             Id = sessionId,
             Name = ResolveSessionName(sessionId, index, teamConfig),
             Project = project,
-            Description = index?.Description,
-            GitBranch = index?.GitBranch,
+            Description = index?.Description ?? leadIndex?.Description,
+            GitBranch = index?.GitBranch ?? leadIndex?.GitBranch,
             TaskCount = tasks.Count,
             Pending = tasks.Count(t => t.Status == "pending"),
             InProgress = tasks.Count(t => t.Status == "in_progress"),
