@@ -1668,9 +1668,13 @@
     .owner-filter-bar {
       display: none;
       position: absolute;
-      top: 24px;
+      top: 20px;
       right: 24px;
       z-index: 2;
+    }
+
+    .kanban:has(.owner-filter-bar.visible) {
+      padding-top: 60px;
     }
 
     .owner-filter-bar.visible {
