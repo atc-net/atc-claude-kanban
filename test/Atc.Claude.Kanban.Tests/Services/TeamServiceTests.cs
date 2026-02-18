@@ -50,7 +50,7 @@ public sealed class TeamServiceTests : IDisposable
 
         var teamConfig = new
         {
-            team_name = "my-team",
+            name = "my-team",
             description = "Test team",
             members = new[]
             {
@@ -71,7 +71,7 @@ public sealed class TeamServiceTests : IDisposable
 
         // Assert
         config.Should().NotBeNull();
-        config!.TeamName.Should().Be("my-team");
+        config!.Name.Should().Be("my-team");
         config.Description.Should().Be("Test team");
         config.Members.Should().HaveCount(2);
         config.Members![0].Name.Should().Be("researcher");
@@ -109,7 +109,7 @@ public sealed class TeamServiceTests : IDisposable
 
         await File.WriteAllTextAsync(
             Path.Combine(teamDir, "config.json"),
-            JsonSerializer.Serialize(new { team_name = "cached-team", description = "Original" }),
+            JsonSerializer.Serialize(new { name = "cached-team", description = "Original" }),
             cancellationToken);
 
         var service = new TeamService(tempDir, cache, jsonSerializerOptions);
@@ -120,7 +120,7 @@ public sealed class TeamServiceTests : IDisposable
         // Modify file on disk — cache should still return old value
         await File.WriteAllTextAsync(
             Path.Combine(teamDir, "config.json"),
-            JsonSerializer.Serialize(new { team_name = "cached-team", description = "Modified" }),
+            JsonSerializer.Serialize(new { name = "cached-team", description = "Modified" }),
             cancellationToken);
 
         var secondResult = await service.GetTeamConfigAsync("cached-team", cancellationToken);

@@ -398,8 +398,7 @@ public sealed class SessionService
         string sessionId,
         SessionIndex? index,
         TeamConfig? teamConfig)
-        => teamConfig?.TeamName ??
-           teamConfig?.Name ??
+        => teamConfig?.Name ??
            index?.CustomTitle ??
            index?.Description ??
            ProjectDisplayName(index?.ProjectPath) ??
