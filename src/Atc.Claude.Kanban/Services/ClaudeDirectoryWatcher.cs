@@ -200,7 +200,7 @@ public sealed partial class ClaudeDirectoryWatcher : BackgroundService
 
                     if (notification.Type is "metadata-update" || evt.Category is "plans")
                     {
-                        InvalidateSessionCache();
+                        InvalidateSessionCache(notification.SessionId);
                     }
 
                     if (notification.Type is "team-update" && notification.TeamName is not null)
@@ -242,15 +242,21 @@ public sealed partial class ClaudeDirectoryWatcher : BackgroundService
     }
 
     /// <summary>
-    /// Clears cached session and project data so the next API call reads fresh data from disk.
+    /// Clears cached session, project, and subagent data so the next API call reads fresh data from disk.
     /// Mirrors the original's <c>lastMetadataRefresh = 0</c> approach.
     /// </summary>
-    private void InvalidateSessionCache()
+    /// <param name="sessionId">Optional session identifier to also invalidate subagent cache for.</param>
+    private void InvalidateSessionCache(string? sessionId)
     {
         cache.Remove("projects");
         for (var i = 1; i <= 100; i++)
         {
             cache.Remove($"sessions:{i}");
+        }
+
+        if (sessionId is not null)
+        {
+            cache.Remove($"subagents:{sessionId}");
         }
     }
 
