@@ -4676,6 +4676,19 @@
       updateUrl();
       renderSessions();
       fetchLiveUpdates();
+
+      // When a specific project is selected and only one active session matches,
+      // auto-select it so subagents and session details are shown
+      if (filterProject && filterProject !== '__recent__') {
+        const matching = sessions.filter(s =>
+          !s.isCompleted && matchesProjectFilter(s.project, s.modifiedAt)
+        );
+        if (matching.length === 1) {
+          fetchTasks(matching[0].id);
+          return;
+        }
+      }
+
       showAllTasks();
     }
 
