@@ -2647,6 +2647,7 @@
     let selectedSessionIdx = -1;
     let currentSubagents = [];
     let showAllSubagents = false;
+    const expandedSubagentIds = new Set();
     const knownSessions = new Map(); // client-side persistence until page refresh
     const completedTasksCache = []; // tasks preserved from sessions that completed
 
@@ -3089,7 +3090,7 @@
     function renderSubagentCards(agents) {
       const container = document.getElementById('subagent-cards');
       container.innerHTML = agents.map(agent => `
-        <div class="subagent-card ${agent.isActive ? 'active' : ''}" data-action="toggleSubagentDetail">
+        <div class="subagent-card ${agent.isActive ? 'active' : ''} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
           <div class="subagent-card-header">
             <span class="subagent-status-dot ${agent.isActive ? 'active' : ''}"></span>
             <span>${escapeHtml(agent.slug || agent.agentId)}</span>
@@ -5246,7 +5247,16 @@
         case 'deleteAllSessionTasks': deleteAllSessionTasks(sessionId); break;
         case 'toggleSubagents': toggleSubagents(); break;
         case 'toggleSubagentFilter': toggleSubagentFilter(); break;
-        case 'toggleSubagentDetail': actionEl.closest('.subagent-card').classList.toggle('expanded'); break;
+        case 'toggleSubagentDetail': {
+          const card = actionEl.closest('.subagent-card');
+          card.classList.toggle('expanded');
+          const agentId = card.dataset.agentId;
+          if (agentId) {
+            if (card.classList.contains('expanded')) expandedSubagentIds.add(agentId);
+            else expandedSubagentIds.delete(agentId);
+          }
+          break;
+        }
 
         // Task cards
         case 'showTaskDetail': showTaskDetail(taskId, sessionId); break;
