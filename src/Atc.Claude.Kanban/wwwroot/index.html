@@ -3860,7 +3860,9 @@
       const save = async () => {
         const val = input.value.trim();
         if (val && val !== task.subject) {
+          input.disabled = true;
           await saveTaskField(task.id, sessionId, 'subject', val);
+          input.disabled = false;
         } else {
           showTaskDetail(task.id, sessionId);
         }
@@ -3900,7 +3902,11 @@
       const save = async () => {
         const val = textarea.value;
         if (val !== (task.description || '')) {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Saving...';
           await saveTaskField(task.id, sessionId, 'description', val);
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save';
         } else {
           showTaskDetail(task.id, sessionId);
         }
@@ -3932,9 +3938,12 @@
             await fetchTasks(sessionId);
           }
           showTaskDetail(taskId, sessionId);
+        } else {
+          showToast('Failed to save task');
         }
       } catch (error) {
         log.error('Failed to update task:', error);
+        showToast('Failed to save task');
       }
     }
 
