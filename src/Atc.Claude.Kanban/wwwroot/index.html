@@ -5087,9 +5087,7 @@
         const agentTask = agentTasks.find(t => t.subject === agentName || t.owner === agentName);
 
         if (agentTask && agentTask.description) {
-          const isTruncated = agentTask.description.length === 100;
-          bodyEl.innerHTML = `<div style="white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--text-primary); font-family: 'IBM Plex Mono', monospace;">${escapeHtml(agentTask.description)}${isTruncated ? '...' : ''}</div>
-            ${isTruncated ? '<div style="margin-top: 12px; padding: 8px 12px; background: var(--bg-elevated); border-radius: 6px; font-size: 11px; color: var(--text-muted);">Claude Code truncates agent instructions to 100 characters in task files.</div>' : ''}`;
+          bodyEl.innerHTML = `<div style="white-space: pre-wrap; font-size: 13px; line-height: 1.6; color: var(--text-primary); font-family: 'IBM Plex Mono', monospace;">${escapeHtml(agentTask.description)}</div>`;
         } else {
           bodyEl.innerHTML = '<div style="color: var(--text-muted); padding: 12px;">No instruction found for this agent.</div>';
         }
