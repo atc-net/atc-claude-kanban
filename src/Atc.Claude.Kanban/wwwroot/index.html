@@ -4326,7 +4326,7 @@
           refreshTimer = setTimeout(() => {
             if (!isServerConnected) return;
             fetchSessions().catch(err => log.error('[SSE] fetchSessions failed:', err));
-            if (currentSessionId && (isMetadata || sessionId === currentSessionId)) {
+            if (currentSessionId) {
               fetchTasks(currentSessionId);
               fetchSubagents(currentSessionId);
             }
