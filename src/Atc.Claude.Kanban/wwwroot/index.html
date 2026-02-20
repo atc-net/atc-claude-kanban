@@ -3944,6 +3944,12 @@
       const note = input.value.trim();
       if (!note) return;
 
+      const btn = event.target.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Adding...';
+      }
+
       try {
         const res = await fetch(`/api/tasks/${sessionId}/${taskId}/note`, {
           method: 'POST',
@@ -3961,9 +3967,17 @@
             await fetchTasks(sessionId);
           }
           showTaskDetail(taskId, sessionId);
+        } else {
+          showToast('Failed to add note');
         }
       } catch (error) {
         log.error('Failed to add note:', error);
+        showToast('Failed to add note');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Add Note';
+        }
       }
     }
 
