@@ -2903,7 +2903,10 @@
       if (!bulkDeleteSessionId) return;
 
       const sessionId = bulkDeleteSessionId;
-      closeDeleteSessionTasksModal();
+      const confirmBtn = document.getElementById('delete-session-confirm-btn');
+      const cancelBtn = document.getElementById('delete-session-cancel-btn');
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
 
       // Get tasks to delete
       const sessionTasks = currentSessionId === sessionId
@@ -2912,12 +2915,15 @@
 
       // Sort tasks by dependency order (blocked tasks first, then blockers)
       const sortedTasks = topologicalSort(sessionTasks);
+      const total = sortedTasks.length;
 
       let successCount = 0;
       let failedCount = 0;
       const failedTasks = [];
 
       for (const task of sortedTasks) {
+        confirmBtn.textContent = `Deleting ${successCount + failedCount + 1}/${total}...`;
+
         try {
           const res = await fetch(`/api/tasks/${sessionId}/${task.id}`, {
             method: 'DELETE'
@@ -2937,6 +2943,12 @@
           log.error(`Error deleting task ${task.id}:`, error);
         }
       }
+
+      // Reset modal state and close
+      confirmBtn.disabled = false;
+      cancelBtn.disabled = false;
+      confirmBtn.textContent = 'Delete All';
+      closeDeleteSessionTasksModal();
 
       // Show result modal
       showDeleteResultModal(successCount, failedCount, failedTasks);
@@ -5485,8 +5497,8 @@
         <p style="margin: 0; font-size: 13px; color: var(--text-secondary);">This action cannot be undone.</p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-action="closeDeleteSessionTasksModal">Cancel</button>
-        <button class="btn btn-primary" data-action="confirmDeleteSessionTasks" style="background: #ef4444; border-color: #ef4444;">Delete All</button>
+        <button id="delete-session-cancel-btn" class="btn btn-secondary" data-action="closeDeleteSessionTasksModal">Cancel</button>
+        <button id="delete-session-confirm-btn" class="btn btn-primary" data-action="confirmDeleteSessionTasks" style="background: #ef4444; border-color: #ef4444;">Delete All</button>
       </div>
     </div>
   </div>
