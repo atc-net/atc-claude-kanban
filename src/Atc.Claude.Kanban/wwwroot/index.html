@@ -4094,7 +4094,11 @@
       const taskId = deleteTaskId;
       const sessionId = deleteSessionId;
 
-      closeDeleteConfirmModal();
+      const confirmBtn = document.getElementById('delete-confirm-btn');
+      const cancelBtn = document.getElementById('delete-cancel-btn');
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      confirmBtn.textContent = 'Deleting...';
 
       try {
         const res = await fetch(`/api/tasks/${sessionId}/${taskId}`, {
@@ -4102,15 +4106,22 @@
         });
 
         if (res.ok) {
+          closeDeleteConfirmModal();
           closeDetailPanel();
           await refreshCurrentView();
         } else {
           const error = await res.json();
-          alert('Failed to delete task: ' + (error.error || 'Unknown error'));
+          closeDeleteConfirmModal();
+          showToast('Failed to delete: ' + (error.error || 'Unknown error'));
         }
       } catch (error) {
         log.error('Failed to delete task:', error);
-        alert('Failed to delete task');
+        closeDeleteConfirmModal();
+        showToast('Failed to delete task');
+      } finally {
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        confirmBtn.textContent = 'Delete';
       }
     }
 
