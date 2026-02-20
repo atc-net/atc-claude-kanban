@@ -5288,11 +5288,14 @@
 
     // Delegated event handler for all data-action clicks
     document.addEventListener('click', (e) => {
-      // Stop propagation for clicks inside modals (prevents overlay close)
+      // Stop propagation for clicks inside modals (prevents overlay close).
+      // closest('[data-action]') from inside the modal walks up to the overlay,
+      // so we block when the only matching data-action is the overlay itself.
       const modal = e.target.closest('.modal');
       const overlay = e.target.closest('.modal-overlay');
-      if (modal && overlay && !e.target.closest('[data-action]')) {
-        return;
+      if (modal && overlay) {
+        const closest = e.target.closest('[data-action]');
+        if (!closest || closest === overlay) return;
       }
 
       const actionEl = e.target.closest('[data-action]');
