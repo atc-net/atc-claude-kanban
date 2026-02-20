@@ -139,30 +139,60 @@ public sealed class SessionService
         // appear on the team row instead of a separate subagent-only row
         await MergeLeadSessionsAsync(sessions, cancellationToken);
 
-        // Snapshot all discovered sessions that have tasks
+        // Snapshot active sessions and restore progress for sessions whose
+        // task files were removed (either files only or entire directory).
+        ApplyAndMergeSnapshots(sessions, discoveredIds);
+
+        return sessions;
+    }
+
+    /// <summary>
+    /// Snapshots sessions that have tasks, restores progress from snapshots
+    /// for sessions whose task files were removed but whose directory still
+    /// exists, and merges in snapshots for sessions whose entire task directory
+    /// has been deleted.
+    /// </summary>
+    private void ApplyAndMergeSnapshots(
+        List<SessionInfo> sessions,
+        HashSet<string> discoveredIds)
+    {
         foreach (var session in sessions)
         {
             if (session.TaskCount > 0)
             {
                 sessionSnapshots[session.Id] = session;
             }
+            else if (sessionSnapshots.TryGetValue(session.Id, out var snapshot) && snapshot.TaskCount > 0)
+            {
+                // Directory exists but all task files removed — restore progress from snapshot
+                RestoreCompletedProgress(session, snapshot);
+            }
         }
 
-        // Merge in snapshots for sessions whose task dirs have been deleted
+        // Merge in snapshots for sessions whose task dirs have been deleted entirely
         foreach (var (id, snapshot) in sessionSnapshots)
         {
             if (!discoveredIds.Contains(id))
             {
-                snapshot.IsCompleted = true;
-                snapshot.Progress = 100;
-                snapshot.PeakTaskCount = snapshot.PeakTaskCount > 0
-                    ? snapshot.PeakTaskCount
-                    : snapshot.TaskCount;
+                RestoreCompletedProgress(snapshot, snapshot);
                 sessions.Add(snapshot);
             }
         }
+    }
 
-        return sessions;
+    private static void RestoreCompletedProgress(
+        SessionInfo target,
+        SessionInfo source)
+    {
+        target.IsCompleted = true;
+        target.Progress = 100;
+        target.TaskCount = source.TaskCount;
+        target.Completed = source.TaskCount;
+        target.Pending = 0;
+        target.InProgress = 0;
+        target.PeakTaskCount = source.PeakTaskCount > 0
+            ? source.PeakTaskCount
+            : source.TaskCount;
     }
 
     private void DiscoverSubagentOnlySessions(
