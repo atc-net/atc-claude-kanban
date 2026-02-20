@@ -25,7 +25,7 @@ public sealed class SubagentInfo
     public string? Slug { get; set; }
 
     /// <summary>
-    /// Gets or sets a short description (first user message, truncated to 100 chars).
+    /// Gets or sets the description extracted from the first user message.
     /// </summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
