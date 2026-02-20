@@ -196,4 +196,62 @@ public sealed class SessionServiceTests : IDisposable
         sessions[0].Id.Should().Be("session-empty");
         sessions[0].TaskCount.Should().Be(0);
     }
+
+    [Fact]
+    public async Task GetSessions_PreservesProgressAfterTaskFilesRemoved()
+    {
+        // Arrange — create a session with 3 tasks, then remove the task files
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionDir = Path.Combine(tempDir, "tasks", "session-snap");
+
+        Directory.CreateDirectory(sessionDir);
+
+        var taskFile1 = Path.Combine(sessionDir, "1.json");
+        var taskFile2 = Path.Combine(sessionDir, "2.json");
+        var taskFile3 = Path.Combine(sessionDir, "3.json");
+
+        await File.WriteAllTextAsync(
+            taskFile1,
+            JsonSerializer.Serialize(new { id = "1", subject = "Task 1", status = "completed" }),
+            cancellationToken);
+
+        await File.WriteAllTextAsync(
+            taskFile2,
+            JsonSerializer.Serialize(new { id = "2", subject = "Task 2", status = "completed" }),
+            cancellationToken);
+
+        await File.WriteAllTextAsync(
+            taskFile3,
+            JsonSerializer.Serialize(new { id = "3", subject = "Task 3", status = "pending" }),
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+
+        // First call snapshots the session with 3 tasks
+        var before = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+        before.Should().HaveCount(1);
+        before[0].TaskCount.Should().Be(3);
+
+        // Expire the memory cache so the next call re-discovers from disk
+        cache.Remove("sessions:20");
+
+        // Remove all task files (directory stays)
+        File.Delete(taskFile1);
+        File.Delete(taskFile2);
+        File.Delete(taskFile3);
+
+        // Act — re-fetch sessions; directory exists but is empty
+        var after = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert — progress should be restored from snapshot, marked as completed
+        after.Should().HaveCount(1);
+
+        var session = after[0];
+        session.IsCompleted.Should().BeTrue();
+        session.Progress.Should().Be(100);
+        session.TaskCount.Should().Be(3);
+        session.Completed.Should().Be(3);
+        session.Pending.Should().Be(0);
+        session.InProgress.Should().Be(0);
+    }
 }
