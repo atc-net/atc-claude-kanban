@@ -1355,8 +1355,15 @@
       transition: all 0.15s ease;
     }
 
-    .note-submit:hover {
+    .note-submit:hover:not(:disabled) {
       filter: brightness(1.1);
+    }
+
+    .note-submit:disabled,
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
     }
 
     /* Team badge */
@@ -4387,13 +4394,15 @@
       return text.replace(/<\/?[^>]+>/g, '').trim();
     }
 
+    function showToast(message, duration = 2000) {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.classList.add('visible');
+      setTimeout(() => el.classList.remove('visible'), duration);
+    }
+
     function copyPath(path) {
-      navigator.clipboard.writeText(path).then(() => {
-        const el = document.getElementById('toast');
-        el.textContent = 'Path copied';
-        el.classList.add('visible');
-        setTimeout(() => el.classList.remove('visible'), 1500);
-      });
+      navigator.clipboard.writeText(path).then(() => showToast('Path copied', 1500));
     }
 
     function openFolder(path) {
