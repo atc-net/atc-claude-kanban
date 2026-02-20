@@ -3109,7 +3109,7 @@
             <span>${escapeHtml(agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
           </div>
-          ${agent.description ? `<div class="subagent-desc" title="${escapeHtml(agent.description)}">${escapeHtml(agent.description)}</div>` : ''}
+          ${agent.description ? `<div class="subagent-desc" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</div>` : ''}
           <div class="subagent-time">${agent.startedAt ? formatDate(agent.startedAt) : ''} ${agent.isActive ? '· Active' : `· Last: ${formatDate(agent.lastActivityAt)}`}</div>
           <div class="subagent-detail">
             <div class="subagent-detail-row"><span class="subagent-detail-label">Agent</span><span class="subagent-detail-value">${escapeHtml(agent.agentId)}</span></div>
@@ -3117,7 +3117,7 @@
             ${agent.cwd ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Dir</span><span class="subagent-detail-value" title="${escapeHtml(agent.cwd)}">${escapeHtml(agent.cwd)}</span></div>` : ''}
             ${agent.startedAt ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Started</span><span class="subagent-detail-value">${new Date(agent.startedAt).toLocaleString()}</span></div>` : ''}
             <div class="subagent-detail-row"><span class="subagent-detail-label">Last</span><span class="subagent-detail-value">${new Date(agent.lastActivityAt).toLocaleString()}</span></div>
-            ${agent.description ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Task</span><span class="subagent-detail-value" title="${escapeHtml(agent.description)}">${escapeHtml(agent.description)}</span></div>` : ''}
+            ${agent.description ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Task</span><span class="subagent-detail-value" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</span></div>` : ''}
           </div>
         </div>
       `).join('');
@@ -4372,6 +4372,13 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    function cleanAgentDescription(text) {
+      if (!text) return text;
+      const summaryMatch = text.match(/<teammate-message[^>]+summary="([^"]*)"?/);
+      if (summaryMatch) return summaryMatch[1];
+      return text.replace(/<\/?[^>]+>/g, '').trim();
     }
 
     function copyPath(path) {

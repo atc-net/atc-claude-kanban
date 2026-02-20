@@ -267,10 +267,33 @@ public sealed class SubagentService
             var content = contentElement.GetString();
             if (!string.IsNullOrEmpty(content))
             {
-                metadata.Description = content.Length > 100
-                    ? content[..100]
-                    : content;
+                metadata.Description = CleanAgentDescription(content);
             }
         }
+    }
+
+    /// <summary>
+    /// Strips Claude Code protocol tags (e.g. &lt;teammate-message&gt;) from subagent
+    /// descriptions, preferring the summary attribute when present. Truncates the
+    /// result to 100 characters with an ellipsis.
+    /// </summary>
+    private static string CleanAgentDescription(string content)
+    {
+        var cleaned = content;
+
+        // Extract summary from <teammate-message summary="..."> if present
+        const string marker = "summary=\"";
+        if (content.StartsWith('<') && content.Contains(marker, StringComparison.Ordinal))
+        {
+            var start = content.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+            var end = content.IndexOf('"', start);
+            cleaned = end > start
+                ? content[start..end]
+                : content[start..];
+        }
+
+        return cleaned.Length > 100
+            ? string.Concat(cleaned.AsSpan(0, 100), "...")
+            : cleaned;
     }
 }
