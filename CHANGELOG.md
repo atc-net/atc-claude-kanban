@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.3](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.2...v1.1.3) (2026-02-20)
+
+
+### Bug Fixes
+
+* clean teammate-message tags from subagent descriptions on backend before truncation ([558dccc](https://github.com/atc-net/atc-claude-kanban/commit/558dcccb0dda2cc4443901e53d2d94b02115d0ed))
+* preserve session progress when task files are removed but directory remains ([9b8ce06](https://github.com/atc-net/atc-claude-kanban/commit/9b8ce06fb39f9b7b4fa7ac397c66415df2656875))
+* replace reset filter reload icon with X-circle and add loading spinner ([93d1140](https://github.com/atc-net/atc-claude-kanban/commit/93d114082dd08ddee864e17a08eb70edcceb7af4))
+* use monospace font for headers and logo to match content style ([b5f0995](https://github.com/atc-net/atc-claude-kanban/commit/b5f0995fbc5a8f3099672920c7ff20893d41af27))
+
 ## [1.1.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.1...v1.1.2) (2026-02-20)
 
 
