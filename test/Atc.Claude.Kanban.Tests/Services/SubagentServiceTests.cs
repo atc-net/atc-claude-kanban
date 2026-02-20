@@ -91,6 +91,39 @@ public sealed class SubagentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSubagents_CleansTeammateMessageDescription()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash789", "session-tm", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = JsonSerializer.Serialize(new
+        {
+            type = "user",
+            timestamp = "2025-06-01T10:00:00Z",
+            message = new
+            {
+                content = "<teammate-message teammate_id=\"team-lead\" summary=\"New features evaluator\">\nYou are the \"features-evaluator\" agent.",
+            },
+        });
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, "agent-tm123.jsonl"),
+            jsonl,
+            cancellationToken);
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-tm", cancellationToken);
+
+        // Assert — should extract the summary, not the raw XML tag
+        subagents.Should().HaveCount(1);
+        subagents[0].Description.Should().Be("New features evaluator");
+    }
+
+    [Fact]
     public void GetSubagentCounts_ReturnsZero_WhenNoProjects()
     {
         // Arrange
