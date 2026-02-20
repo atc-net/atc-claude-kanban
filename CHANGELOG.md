@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.1...v1.1.2) (2026-02-20)
+
+
+### Bug Fixes
+
+* preserve expanded subagent card state across SSE re-renders ([7422aa7](https://github.com/atc-net/atc-claude-kanban/commit/7422aa7db55eaa2ab6da6f2447bb9c25132d54f9))
+
 ## [1.1.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.0...v1.1.1) (2026-02-18)
 
 
