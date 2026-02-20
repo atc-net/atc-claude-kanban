@@ -180,7 +180,6 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 - **Async service layer** — all file I/O uses `ReadAllTextAsync`/`WriteAllTextAsync`
 - **IMemoryCache** with TTL expiration (10s sessions, 5s teams)
 - **Embedded static files** — single HTML dashboard served via `ManifestEmbeddedFileProvider`
-- **Delegated event listeners** — frontend uses `data-action` attributes instead of inline `onclick`
 
 ## 🤝 How to contribute
 
