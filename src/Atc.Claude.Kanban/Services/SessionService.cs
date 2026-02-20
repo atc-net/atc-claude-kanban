@@ -579,7 +579,7 @@ public sealed class SessionService
     /// Scans up to 250 lines because hook/progress entries can push the
     /// first user message (which carries the slug) deep into the file.
     /// </summary>
-    private static async Task<(string? Cwd, string? GitBranch, string? Slug, string? ParentSessionId, string? CustomTitle)> TryReadJsonlMetadataAsync(
+    private static async Task<JsonlMetadata> TryReadJsonlMetadataAsync(
         string jsonlFile,
         CancellationToken cancellationToken)
     {
@@ -618,7 +618,14 @@ public sealed class SessionService
             // Skip on error — metadata is best-effort
         }
 
-        return (cwd, gitBranch, slug, parentSessionId, customTitle);
+        return new JsonlMetadata
+        {
+            Cwd = cwd,
+            GitBranch = gitBranch,
+            Slug = slug,
+            ParentSessionId = parentSessionId,
+            CustomTitle = customTitle,
+        };
     }
 
     /// <summary>
