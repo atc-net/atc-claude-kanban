@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.3...v1.2.0) (2026-02-21)
+
+
+### Features
+
+* add loading state to addNote mutation ([a5c7337](https://github.com/atc-net/atc-claude-kanban/commit/a5c733713e71a091ae82f3798eea12461f4457c3))
+* add loading state to confirmDelete and replace alert() with toast ([dcc0c83](https://github.com/atc-net/atc-claude-kanban/commit/dcc0c83fbeccd7b2fd36e45cf6ebaea9ae415094))
+* add loading state to saveTaskField mutation ([84c7117](https://github.com/atc-net/atc-claude-kanban/commit/84c7117033961e933e077d68396347694e7abda8))
+* add loading state with progress to bulk delete session tasks ([0ee8db0](https://github.com/atc-net/atc-claude-kanban/commit/0ee8db0cf23a82a319c0bdbdb78de9e45d0e9b98))
+* add reusable showToast helper and disabled button styles ([9155621](https://github.com/atc-net/atc-claude-kanban/commit/9155621b8439a6878772a71d327b3136f62e634b))
+* show more of the subagent description when card is expanded ([17e3920](https://github.com/atc-net/atc-claude-kanban/commit/17e392092045e6524c5279dc00b51f3734178d0f))
+
+
+### Bug Fixes
+
+* always refresh current session data on any SSE event ([8bf7385](https://github.com/atc-net/atc-claude-kanban/commit/8bf7385cc1cf9ba718f0b7dbbec901a70f5cadcc))
+* prevent modal content clicks from closing the dialog ([dfc24e4](https://github.com/atc-net/atc-claude-kanban/commit/dfc24e449899f429231cb63d9d783c013cc4a55b))
+* remove 100-character truncation from subagent descriptions ([729290e](https://github.com/atc-net/atc-claude-kanban/commit/729290e70f9526ed9c1c2d947a0bfd46dfade209))
+
 ## [1.1.3](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.2...v1.1.3) (2026-02-20)
 
 
