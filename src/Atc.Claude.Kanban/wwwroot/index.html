@@ -3331,9 +3331,8 @@
         );
       }
       if (filterProject) {
-        // Always show client-side completed sessions regardless of project filter
         filteredSessions = filteredSessions.filter(s =>
-          s.isCompleted || matchesProjectFilter(s.project, s.modifiedAt)
+          matchesProjectFilter(s.project, s.modifiedAt)
         );
       }
 
