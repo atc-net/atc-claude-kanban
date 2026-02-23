@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.2.0...v1.2.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* apply project filter to completed sessions instead of showing all ([855f0d3](https://github.com/atc-net/atc-claude-kanban/commit/855f0d36aee2123278c45e113d50dc7ee3073f82))
+
 ## [1.2.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.1.3...v1.2.0) (2026-02-21)
 
 
