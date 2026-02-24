@@ -1,10 +1,29 @@
 namespace Atc.Claude.Kanban.Helpers;
 
 /// <summary>
-/// Shared path validation utilities.
+/// Shared path validation and display utilities.
 /// </summary>
 public static class PathHelper
 {
+    /// <summary>
+    /// Replaces the user's home directory prefix with <c>~</c> and normalizes separators to forward slashes.
+    /// </summary>
+    /// <param name="path">The absolute path to shorten.</param>
+    /// <returns>The display-friendly path.</returns>
+    public static string CollapseHomePath(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (!path.StartsWith(home, StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        return "~" + path[home.Length..].Replace('\\', '/');
+    }
+
     /// <summary>
     /// Validates that a resolved file path is within the expected directory.
     /// Prevents path traversal attacks via crafted identifiers.
