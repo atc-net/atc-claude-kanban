@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.3.0...v1.4.0) (2026-02-24)
+
+
+### Features
+
+* add gradient coloring to Claude Kanban label and use braille characters ([54b0a32](https://github.com/atc-net/atc-claude-kanban/commit/54b0a32742cb89d63a3bf3e6d97be6acc02b0fd5))
+* add styled watcher registration output to console ([fe317fe](https://github.com/atc-net/atc-claude-kanban/commit/fe317fe17b240a9865b0679044dd1ca9ae9b8aed))
+
+
+### Bug Fixes
+
+* set console output encoding to UTF-8 for dotnet tool emoji rendering ([fd8e48e](https://github.com/atc-net/atc-claude-kanban/commit/fd8e48e7e1e833473e258f1396992b5ff6c7811b))
+
 ## [1.3.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.2.1...v1.3.0) (2026-02-24)
 
 
