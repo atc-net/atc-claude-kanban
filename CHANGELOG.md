@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.2.1...v1.3.0) (2026-02-24)
+
+
+### Features
+
+* add colored ASCII art startup banner ([ddae574](https://github.com/atc-net/atc-claude-kanban/commit/ddae5747c0793ec69f02aa17dacc1c2b61c7a7d5))
+
 ## [1.2.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.2.0...v1.2.1) (2026-02-23)
 
 
