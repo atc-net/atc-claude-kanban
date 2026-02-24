@@ -5,11 +5,11 @@ namespace Atc.Claude.Kanban.Helpers;
 /// </summary>
 internal static class StartupBanner
 {
-    private const string Cyan = "\u001b[36m";
-    private const string BoldWhite = "\u001b[1;37m";
-    private const string Dim = "\u001b[90m";
-    private const string BrightWhite = "\u001b[97m";
-    private const string Reset = "\u001b[0m";
+    private const string Cyan = "\e[36m";
+    private const string BoldWhite = "\e[1;37m";
+    private const string Dim = "\e[90m";
+    private const string BrightWhite = "\e[97m";
+    private const string Reset = "\e[0m";
 
     /// <summary>
     /// Writes the ATC Claude Kanban startup banner with ANSI colors.
