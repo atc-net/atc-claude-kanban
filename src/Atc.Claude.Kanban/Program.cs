@@ -46,6 +46,9 @@ public static class Program
         builder.Logging.SetMinimumLevel(LogLevel.Warning);
         builder.Logging.AddFilter("Atc.Claude.Kanban", LogLevel.Information);
 
+        // Suppress verbose stack traces from the host when port binding fails (auto-port handles this)
+        builder.Logging.AddFilter("Microsoft.Extensions.Hosting.Internal.Host", LogLevel.Critical);
+
         builder.Services.AddKanbanServices(claudeDir);
         builder.Services.AddEndpointDefinitions(typeof(Program));
 
