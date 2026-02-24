@@ -12,6 +12,8 @@ public static class Program
     {
         ArgumentNullException.ThrowIfNull(args);
 
+        System.Console.OutputEncoding = System.Text.Encoding.UTF8;
+
         var (port, explicitPort, openBrowser, claudeDir) = ParseArguments(args);
 
         for (var attempt = 0; attempt < MaxPortAttempts; attempt++)
