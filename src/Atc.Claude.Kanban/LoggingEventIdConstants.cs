@@ -5,9 +5,6 @@ namespace Atc.Claude.Kanban;
 /// </summary>
 internal static class LoggingEventIdConstants
 {
-    public const int DashboardStarting = 10000;
-
-    public const int WatchingDirectory = 11000;
     public const int WatcherRegistered = 11001;
     public const int WatcherDirectoryCreateFailed = 11002;
     public const int WatcherCreateFailed = 11003;

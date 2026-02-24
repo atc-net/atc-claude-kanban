@@ -3,7 +3,7 @@ namespace Atc.Claude.Kanban;
 /// <summary>
 /// Entry point — parses CLI arguments, wires up DI, and launches the Kestrel web server.
 /// </summary>
-public static partial class Program
+public static class Program
 {
     private const int DefaultPort = 3456;
     private const int MaxPortAttempts = 10;
@@ -53,8 +53,10 @@ public static partial class Program
         app.UseEmbeddedStaticFiles();
 
         var url = $"http://localhost:{port}";
-        LogDashboardStarting(app.Logger, url);
-        LogWatchingDirectory(app.Logger, claudeDir);
+
+        var version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "dev";
+
+        StartupBanner.Print(url, claudeDir, version);
 
         if (openBrowser)
         {
@@ -63,22 +65,6 @@ public static partial class Program
 
         app.Run();
     }
-
-    [LoggerMessage(
-        EventId = LoggingEventIdConstants.DashboardStarting,
-        Level = LogLevel.Information,
-        Message = "ATC Claude Kanban dashboard starting at {Url}.")]
-    private static partial void LogDashboardStarting(
-        ILogger logger,
-        string url);
-
-    [LoggerMessage(
-        EventId = LoggingEventIdConstants.WatchingDirectory,
-        Level = LogLevel.Information,
-        Message = "Watching Claude directory: {ClaudeDir}.")]
-    private static partial void LogWatchingDirectory(
-        ILogger logger,
-        string claudeDir);
 
     private static (int Port, bool ExplicitPort, bool OpenBrowser, string ClaudeDir) ParseArguments(
         string[] args)
