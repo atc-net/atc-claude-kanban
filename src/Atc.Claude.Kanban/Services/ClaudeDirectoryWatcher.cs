@@ -118,12 +118,24 @@ public sealed partial class ClaudeDirectoryWatcher : BackgroundService
                 watchers.Add(watcher);
 
                 LogWatching(dir);
+                PrintWatcherRegistered(dir);
             }
             catch (IOException ex)
             {
                 LogWatcherCreateFailed(ex, dir);
             }
         }
+    }
+
+    /// <summary>
+    /// Prints a styled confirmation line to the console when a watcher is registered.
+    /// </summary>
+    /// <param name="directory">The directory being watched.</param>
+    [SuppressMessage("Globalization", "CA1303:Do not pass literals as localized parameters", Justification = "Styled console output is not localizable")]
+    private static void PrintWatcherRegistered(string directory)
+    {
+        var displayDir = PathHelper.CollapseHomePath(directory);
+        System.Console.WriteLine($"  \e[32m✓\e[0m \e[90mWatching\e[0m  \e[97m{displayDir}\e[0m");
     }
 
     /// <summary>

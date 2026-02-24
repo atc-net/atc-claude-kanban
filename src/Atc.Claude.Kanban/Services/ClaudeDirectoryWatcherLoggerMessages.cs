@@ -8,7 +8,7 @@ public sealed partial class ClaudeDirectoryWatcher
 {
     [LoggerMessage(
         EventId = LoggingEventIdConstants.WatcherRegistered,
-        Level = LogLevel.Information,
+        Level = LogLevel.Debug,
         Message = "Watching directory '{Directory}'.")]
     private partial void LogWatching(string directory);
 
