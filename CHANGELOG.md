@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.4.0...v1.5.0) (2026-02-25)
+
+
+### Features
+
+* add background auto-update check via NuGet on startup ([161c39e](https://github.com/atc-net/atc-claude-kanban/commit/161c39ed7062980c80e104abde5b3ff3ced44322))
+
 ## [1.4.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.3.0...v1.4.0) (2026-02-24)
 
 
