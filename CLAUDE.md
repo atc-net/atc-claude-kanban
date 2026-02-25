@@ -12,7 +12,7 @@ A .NET 10 dotnet tool that serves a real-time Kanban dashboard for monitoring Cl
 # Build (Release mode enforces all analyzer rules as errors)
 dotnet build -c Release
 
-# Run tests (53 tests across 7 test classes)
+# Run tests (65 tests across 8 test classes)
 dotnet test
 
 # Run the dashboard locally
@@ -27,6 +27,7 @@ dotnet run --project src/Atc.Claude.Kanban -- --port 8080
 ```
 src/Atc.Claude.Kanban/
   Program.cs                    # Entry point, CLI args, auto-port discovery, WebApplication wiring
+  CliOptions.cs                 # Parsed CLI argument record
   EndpointDefinitions/          # Atc.Rest.MinimalApi IEndpointDefinition implementations
     SessionEndpointDefinition   # /api/sessions, /api/sessions/{id}, /api/sessions/{id}/agents
     TaskEndpointDefinition      # /api/tasks/all, PUT/DELETE/POST task operations
@@ -52,14 +53,17 @@ src/Atc.Claude.Kanban/
     SubagentService             # Subagent JSONL transcript parsing from projects/
     ClaudeDirectoryWatcher      # BackgroundService with 4 FileSystemWatchers (extension-filtered)
     SseClientManager            # SSE client connection manager (singleton)
+  UpdateCheck/
+    Models/                     # NuGetVersionIndex, UpdateCheckCache (internal)
+    Services/                   # UpdateCheckService (BackgroundService), logger messages
   wwwroot/
     index.html                  # Single-page Kanban + Timeline dashboard (embedded resource)
     images/icon.png             # ATC logo (favicon + sidebar)
   GlobalUsings.cs               # All using directives centralized here
 test/Atc.Claude.Kanban.Tests/
-  Helpers/                      # PathHelper tests (path traversal prevention)
+  Helpers/                      # PathHelper, MockHttpMessageHandler
   Services/                     # SessionService, TaskService, TeamService, SubagentService,
-                                # PlanService, SseClientManager tests
+                                # PlanService, SseClientManager, UpdateCheckService tests
 ```
 
 ## Architecture
@@ -84,7 +88,8 @@ test/Atc.Claude.Kanban.Tests/
 - **File watcher extension filtering** — tasks/teams fire on `.json`, projects on `.jsonl`, plans on `.md` only; other file types are ignored to avoid spurious SSE events
 - **Task timestamps** — Claude Code task JSON files don't store `createdAt`/`updatedAt`; enriched at read time from `File.GetCreationTimeUtc`/`File.GetLastWriteTimeUtc`
 - **Blocked badge** — must check actual status of blocking tasks, not just presence of `blockedBy` array (completed blockers should clear the badge)
-- **Auto-port** — only when using the default port; explicit `--port` fails fast. Catches `IOException` wrapping `SocketException(AddressAlreadyInUse)`
+- **Auto-port** — probes port availability with `TcpListener` before building the app; explicit `--port` fails fast with a styled error
+- **Auto-update** — `UpdateCheckService` (BackgroundService) checks NuGet flat container API on startup with 24h cache at `{LocalApplicationData}/atc-claude-kanban/update-check.json`. Suppressed by `ATC_NO_UPDATE_CHECK=1`, `--no-update-check`, or CI env vars (`CI`, `TF_BUILD`, `GITHUB_ACTIONS`). SSE broadcasts `version-update` notifications; `SseClientManager` replays pending version-update to late-connecting clients via `pendingVersionUpdate` field
 
 ## Coding Conventions
 

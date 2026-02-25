@@ -15,6 +15,7 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
 - 📝 **Plan viewer** — view and open Claude Code plans directly from the dashboard
 - 🔌 **Auto-port discovery** — automatically finds an available port when the default is taken
+- 🔄 **Auto-update** — checks NuGet for new versions on startup and updates automatically
 
 ## 📋 Requirements
 
@@ -42,6 +43,9 @@ atc-claude-kanban --port 8080
 
 # Custom Claude directory
 atc-claude-kanban --dir ~/.claude-work
+
+# Skip the NuGet update check on startup
+atc-claude-kanban --no-update-check
 ```
 
 Then open your browser to `http://localhost:3456` and watch your Claude Code tasks in real time.
@@ -171,6 +175,14 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 **JSON vs JSONL**: Task files, team configs, and session indexes are standard `.json` (single object). Session transcripts are `.jsonl` (JSON Lines — one JSON object per line, append-only). The dashboard only reads `.json` files; `.jsonl` transcripts are used for metadata discovery (project path, git branch).
 
 **Session discovery**: Sessions appear on the board if they have task `.json` files under `tasks/`, or if they have active subagents under `projects/`. The `projects/` and `teams/` directories enrich sessions with metadata (project name, git branch, team members).
+
+## ⚙️ Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ATC_NO_UPDATE_CHECK=1` | Disable the NuGet update check on startup |
+
+The update check is also automatically suppressed in CI environments (`CI`, `TF_BUILD`, or `GITHUB_ACTIONS` env vars detected).
 
 ## 🏗️ Architecture
 
