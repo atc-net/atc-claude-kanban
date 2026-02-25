@@ -54,7 +54,7 @@ public sealed class PlanEndpointDefinition : IEndpointDefinition
             var editor = Environment.GetEnvironmentVariable("EDITOR");
             if (!string.IsNullOrEmpty(editor))
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                Process.Start(new ProcessStartInfo
                 {
                     FileName = editor,
                     Arguments = $"\"{filePath}\"",
@@ -63,7 +63,7 @@ public sealed class PlanEndpointDefinition : IEndpointDefinition
             }
             else
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                Process.Start(new ProcessStartInfo
                 {
                     FileName = filePath,
                     UseShellExecute = true,

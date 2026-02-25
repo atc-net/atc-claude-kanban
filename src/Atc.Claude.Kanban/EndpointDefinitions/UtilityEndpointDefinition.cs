@@ -19,14 +19,15 @@ public sealed class UtilityEndpointDefinition : IEndpointDefinition
     internal static Results<Ok, BadRequest, StatusCodeHttpResult> OpenFolder(
         [FromBody] OpenFolderRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Path) || !Directory.Exists(request.Path))
+        if (string.IsNullOrWhiteSpace(request.Path) ||
+            !Directory.Exists(request.Path))
         {
             return TypedResults.BadRequest();
         }
 
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            Process.Start(new ProcessStartInfo
             {
                 FileName = request.Path,
                 UseShellExecute = true,

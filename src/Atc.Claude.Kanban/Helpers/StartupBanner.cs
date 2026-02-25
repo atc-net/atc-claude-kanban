@@ -70,7 +70,6 @@ internal static class StartupBanner
     /// <param name="url">The dashboard URL.</param>
     /// <param name="claudeDir">The watched Claude directory path.</param>
     /// <param name="version">The application version string.</param>
-    [SuppressMessage("Globalization", "CA1303:Do not pass literals as localized parameters", Justification = "ASCII art banner is not localizable")]
     internal static void Print(
         string url,
         string claudeDir,
