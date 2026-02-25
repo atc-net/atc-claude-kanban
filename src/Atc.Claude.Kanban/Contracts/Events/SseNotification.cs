@@ -42,8 +42,14 @@ public sealed class SseNotification
     public string? Slug { get; set; }
 
     /// <summary>
-    /// Gets or sets the notification timestamp.
+    /// Gets or sets the current application version (for version-update notifications).
     /// </summary>
-    [JsonPropertyName("timestamp")]
-    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+    [JsonPropertyName("currentVersion")]
+    public string? CurrentVersion { get; set; }
+
+    /// <summary>
+    /// Gets or sets the latest available version (for version-update notifications).
+    /// </summary>
+    [JsonPropertyName("latestVersion")]
+    public string? LatestVersion { get; set; }
 }

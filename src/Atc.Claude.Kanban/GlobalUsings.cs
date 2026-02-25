@@ -1,6 +1,8 @@
 global using System.Collections.Concurrent;
+global using System.ComponentModel;
 global using System.Diagnostics;
 global using System.Diagnostics.CodeAnalysis;
+global using System.Net.Sockets;
 global using System.Reflection;
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
@@ -13,6 +15,8 @@ global using Atc.Claude.Kanban.Contracts.Responses;
 global using Atc.Claude.Kanban.Extensions;
 global using Atc.Claude.Kanban.Helpers;
 global using Atc.Claude.Kanban.Services;
+global using Atc.Claude.Kanban.UpdateCheck.Models;
+global using Atc.Claude.Kanban.UpdateCheck.Services;
 global using Atc.Rest.MinimalApi.Abstractions;
 global using Atc.Rest.MinimalApi.Extensions;
 global using Atc.Serialization;
