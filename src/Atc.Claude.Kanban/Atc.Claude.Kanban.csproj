@@ -28,4 +28,8 @@
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Atc.Claude.Kanban.Tests" />
+  </ItemGroup>
+
 </Project>

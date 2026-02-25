@@ -584,6 +584,7 @@ dotnet_diagnostic.SA1010.severity = none            #
 dotnet_diagnostic.SA1615.severity = none            # Element return value should be documented
 
 dotnet_diagnostic.CA1056.severity = none            # URI properties should not be strings
+dotnet_diagnostic.CA1303.severity = none            # Do not pass literals as localized parameters - Console output is not localizable
 dotnet_diagnostic.CA1852.severity = none            # False-Positive on sealed classes
 dotnet_diagnostic.CA1859.severity = none            #
 dotnet_diagnostic.CA1860.severity = none            #
