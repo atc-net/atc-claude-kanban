@@ -1,4 +1,11 @@
+global using System.Net;
 global using System.Text.Json;
+global using System.Text.Json.Serialization;
+global using Atc.Claude.Kanban.Contracts.Events;
 global using Atc.Claude.Kanban.Services;
+global using Atc.Claude.Kanban.Tests.Helpers;
+global using Atc.Claude.Kanban.UpdateCheck.Models;
+global using Atc.Claude.Kanban.UpdateCheck.Services;
 global using Atc.Serialization;
 global using Microsoft.Extensions.Caching.Memory;
+global using Microsoft.Extensions.Logging.Abstractions;

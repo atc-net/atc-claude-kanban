@@ -2413,6 +2413,39 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    #update-banner {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 12px;
+      color: var(--text-primary);
+      z-index: 10000;
+      display: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      max-width: 380px;
+    }
+
+    #update-banner.visible {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #update-banner .dismiss {
+      cursor: pointer;
+      opacity: 0.5;
+      margin-left: auto;
+      font-size: 16px;
+    }
+
+    #update-banner .dismiss:hover {
+      opacity: 1;
+    }
   </style>
 </head>
 <body>
@@ -4409,6 +4442,14 @@
               fetchTasks(currentSessionId);
             }
           }
+
+          if (data.type === 'version-update') {
+            log.debug('[SSE] Version update:', data.currentVersion, '->', data.latestVersion);
+            const banner = document.getElementById('update-banner');
+            const text = document.getElementById('update-banner-text');
+            text.textContent = `Update available: ${data.currentVersion} \u2192 ${data.latestVersion}`;
+            banner.classList.add('visible');
+          }
         };
       }
 
@@ -5306,6 +5347,9 @@
       const owner = actionEl.dataset.owner;
 
       switch (action) {
+        // Update banner
+        case 'dismissUpdate': document.getElementById('update-banner').classList.remove('visible'); break;
+
         // Sidebar
         case 'toggleSidebar': toggleSidebar(); break;
         case 'showAllTasks': showAllTasks(); break;
@@ -5608,6 +5652,10 @@
     </div>
   </div>
   <div id="toast"></div>
+  <div id="update-banner">
+    <span id="update-banner-text"></span>
+    <span class="dismiss" data-action="dismissUpdate" title="Dismiss">&times;</span>
+  </div>
   <div id="reconnect-overlay">
     <div class="reconnect-box">
       <div class="reconnect-spinner"></div>

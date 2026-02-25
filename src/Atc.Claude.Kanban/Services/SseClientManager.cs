@@ -9,6 +9,8 @@ public sealed class SseClientManager
 {
     private readonly ConcurrentDictionary<string, Channel<SseNotification>> clients = new(StringComparer.Ordinal);
 
+    private volatile SseNotification? pendingVersionUpdate;
+
     /// <summary>
     /// Gets the number of currently connected SSE clients.
     /// </summary>
@@ -16,6 +18,8 @@ public sealed class SseClientManager
 
     /// <summary>
     /// Registers a new SSE client and returns its unique ID and notification channel.
+    /// If a version-update notification was broadcast before this client connected,
+    /// it is immediately written to the new client's channel.
     /// </summary>
     /// <returns>A tuple containing the client ID and the notification channel.</returns>
     public (string ClientId, Channel<SseNotification> Channel) AddClient()
@@ -28,6 +32,13 @@ public sealed class SseClientManager
         });
 
         clients.TryAdd(clientId, channel);
+
+        // Replay pending version-update for late-connecting clients
+        var pending = pendingVersionUpdate;
+        if (pending is not null)
+        {
+            channel.Writer.TryWrite(pending);
+        }
 
         return (clientId, channel);
     }
@@ -54,6 +65,13 @@ public sealed class SseClientManager
     /// <param name="notification">The notification to broadcast.</param>
     public void BroadcastNotification(SseNotification notification)
     {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        if (string.Equals(notification.Type, "version-update", StringComparison.Ordinal))
+        {
+            pendingVersionUpdate = notification;
+        }
+
         foreach (var client in clients)
         {
             client.Value.Writer.TryWrite(notification);
