@@ -3479,6 +3479,19 @@
         }
       }
 
+      // Sort by task activity when a filter is active
+      if (filterProject || sessionFilter === 'active') {
+        activeSessions.sort((a, b) => {
+          const aActive = a.inProgress > 0 ? 1 : 0;
+          const bActive = b.inProgress > 0 ? 1 : 0;
+          if (bActive !== aActive) return bActive - aActive;
+          const aHasTasks = a.taskCount > 0 ? 1 : 0;
+          const bHasTasks = b.taskCount > 0 ? 1 : 0;
+          if (bHasTasks !== aHasTasks) return bHasTasks - aHasTasks;
+          return new Date(b.modifiedAt) - new Date(a.modifiedAt);
+        });
+      }
+
       if (activeSessions.length === 0 && archivedSessions.length === 0) {
         let emptyMsg = 'No sessions found';
         let emptyHint = 'Tasks appear when you use Claude Code';
