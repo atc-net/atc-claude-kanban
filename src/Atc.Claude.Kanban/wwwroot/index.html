@@ -3132,11 +3132,19 @@
       if (!sessionId || viewMode === 'all') {
         section.style.display = 'none';
         currentSubagents = [];
+        lastSubagentsHash = '';
         return;
       }
       try {
         const res = await fetch(`/api/sessions/${sessionId}/subagents`);
-        currentSubagents = await res.json();
+        const newSubagents = await res.json();
+        const hash = JSON.stringify(newSubagents);
+        if (hash === lastSubagentsHash) {
+          log.debug('[fetchSubagents] No changes, skipping render');
+          return;
+        }
+        lastSubagentsHash = hash;
+        currentSubagents = newSubagents;
         const activeCount = currentSubagents.filter(a => a.isActive).length;
         const visibleAgents = showAllSubagents ? currentSubagents : currentSubagents.filter(a => a.isActive);
         if (currentSubagents.length === 0 || (!showAllSubagents && activeCount === 0)) {
@@ -3160,6 +3168,13 @@
 
     function renderSubagentCards(agents) {
       const container = document.getElementById('subagent-cards');
+      const savedContainerScroll = container.scrollTop;
+      const savedDescScrolls = {};
+      container.querySelectorAll('.subagent-card.expanded').forEach(card => {
+        const id = card.dataset.agentId;
+        const desc = card.querySelector('.subagent-desc');
+        if (id && desc) savedDescScrolls[id] = desc.scrollTop;
+      });
       container.innerHTML = agents.map(agent => `
         <div class="subagent-card ${agent.isActive ? 'active' : ''} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
           <div class="subagent-card-header">
@@ -3179,6 +3194,12 @@
           </div>
         </div>
       `).join('');
+      container.scrollTop = savedContainerScroll;
+      Object.entries(savedDescScrolls).forEach(([id, scrollTop]) => {
+        const card = container.querySelector(`.subagent-card[data-agent-id="${id}"]`);
+        const desc = card?.querySelector('.subagent-desc');
+        if (desc) desc.scrollTop = scrollTop;
+      });
     }
 
     function toggleSubagentFilter() {
@@ -3201,6 +3222,7 @@
     }
 
     let lastCurrentTasksHash = '';
+    let lastSubagentsHash = '';
 
     async function fetchTasks(sessionId) {
       try {
@@ -3242,6 +3264,7 @@
         currentTasks = [];
         currentSessionId = sessionId;
         lastCurrentTasksHash = '';
+        lastSubagentsHash = '';
         updateUrl();
         renderSession();
         fetchSubagents(sessionId);
@@ -3592,6 +3615,10 @@
 
       const emptyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>`;
 
+      const savedPendingScroll = pendingTasks.scrollTop;
+      const savedInProgressScroll = inProgressTasks.scrollTop;
+      const savedCompletedScroll = completedTasks.scrollTop;
+
       pendingTasks.innerHTML = pending.length > 0
         ? pending.map(renderTaskCard).join('')
         : `<div class="column-empty">${emptyIcon}<div>No pending tasks</div></div>`;
@@ -3603,6 +3630,10 @@
       completedTasks.innerHTML = completed.length > 0
         ? completed.map(renderTaskCard).join('')
         : `<div class="column-empty">${emptyIcon}<div>No completed tasks</div></div>`;
+
+      pendingTasks.scrollTop = savedPendingScroll;
+      inProgressTasks.scrollTop = savedInProgressScroll;
+      completedTasks.scrollTop = savedCompletedScroll;
 
       if (selectedTaskId) {
         const card = document.querySelector(`.task-card[data-task-id="${selectedTaskId}"][data-session-id="${selectedSessionId}"]`)
