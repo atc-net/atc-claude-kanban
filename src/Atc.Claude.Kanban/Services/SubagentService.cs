@@ -161,6 +161,8 @@ public sealed class SubagentService
             LastActivityAt = lastActivityAt,
             IsActive = isActive,
             Cwd = metadata.Cwd,
+            TranscriptPath = filePath,
+            TranscriptDir = Path.GetDirectoryName(filePath),
         };
     }
 

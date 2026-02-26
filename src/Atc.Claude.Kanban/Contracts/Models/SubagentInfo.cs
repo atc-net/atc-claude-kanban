@@ -59,4 +59,16 @@ public sealed class SubagentInfo
     /// </summary>
     [JsonPropertyName("cwd")]
     public string? Cwd { get; set; }
+
+    /// <summary>
+    /// Gets or sets the absolute path to the JSONL transcript file.
+    /// </summary>
+    [JsonPropertyName("transcriptPath")]
+    public string? TranscriptPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the directory containing the JSONL transcript file.
+    /// </summary>
+    [JsonPropertyName("transcriptDir")]
+    public string? TranscriptDir { get; set; }
 }
