@@ -1623,6 +1623,30 @@
       color: var(--text-muted);
     }
 
+    .subagent-detail-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .subagent-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .subagent-action-btn:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
     .plan-indicator {
       width: 24px;
       height: 24px;
@@ -3212,6 +3236,7 @@
             ${agent.startedAt ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Started</span><span class="subagent-detail-value">${new Date(agent.startedAt).toLocaleString()}</span></div>` : ''}
             <div class="subagent-detail-row"><span class="subagent-detail-label">Last</span><span class="subagent-detail-value">${new Date(agent.lastActivityAt).toLocaleString()}</span></div>
             ${agent.description ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Task</span><span class="subagent-detail-value" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</span></div>` : ''}
+            ${agent.transcriptPath ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Transcript</span><span class="subagent-detail-value subagent-detail-actions"><button class="subagent-action-btn" data-action="copyPath" data-path="${escapeHtml(agent.transcriptPath)}" title="Copy transcript path"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy path</button><button class="subagent-action-btn" data-action="openFolder" data-path="${escapeHtml(agent.transcriptDir)}" title="Open transcript folder"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Open folder</button></span></div>` : ''}
           </div>
         </div>
       `).join('');
