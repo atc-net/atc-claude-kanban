@@ -1581,13 +1581,33 @@
       box-shadow: 0 0 4px var(--success);
     }
 
+    .subagent-copy-btn {
+      opacity: 0;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      transition: opacity 0.15s, color 0.15s;
+    }
+
+    .subagent-card:hover .subagent-copy-btn {
+      opacity: 1;
+    }
+
+    .subagent-copy-btn:hover {
+      color: var(--accent);
+    }
+
     .subagent-model {
       font-size: 10px;
       padding: 1px 5px;
       border-radius: 3px;
       background: var(--bg-hover);
       color: var(--text-tertiary);
-      margin-left: auto;
     }
 
     .subagent-desc {
@@ -3181,6 +3201,7 @@
             <span class="subagent-status-dot ${agent.isActive ? 'active' : ''}"></span>
             <span>${escapeHtml(agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
+            ${agent.description ? `<button class="subagent-copy-btn" data-action="copyText" data-text="${escapeHtml(cleanAgentDescription(agent.description))}" data-label="Description copied" title="Copy description"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
           </div>
           ${agent.description ? `<div class="subagent-desc" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</div>` : ''}
           <div class="subagent-time">${agent.startedAt ? formatDate(agent.startedAt) : ''} ${agent.isActive ? '· Active' : `· Last: ${formatDate(agent.lastActivityAt)}`}</div>
@@ -4522,6 +4543,10 @@
       navigator.clipboard.writeText(path).then(() => showToast('Path copied', 1500));
     }
 
+    function copyText(text, label) {
+      navigator.clipboard.writeText(text).then(() => showToast(label || 'Copied', 1500));
+    }
+
     function openFolder(path) {
       fetch('/api/open-folder', {
         method: 'POST',
@@ -5399,6 +5424,7 @@
         case 'openPlanModal': e.stopPropagation(); openPlanModal(); break;
         case 'openPlanForSession': e.stopPropagation(); openPlanForSession(sessionId); break;
         case 'copyPath': e.stopPropagation(); copyPath(actionEl.dataset.path); break;
+        case 'copyText': e.stopPropagation(); copyText(actionEl.dataset.text, actionEl.dataset.label); break;
         case 'openFolder': e.stopPropagation(); openFolder(actionEl.dataset.path); break;
         case 'deleteAllSessionTasks': deleteAllSessionTasks(sessionId); break;
         case 'toggleSubagents': toggleSubagents(); break;
