@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.5.0...v1.6.0) (2026-03-02)
+
+
+### Features
+
+* add copy-to-clipboard button on subagent cards ([166d05c](https://github.com/atc-net/atc-claude-kanban/commit/166d05c0498fb5295ec7f2514f726b72e6cdf05a))
+* expose transcript path and add open-folder button for subagents ([7a9b5a5](https://github.com/atc-net/atc-claude-kanban/commit/7a9b5a5360d490b9f967962049eb3ac9b779b788))
+* sort sessions by task activity in filtered views ([913a0c4](https://github.com/atc-net/atc-claude-kanban/commit/913a0c459cd162b77118819342bc1cae334d7a47))
+
+
+### Bug Fixes
+
+* preserve scroll position on SSE-triggered re-renders ([0bcdf98](https://github.com/atc-net/atc-claude-kanban/commit/0bcdf98e7d0f71c61d569626f975c0ddef3fad20))
+
 ## [1.5.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.4.0...v1.5.0) (2026-02-25)
 
 
