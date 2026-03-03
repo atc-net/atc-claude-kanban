@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.6.0...v1.7.0) (2026-03-03)
+
+
+### Features
+
+* add 3-state subagent lifecycle, last-message capture, and adaptive polling ([9ee080b](https://github.com/atc-net/atc-claude-kanban/commit/9ee080b57fb54a2cbf935f8963eb91e9c7b19cf5))
+
 ## [1.6.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.5.0...v1.6.0) (2026-03-02)
 
 
