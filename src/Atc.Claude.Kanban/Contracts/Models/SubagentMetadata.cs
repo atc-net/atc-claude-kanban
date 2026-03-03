@@ -14,4 +14,6 @@ internal sealed record SubagentMetadata
     public DateTime? StartedAt { get; set; }
 
     public string? Cwd { get; set; }
+
+    public string? LastMessage { get; set; }
 }

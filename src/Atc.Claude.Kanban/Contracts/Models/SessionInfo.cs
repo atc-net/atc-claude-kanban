@@ -126,7 +126,7 @@ public sealed class SessionInfo
     public int SubagentCount { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of subagents modified in the last 30 seconds.
+    /// Gets or sets the number of subagents that are not stopped (modified within 90 seconds).
     /// </summary>
     [JsonPropertyName("activeSubagentCount")]
     public int ActiveSubagentCount { get; set; }

@@ -49,10 +49,18 @@ public sealed class SubagentInfo
     public DateTime LastActivityAt { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the subagent is currently active (modified in last 30s).
+    /// Gets or sets the subagent lifecycle status: "active" (modified &lt;15s ago),
+    /// "idle" (15–90s ago), or "stopped" (&gt;90s ago).
     /// </summary>
-    [JsonPropertyName("isActive")]
-    public bool IsActive { get; set; }
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "stopped";
+
+    /// <summary>
+    /// Gets or sets the last assistant message content from the JSONL transcript (truncated to 200 chars).
+    /// Only populated for idle or stopped agents.
+    /// </summary>
+    [JsonPropertyName("lastMessage")]
+    public string? LastMessage { get; set; }
 
     /// <summary>
     /// Gets or sets the working directory of the subagent.
