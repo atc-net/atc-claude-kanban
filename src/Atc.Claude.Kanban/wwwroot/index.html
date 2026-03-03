@@ -1518,7 +1518,12 @@
     }
 
     .subagent-card.active {
-      border-color: var(--accent);
+      border-color: var(--success);
+      border-left-width: 3px;
+    }
+
+    .subagent-card.idle {
+      border-color: var(--warning);
       border-left-width: 3px;
     }
 
@@ -1581,6 +1586,11 @@
       box-shadow: 0 0 4px var(--success);
     }
 
+    .subagent-status-dot.idle {
+      background: var(--warning);
+      box-shadow: 0 0 3px var(--warning);
+    }
+
     .subagent-copy-btn {
       opacity: 0;
       background: none;
@@ -1621,6 +1631,15 @@
     .subagent-time {
       font-size: 10px;
       color: var(--text-muted);
+    }
+
+    .subagent-last-msg {
+      font-style: italic;
+      color: var(--text-tertiary);
+      max-height: 60px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     .subagent-detail-actions {
@@ -2746,6 +2765,23 @@
     let selectedSessionIdx = -1;
     let currentSubagents = [];
     let showAllSubagents = false;
+    let subagentPollTimer = null;
+
+    function startSubagentPolling() {
+      if (subagentPollTimer) return;
+      subagentPollTimer = setInterval(() => {
+        if (currentSessionId) {
+          fetchSubagents(currentSessionId);
+        }
+      }, 3000);
+    }
+
+    function stopSubagentPolling() {
+      if (subagentPollTimer) {
+        clearInterval(subagentPollTimer);
+        subagentPollTimer = null;
+      }
+    }
     const expandedSubagentIds = new Set();
     const knownSessions = new Map(); // client-side persistence until page refresh
     const completedTasksCache = []; // tasks preserved from sessions that completed
@@ -3177,6 +3213,7 @@
         section.style.display = 'none';
         currentSubagents = [];
         lastSubagentsHash = '';
+        stopSubagentPolling();
         return;
       }
       try {
@@ -3189,21 +3226,31 @@
         }
         lastSubagentsHash = hash;
         currentSubagents = newSubagents;
-        const activeCount = currentSubagents.filter(a => a.isActive).length;
-        const visibleAgents = showAllSubagents ? currentSubagents : currentSubagents.filter(a => a.isActive);
-        if (currentSubagents.length === 0 || (!showAllSubagents && activeCount === 0)) {
+        const activeCount = currentSubagents.filter(a => a.status === 'active').length;
+        const idleCount = currentSubagents.filter(a => a.status === 'idle').length;
+        const stoppedCount = currentSubagents.filter(a => a.status === 'stopped').length;
+        const notStoppedCount = activeCount + idleCount;
+        const visibleAgents = showAllSubagents ? currentSubagents : currentSubagents.filter(a => a.status !== 'stopped');
+        if (currentSubagents.length === 0) {
           section.style.display = 'none';
+          stopSubagentPolling();
           return;
         }
         section.style.display = '';
-        const countLabel = showAllSubagents
-          ? `${activeCount} active / ${currentSubagents.length} total`
-          : `${activeCount}`;
-        document.getElementById('subagent-count').textContent = countLabel;
+        const countParts = [];
+        if (activeCount > 0) countParts.push(`${activeCount} active`);
+        if (idleCount > 0) countParts.push(`${idleCount} idle`);
+        if (showAllSubagents && stoppedCount > 0) countParts.push(`${stoppedCount} stopped`);
+        document.getElementById('subagent-count').textContent = countParts.length > 0 ? countParts.join(' / ') : `${stoppedCount} stopped`;
         const filterToggle = document.getElementById('subagent-filter-toggle');
-        filterToggle.textContent = showAllSubagents ? 'Active only' : `Show all (${currentSubagents.length})`;
-        filterToggle.style.display = currentSubagents.length > activeCount ? '' : 'none';
+        filterToggle.textContent = showAllSubagents ? 'Hide stopped' : `Show all (${currentSubagents.length})`;
+        filterToggle.style.display = stoppedCount > 0 ? '' : 'none';
         renderSubagentCards(visibleAgents);
+        if (notStoppedCount > 0) {
+          startSubagentPolling();
+        } else {
+          stopSubagentPolling();
+        }
       } catch (error) {
         log.error('Failed to fetch subagents:', error);
         section.style.display = 'none';
@@ -3212,6 +3259,7 @@
 
     function renderSubagentCards(agents) {
       const container = document.getElementById('subagent-cards');
+      container.style.display = '';
       const savedContainerScroll = container.scrollTop;
       const savedDescScrolls = {};
       container.querySelectorAll('.subagent-card.expanded').forEach(card => {
@@ -3219,22 +3267,24 @@
         const desc = card.querySelector('.subagent-desc');
         if (id && desc) savedDescScrolls[id] = desc.scrollTop;
       });
+      const statusLabel = (agent) => agent.status === 'active' ? '· Active' : agent.status === 'idle' ? '· Idle' : `· Last: ${formatDate(agent.lastActivityAt)}`;
       container.innerHTML = agents.map(agent => `
-        <div class="subagent-card ${agent.isActive ? 'active' : ''} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
+        <div class="subagent-card ${agent.status} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
           <div class="subagent-card-header">
-            <span class="subagent-status-dot ${agent.isActive ? 'active' : ''}"></span>
+            <span class="subagent-status-dot ${agent.status}"></span>
             <span>${escapeHtml(agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
             ${agent.description ? `<button class="subagent-copy-btn" data-action="copyText" data-text="${escapeHtml(cleanAgentDescription(agent.description))}" data-label="Description copied" title="Copy description"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
           </div>
           ${agent.description ? `<div class="subagent-desc" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</div>` : ''}
-          <div class="subagent-time">${agent.startedAt ? formatDate(agent.startedAt) : ''} ${agent.isActive ? '· Active' : `· Last: ${formatDate(agent.lastActivityAt)}`}</div>
+          <div class="subagent-time">${agent.startedAt ? formatDate(agent.startedAt) : ''} ${statusLabel(agent)}</div>
           <div class="subagent-detail">
             <div class="subagent-detail-row"><span class="subagent-detail-label">Agent</span><span class="subagent-detail-value">${escapeHtml(agent.agentId)}</span></div>
             ${agent.model ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Model</span><span class="subagent-detail-value">${escapeHtml(agent.model)}</span></div>` : ''}
             ${agent.cwd ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Dir</span><span class="subagent-detail-value" title="${escapeHtml(agent.cwd)}">${escapeHtml(agent.cwd)}</span></div>` : ''}
             ${agent.startedAt ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Started</span><span class="subagent-detail-value">${new Date(agent.startedAt).toLocaleString()}</span></div>` : ''}
             <div class="subagent-detail-row"><span class="subagent-detail-label">Last</span><span class="subagent-detail-value">${new Date(agent.lastActivityAt).toLocaleString()}</span></div>
+            ${agent.lastMessage ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Message</span><span class="subagent-detail-value subagent-last-msg">${escapeHtml(agent.lastMessage)}</span></div>` : ''}
             ${agent.description ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Task</span><span class="subagent-detail-value" title="${escapeHtml(cleanAgentDescription(agent.description))}">${escapeHtml(cleanAgentDescription(agent.description))}</span></div>` : ''}
             ${agent.transcriptPath ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Transcript</span><span class="subagent-detail-value subagent-detail-actions"><button class="subagent-action-btn" data-action="copyPath" data-path="${escapeHtml(agent.transcriptPath)}" title="Copy transcript path"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy path</button><button class="subagent-action-btn" data-action="openFolder" data-path="${escapeHtml(agent.transcriptDir)}" title="Open transcript folder"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Open folder</button></span></div>` : ''}
           </div>
@@ -3250,8 +3300,19 @@
 
     function toggleSubagentFilter() {
       showAllSubagents = !showAllSubagents;
-      if (currentSessionId) {
-        fetchSubagents(currentSessionId);
+      if (currentSubagents.length > 0) {
+        const activeCount = currentSubagents.filter(a => a.status === 'active').length;
+        const idleCount = currentSubagents.filter(a => a.status === 'idle').length;
+        const stoppedCount = currentSubagents.filter(a => a.status === 'stopped').length;
+        const visibleAgents = showAllSubagents ? currentSubagents : currentSubagents.filter(a => a.status !== 'stopped');
+        const countParts = [];
+        if (activeCount > 0) countParts.push(`${activeCount} active`);
+        if (idleCount > 0) countParts.push(`${idleCount} idle`);
+        if (showAllSubagents && stoppedCount > 0) countParts.push(`${stoppedCount} stopped`);
+        document.getElementById('subagent-count').textContent = countParts.length > 0 ? countParts.join(' / ') : `${stoppedCount} stopped`;
+        const filterToggle = document.getElementById('subagent-filter-toggle');
+        filterToggle.textContent = showAllSubagents ? 'Hide stopped' : `Show all (${currentSubagents.length})`;
+        renderSubagentCards(visibleAgents);
       }
     }
 

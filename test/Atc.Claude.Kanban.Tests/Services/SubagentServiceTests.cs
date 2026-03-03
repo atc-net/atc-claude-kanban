@@ -162,7 +162,170 @@ public sealed class SubagentServiceTests : IDisposable
         // Assert
         total.Should().Be(2);
 
-        // Both files were just created, so they should be active (within 30s threshold)
+        // Both files were just created, so they should be active (within 90s idle threshold)
+        active.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSubagents_ReturnsActiveStatus_WhenRecentlyModified()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-active", "session-active", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = JsonSerializer.Serialize(new { type = "user", timestamp = "2025-06-01T10:00:00Z", message = new { content = "Test task" } });
+        var filePath = Path.Combine(subagentsDir, "agent-act1.jsonl");
+        await File.WriteAllTextAsync(filePath, jsonl, cancellationToken);
+
+        // File was just created, so it's within the 15s active threshold
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-active", cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].Status.Should().Be("active");
+    }
+
+    [Fact]
+    public async Task GetSubagents_ReturnsIdleStatus_WhenModeratelyOld()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-idle", "session-idle", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = JsonSerializer.Serialize(new { type = "user", timestamp = "2025-06-01T10:00:00Z", message = new { content = "Test task" } });
+        var filePath = Path.Combine(subagentsDir, "agent-idl1.jsonl");
+        await File.WriteAllTextAsync(filePath, jsonl, cancellationToken);
+
+        // Set modification time to 30 seconds ago (between 15s active and 90s idle thresholds)
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddSeconds(-30));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-idle", cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].Status.Should().Be("idle");
+    }
+
+    [Fact]
+    public async Task GetSubagents_ReturnsStoppedStatus_WhenOld()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-stop", "session-stop", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = JsonSerializer.Serialize(new { type = "user", timestamp = "2025-06-01T10:00:00Z", message = new { content = "Test task" } });
+        var filePath = Path.Combine(subagentsDir, "agent-stp1.jsonl");
+        await File.WriteAllTextAsync(filePath, jsonl, cancellationToken);
+
+        // Set modification time to 2 minutes ago (beyond 90s idle threshold)
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddMinutes(-2));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-stop", cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].Status.Should().Be("stopped");
+    }
+
+    [Fact]
+    public async Task GetSubagents_IncludesLastMessage_WhenStopped()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-msg", "session-msg", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", timestamp = "2025-06-01T10:00:00Z", message = new { content = "Find bugs" } }),
+            JsonSerializer.Serialize(new { type = "assistant", message = new { model = "claude-opus-4-6", content = "I found 3 bugs in the codebase." } }));
+
+        var filePath = Path.Combine(subagentsDir, "agent-msg1.jsonl");
+        await File.WriteAllTextAsync(filePath, jsonl, cancellationToken);
+
+        // Set modification time to 2 minutes ago so agent is stopped
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddMinutes(-2));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-msg", cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].LastMessage.Should().Be("I found 3 bugs in the codebase.");
+    }
+
+    [Fact]
+    public async Task GetSubagents_DoesNotIncludeLastMessage_WhenActive()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-nomsg", "session-nomsg", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", timestamp = "2025-06-01T10:00:00Z", message = new { content = "Find bugs" } }),
+            JsonSerializer.Serialize(new { type = "assistant", message = new { model = "claude-opus-4-6", content = "I found 3 bugs." } }));
+
+        var filePath = Path.Combine(subagentsDir, "agent-nomsg.jsonl");
+        await File.WriteAllTextAsync(filePath, jsonl, cancellationToken);
+
+        // File just created = active, so lastMessage should NOT be populated
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync("session-nomsg", cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].Status.Should().Be("active");
+        subagents[0].LastMessage.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSubagentCounts_CountsActiveAsNotStopped()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-cnt", "session-cnt", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        // Create 3 agent files
+        var file1 = Path.Combine(subagentsDir, "agent-cnt1.jsonl");
+        var file2 = Path.Combine(subagentsDir, "agent-cnt2.jsonl");
+        var file3 = Path.Combine(subagentsDir, "agent-cnt3.jsonl");
+
+        await File.WriteAllTextAsync(file1, "{\"type\":\"user\"}", cancellationToken);
+        await File.WriteAllTextAsync(file2, "{\"type\":\"user\"}", cancellationToken);
+        await File.WriteAllTextAsync(file3, "{\"type\":\"user\"}", cancellationToken);
+
+        // file1: just created = active (within 90s), file2: 30s ago = idle (within 90s), file3: 2min ago = stopped
+        File.SetLastWriteTimeUtc(file2, DateTime.UtcNow.AddSeconds(-30));
+        File.SetLastWriteTimeUtc(file3, DateTime.UtcNow.AddMinutes(-2));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var (total, active) = service.GetSubagentCounts("session-cnt");
+
+        // Assert
+        total.Should().Be(3);
+
+        // Active count uses IdleThreshold (90s), so active + idle = 2, stopped = 1
         active.Should().Be(2);
     }
 }

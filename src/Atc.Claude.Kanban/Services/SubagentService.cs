@@ -7,7 +7,11 @@ namespace Atc.Claude.Kanban.Services;
 /// </summary>
 public sealed class SubagentService
 {
-    private static readonly TimeSpan ActiveThreshold = TimeSpan.FromSeconds(30);
+    private const int LastMessageMaxLength = 200;
+    private const int TailReadSize = 5120;
+
+    private static readonly TimeSpan ActiveThreshold = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan IdleThreshold = TimeSpan.FromSeconds(90);
 
     private readonly string claudeDir;
     private readonly IMemoryCache cache;
@@ -86,7 +90,7 @@ public sealed class SubagentService
             try
             {
                 var lastWrite = File.GetLastWriteTimeUtc(file);
-                if (now - lastWrite < ActiveThreshold)
+                if (now - lastWrite < IdleThreshold)
                 {
                     active++;
                 }
@@ -138,6 +142,7 @@ public sealed class SubagentService
             : fileName;
 
         DateTime lastActivityAt;
+
         try
         {
             lastActivityAt = File.GetLastWriteTimeUtc(filePath);
@@ -147,8 +152,18 @@ public sealed class SubagentService
             return null;
         }
 
-        var isActive = DateTime.UtcNow - lastActivityAt < ActiveThreshold;
+        var elapsed = DateTime.UtcNow - lastActivityAt;
+        var status = elapsed < ActiveThreshold ? "active"
+                   : elapsed < IdleThreshold ? "idle"
+                   : "stopped";
+
         var metadata = await ReadSubagentMetadataAsync(filePath, cancellationToken);
+
+        // Only read last message for non-active agents to avoid reading files mid-write
+        if (!string.Equals(status, "active", StringComparison.Ordinal))
+        {
+            metadata.LastMessage = await ReadLastMessageAsync(filePath, cancellationToken);
+        }
 
         return new SubagentInfo
         {
@@ -159,7 +174,8 @@ public sealed class SubagentService
             Model = metadata.Model,
             StartedAt = metadata.StartedAt,
             LastActivityAt = lastActivityAt,
-            IsActive = isActive,
+            Status = status,
+            LastMessage = metadata.LastMessage,
             Cwd = metadata.Cwd,
             TranscriptPath = filePath,
             TranscriptDir = Path.GetDirectoryName(filePath),
@@ -275,6 +291,127 @@ public sealed class SubagentService
     }
 
     /// <summary>
+    /// Reads the tail of a JSONL transcript file to extract the last assistant message content.
+    /// Seeks from the end to avoid reading the entire file.
+    /// </summary>
+    private static async Task<string?> ReadLastMessageAsync(
+        string filePath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var fileLength = stream.Length;
+            if (fileLength == 0)
+            {
+                return null;
+            }
+
+            var readSize = (int)System.Math.Min(TailReadSize, fileLength);
+            stream.Seek(-readSize, SeekOrigin.End);
+
+            var buffer = new byte[readSize];
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, readSize), cancellationToken);
+            var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            return FindLastAssistantMessage(tail);
+        }
+        catch (IOException)
+        {
+            // File may have been deleted or locked
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Searches backwards through JSONL lines to find the last assistant message text.
+    /// </summary>
+    private static string? FindLastAssistantMessage(string tail)
+    {
+        var lines = tail.Split('\n');
+
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = lines[i].Trim();
+            if (string.IsNullOrEmpty(line))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("type", out var typeEl) ||
+                    !string.Equals(typeEl.GetString(), "assistant", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!root.TryGetProperty("message", out var msgEl) ||
+                    !msgEl.TryGetProperty("content", out var contentEl))
+                {
+                    continue;
+                }
+
+                var text = ExtractAssistantText(contentEl);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                return text.Length > LastMessageMaxLength
+                    ? string.Concat(text.AsSpan(0, LastMessageMaxLength), "...")
+                    : text;
+            }
+            catch (JsonException)
+            {
+                // Skip malformed lines (including partial first line from seek)
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts text content from an assistant message content field.
+    /// Handles both string content and array-of-content-blocks format.
+    /// </summary>
+    private static string? ExtractAssistantText(JsonElement contentElement)
+    {
+        if (contentElement.ValueKind == JsonValueKind.String)
+        {
+            return contentElement.GetString();
+        }
+
+        if (contentElement.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var parts = new List<string>();
+        foreach (var block in contentElement.EnumerateArray())
+        {
+            if (!block.TryGetProperty("type", out var blockType) ||
+                !string.Equals(blockType.GetString(), "text", StringComparison.Ordinal) ||
+                !block.TryGetProperty("text", out var textEl) ||
+                textEl.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var text = textEl.GetString();
+            if (!string.IsNullOrEmpty(text))
+            {
+                parts.Add(text);
+            }
+        }
+
+        return parts.Count > 0 ? string.Join(' ', parts) : null;
+    }
+
+    /// <summary>
     /// Strips Claude Code protocol tags (e.g. &lt;teammate-message&gt;) from subagent
     /// descriptions, preferring the summary attribute when present.
     /// </summary>
@@ -282,15 +419,16 @@ public sealed class SubagentService
     {
         // Extract summary from <teammate-message summary="..."> if present
         const string marker = "summary=\"";
-        if (content.StartsWith('<') && content.Contains(marker, StringComparison.Ordinal))
+        if (!content.StartsWith('<') ||
+            !content.Contains(marker, StringComparison.Ordinal))
         {
-            var start = content.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
-            var end = content.IndexOf('"', start);
-            return end > start
-                ? content[start..end]
-                : content[start..];
+            return content;
         }
 
-        return content;
+        var start = content.IndexOf(marker, StringComparison.Ordinal) + marker.Length;
+        var end = content.IndexOf('"', start);
+        return end > start
+            ? content[start..end]
+            : content[start..];
     }
 }
