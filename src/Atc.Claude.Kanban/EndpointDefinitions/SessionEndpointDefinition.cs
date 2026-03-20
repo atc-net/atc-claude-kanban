@@ -31,6 +31,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithName("GetAgentTasksForSession")
             .WithDescription("Retrieve internal agent lifecycle tasks for a session.")
             .WithSummary("Retrieve agent tasks for a session.");
+
+        group
+            .MapGet("/{sessionId}/messages", GetMessagesForSession)
+            .WithName("GetMessagesForSession")
+            .WithDescription("Retrieve recent conversation messages from a session's JSONL transcript.")
+            .WithSummary("Retrieve messages for a session.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SessionInfo>>> GetSessions(
@@ -59,5 +65,15 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
     {
         var agentTasks = await taskService.GetAgentTasksForSessionAsync(parameters.SessionId, cancellationToken);
         return TypedResults.Ok(agentTasks);
+    }
+
+    internal static async Task<Ok<IReadOnlyList<MessageEntry>>> GetMessagesForSession(
+        [FromServices] MessageService messageService,
+        [AsParameters] GetMessagesParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var limit = parameters.Limit ?? 15;
+        var messages = await messageService.GetRecentMessagesAsync(parameters.SessionId, limit, cancellationToken);
+        return TypedResults.Ok(messages);
     }
 }
