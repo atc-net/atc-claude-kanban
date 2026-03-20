@@ -19,6 +19,12 @@ public sealed class SubagentEndpointDefinition : IEndpointDefinition
             .WithName("GetSubagents")
             .WithDescription("Retrieve subagent information for a session, parsed from JSONL transcript files.")
             .WithSummary("Retrieve subagents for a session.");
+
+        group
+            .MapGet("/{agentId}/messages", GetSubagentMessages)
+            .WithName("GetSubagentMessages")
+            .WithDescription("Retrieve recent conversation messages from a subagent's JSONL transcript.")
+            .WithSummary("Retrieve messages for a subagent.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SubagentInfo>>> GetSubagents(
@@ -40,5 +46,21 @@ public sealed class SubagentEndpointDefinition : IEndpointDefinition
         }
 
         return TypedResults.Ok(subagents);
+    }
+
+    internal static async Task<Ok<IReadOnlyList<MessageEntry>>> GetSubagentMessages(
+        [FromServices] MessageService messageService,
+        [AsParameters] GetSubagentMessagesParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var limit = parameters.Limit ?? 50;
+
+        var messages = await messageService.GetSubagentMessagesAsync(
+            parameters.SessionId,
+            parameters.AgentId,
+            limit,
+            cancellationToken);
+
+        return TypedResults.Ok(messages);
     }
 }

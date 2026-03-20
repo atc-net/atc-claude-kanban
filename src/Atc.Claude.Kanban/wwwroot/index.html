@@ -2509,6 +2509,192 @@
     #update-banner .dismiss:hover {
       opacity: 1;
     }
+
+    /* Message Panel */
+    .message-panel {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: 480px;
+      height: 100vh;
+      background: var(--bg-surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
+      display: none;
+      flex-direction: column;
+      z-index: 101;
+      overflow: hidden;
+    }
+
+    .message-panel.visible {
+      display: flex;
+    }
+
+    .message-panel-header {
+      padding: 12px 16px;
+      border-bottom: none;
+      background-image: linear-gradient(to right, transparent, var(--border), transparent);
+      background-size: 100% 1px;
+      background-repeat: no-repeat;
+      background-position: bottom;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .message-panel-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .message-panel-header .back-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-right: 8px;
+    }
+
+    .message-panel-header .back-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+
+    .message-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      min-height: 0;
+    }
+
+    .msg-entry {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .msg-entry:hover {
+      background: var(--bg-hover);
+    }
+
+    .msg-entry.msg-user {
+      border-left: 3px solid #3b82f6;
+    }
+
+    .msg-entry.msg-assistant {
+      border-left: 3px solid var(--text-secondary);
+    }
+
+    .msg-entry.msg-tool {
+      border-left: 3px solid #f59e0b;
+    }
+
+    .msg-role {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+    }
+
+    .msg-text {
+      font-size: 13px;
+      color: var(--text-primary);
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      word-break: break-word;
+    }
+
+    .msg-tool-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #f59e0b;
+      margin-bottom: 2px;
+    }
+
+    .msg-tool-params {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    .msg-tool-params .param-badge {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      font-family: monospace;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .msg-tool-result {
+      margin-top: 6px;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-secondary);
+      max-height: 80px;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+    }
+
+    .msg-tool-result.expanded {
+      display: block;
+    }
+
+    .msg-result-toggle {
+      font-size: 11px;
+      color: var(--accent);
+      cursor: pointer;
+      margin-top: 4px;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .msg-result-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .msg-timestamp {
+      font-size: 10px;
+      color: var(--text-secondary);
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    /* Message detail modal content */
+    .msg-detail-full {
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-y: auto;
+      max-height: 70vh;
+    }
   </style>
 </head>
 <body>
@@ -2631,6 +2817,11 @@
                 </svg>
               </button>
             </div>
+            <button id="message-log-toggle" class="icon-btn" data-action="toggleMessagePanel" title="Session log (Shift+L)" aria-label="Toggle message log">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+            </button>
             <button id="notifications-toggle" class="icon-btn" data-action="toggleNotifications" title="Notifications off (click to enable)" aria-label="Toggle notifications">
               <svg id="bell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
@@ -2731,6 +2922,24 @@
         </div>
       </header>
       <div id="detail-content" class="detail-content"></div>
+    </aside>
+
+    <!-- Message panel -->
+    <aside id="message-panel" class="message-panel">
+      <header class="message-panel-header">
+        <div style="display: flex; align-items: center;">
+          <button id="msg-back-btn" class="back-btn" style="display: none;" data-action="exitAgentLog" title="Back to session log">← Back</button>
+          <h3 id="msg-panel-title">Session Log</h3>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button class="detail-close" data-action="closeMessagePanel" aria-label="Close message panel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+              <path d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div id="message-list" class="message-list"></div>
     </aside>
   </div>
 
@@ -2849,6 +3058,10 @@
     const completedCount = document.getElementById('completed-count');
     const detailPanel = document.getElementById('detail-panel');
     const detailContent = document.getElementById('detail-content');
+    const messagePanel = document.getElementById('message-panel');
+    const messageList = document.getElementById('message-list');
+    const msgPanelTitle = document.getElementById('msg-panel-title');
+    const msgBackBtn = document.getElementById('msg-back-btn');
     const connectionStatus = document.getElementById('connection-status');
     const COLUMNS = [
       { el: pendingTasks },
@@ -2858,6 +3071,9 @@
 
     let lastSessionsHash = '';
     let lastTasksHash = '';
+    let lastMessagesHash = '';
+    let agentLogMode = false;
+    let viewingAgentId = null;
 
     async function fetchSessions() {
       log.debug('[fetchSessions] Starting...');
@@ -3366,6 +3582,7 @@
         updateUrl();
         renderSession();
         fetchSubagents(sessionId);
+        if (messagePanel.classList.contains('visible')) fetchMessages(sessionId);
       } catch (error) {
         log.error('Failed to fetch tasks:', error);
         currentTasks = [];
@@ -4190,6 +4407,189 @@
       document.getElementById('delete-task-btn').style.display = 'none';
     }
 
+    // ── Message Panel ──────────────────────────────────────────────
+
+    function toggleMessagePanel() {
+      if (messagePanel.classList.contains('visible')) {
+        closeMessagePanel();
+      } else {
+        const sid = currentSessionId;
+        if (sid) fetchMessages(sid);
+        messagePanel.classList.add('visible');
+      }
+    }
+
+    function closeMessagePanel() {
+      messagePanel.classList.remove('visible');
+      agentLogMode = false;
+      viewingAgentId = null;
+      msgBackBtn.style.display = 'none';
+      msgPanelTitle.textContent = 'Session Log';
+    }
+
+    async function fetchMessages(sessionId) {
+      if (agentLogMode) return;
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/messages?limit=30`);
+        if (!res.ok) return;
+        const messages = await res.json();
+        const hash = JSON.stringify(messages);
+        if (hash === lastMessagesHash) return;
+        lastMessagesHash = hash;
+        renderMessageList(messages);
+      } catch (err) {
+        log.error('[fetchMessages] failed:', err);
+      }
+    }
+
+    async function fetchAgentMessages(sessionId, agentId) {
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/subagents/${agentId}/messages?limit=50`);
+        if (!res.ok) return;
+        const messages = await res.json();
+        renderMessageList(messages);
+      } catch (err) {
+        log.error('[fetchAgentMessages] failed:', err);
+      }
+    }
+
+    function viewAgentLog(sessionId, agentId) {
+      agentLogMode = true;
+      viewingAgentId = agentId;
+      msgBackBtn.style.display = '';
+      msgPanelTitle.textContent = `Agent ${agentId}`;
+      messagePanel.classList.add('visible');
+      fetchAgentMessages(sessionId, agentId);
+    }
+
+    function exitAgentLog() {
+      agentLogMode = false;
+      viewingAgentId = null;
+      lastMessagesHash = '';
+      msgBackBtn.style.display = 'none';
+      msgPanelTitle.textContent = 'Session Log';
+      if (currentSessionId) fetchMessages(currentSessionId);
+    }
+
+    function renderMessageList(messages) {
+      if (!messages || messages.length === 0) {
+        messageList.innerHTML = '<div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">No messages yet</div>';
+        return;
+      }
+
+      const html = messages.map(msg => {
+        if (msg.type === 'tool_use') return renderToolUseEntry(msg);
+        if (msg.type === 'user') return renderUserEntry(msg);
+        if (msg.type === 'assistant') return renderAssistantEntry(msg);
+        return '';
+      }).join('');
+
+      messageList.innerHTML = html;
+      messageList.scrollTop = messageList.scrollHeight;
+    }
+
+    function renderUserEntry(msg) {
+      const text = escapeHtml(msg.text || '');
+      const ts = formatMsgTimestamp(msg.timestamp);
+      return `<div class="msg-entry msg-user" data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}">
+        <div class="msg-role">You</div>
+        <div class="msg-text">${text}</div>
+        ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
+      </div>`;
+    }
+
+    function renderAssistantEntry(msg) {
+      const text = escapeHtml(msg.text || '');
+      const ts = formatMsgTimestamp(msg.timestamp);
+      const model = msg.model ? `<span style="font-size: 10px; color: var(--text-secondary); opacity: 0.6; margin-left: 8px;">${escapeHtml(msg.model)}</span>` : '';
+      return `<div class="msg-entry msg-assistant" data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}">
+        <div class="msg-role">Assistant${model}</div>
+        <div class="msg-text">${text}</div>
+        ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
+      </div>`;
+    }
+
+    function renderToolUseEntry(msg) {
+      const toolName = escapeHtml(msg.toolName || 'Tool');
+      const displayText = escapeHtml(msg.text || msg.toolName || '');
+      const ts = formatMsgTimestamp(msg.timestamp);
+
+      let paramsHtml = '';
+      if (msg.toolInput) {
+        const badges = Object.entries(msg.toolInput)
+          .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description'].includes(k))
+          .slice(0, 4)
+          .map(([k, v]) => {
+            const val = typeof v === 'string' ? v : JSON.stringify(v);
+            return `<span class="param-badge" title="${escapeAttr(k)}: ${escapeAttr(val)}">${escapeHtml(k)}=${escapeHtml(String(val).substring(0, 30))}</span>`;
+          }).join('');
+        if (badges) paramsHtml = `<div class="msg-tool-params">${badges}</div>`;
+      }
+
+      let resultHtml = '';
+      if (msg.toolResult) {
+        const resultId = 'tr-' + (msg.toolUseId || Math.random().toString(36).substring(2, 8));
+        resultHtml = `
+          <button class="msg-result-toggle" data-action="toggleToolResult" data-target="${resultId}">Show result</button>
+          <div id="${resultId}" class="msg-tool-result">${escapeHtml(msg.toolResult)}</div>`;
+      }
+
+      let agentLink = '';
+      if ((msg.toolName === 'Agent' || msg.toolName === 'Task') && currentSessionId) {
+        agentLink = ` <button class="msg-result-toggle" data-action="viewAgentLogFromMsg" data-session-id="${currentSessionId}" data-tool-use-id="${msg.toolUseId || ''}" title="View agent log">⇗ log</button>`;
+      }
+
+      return `<div class="msg-entry msg-tool">
+        <div class="msg-tool-name">${toolName}${agentLink}</div>
+        <div class="msg-text">${displayText}</div>
+        ${paramsHtml}
+        ${resultHtml}
+        ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
+      </div>`;
+    }
+
+    function formatMsgTimestamp(ts) {
+      if (!ts) return '';
+      try {
+        const d = new Date(ts);
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } catch {
+        return '';
+      }
+    }
+
+    function escapeAttr(text) {
+      return (text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function showMsgDetailModal(fullText) {
+      let overlay = document.getElementById('msg-detail-modal');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'msg-detail-modal';
+        overlay.className = 'modal-overlay';
+        overlay.dataset.action = 'closeMsgDetailModal';
+        overlay.innerHTML = `<div class="modal" style="max-width: 640px; max-height: 80vh; display: flex; flex-direction: column;">
+          <div class="modal-header">
+            <h3 class="modal-title">Message Detail</h3>
+            <button class="modal-close" data-action="closeMsgDetailModal">&times;</button>
+          </div>
+          <div id="msg-detail-body" class="msg-detail-full"></div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" data-action="closeMsgDetailModal">Close</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+      }
+      document.getElementById('msg-detail-body').textContent = fullText;
+      overlay.classList.add('visible');
+    }
+
+    function closeMsgDetailModal() {
+      const overlay = document.getElementById('msg-detail-modal');
+      if (overlay) overlay.classList.remove('visible');
+    }
+
     let deleteTaskId = null;
     let deleteSessionId = null;
     let deleteModalKeyHandler = null;
@@ -4469,6 +4869,11 @@
         return;
       }
 
+      if (e.key === 'Escape' && messagePanel.classList.contains('visible')) {
+        closeMessagePanel();
+        return;
+      }
+
       if (e.key === 'Escape' && detailPanel.classList.contains('visible')) {
         closeDetailPanel();
       }
@@ -4506,6 +4911,12 @@
       if ((e.key === 'd' || e.key === 'D') && selectedTaskId) {
         e.preventDefault();
         deleteTask(selectedTaskId, selectedSessionId || currentSessionId);
+      }
+
+      if (e.key === 'L' && e.shiftKey) {
+        e.preventDefault();
+        toggleMessagePanel();
+        return;
       }
 
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
@@ -4571,6 +4982,7 @@
             if (currentSessionId) {
               fetchTasks(currentSessionId);
               fetchSubagents(currentSessionId);
+              if (messagePanel.classList.contains('visible')) fetchMessages(currentSessionId);
             }
           }, delay);
         }
@@ -5544,7 +5956,35 @@
         case 'showAgentInstruction': e.stopPropagation(); showAgentInstruction(owner, sessionId); break;
         case 'openLiveTask': openLiveTask(sessionId, taskId); break;
 
+        // Message panel actions
+        case 'toggleMessagePanel': toggleMessagePanel(); break;
+        case 'closeMessagePanel': closeMessagePanel(); break;
+        case 'exitAgentLog': exitAgentLog(); break;
+        case 'toggleToolResult': {
+          const targetId = actionEl.dataset.target;
+          if (targetId) {
+            const el = document.getElementById(targetId);
+            if (el) {
+              el.classList.toggle('expanded');
+              actionEl.textContent = el.classList.contains('expanded') ? 'Hide result' : 'Show result';
+            }
+          }
+          break;
+        }
+        case 'showMsgDetail': {
+          const fullText = actionEl.dataset.fullText;
+          if (fullText) showMsgDetailModal(fullText);
+          break;
+        }
+        case 'viewAgentLogFromMsg': {
+          const sid = actionEl.dataset.sessionId;
+          const tuId = actionEl.dataset.toolUseId;
+          if (sid && tuId) viewAgentLog(sid, tuId);
+          break;
+        }
+
         // Modal close actions
+        case 'closeMsgDetailModal': closeMsgDetailModal(); break;
         case 'closeHelpModal': closeHelpModal(); break;
         case 'closeDeleteConfirmModal': closeDeleteConfirmModal(); break;
         case 'closeDeleteSessionTasksModal': closeDeleteSessionTasksModal(); break;
@@ -5651,6 +6091,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">D</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Delete selected task</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Shift+L</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Toggle message log panel</td>
               </tr>
             </table>
           </div>
