@@ -640,6 +640,11 @@ public sealed class SessionService
         ref string? parentSessionId,
         ref string? customTitle)
     {
+        if (line.Length == 0 || line[0] != '{')
+        {
+            return;
+        }
+
         try
         {
             using var doc = JsonDocument.Parse(line);

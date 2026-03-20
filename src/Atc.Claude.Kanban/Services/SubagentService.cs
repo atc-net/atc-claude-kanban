@@ -201,7 +201,7 @@ public sealed class SubagentService
                     break;
                 }
 
-                if (string.IsNullOrEmpty(line))
+                if (string.IsNullOrEmpty(line) || line[0] != '{')
                 {
                     continue;
                 }
@@ -333,7 +333,7 @@ public sealed class SubagentService
         for (var i = lines.Length - 1; i >= 0; i--)
         {
             var line = lines[i].Trim();
-            if (string.IsNullOrEmpty(line))
+            if (line.Length == 0 || line[0] != '{')
             {
                 continue;
             }
