@@ -12,7 +12,7 @@ A .NET 10 dotnet tool that serves a real-time Kanban dashboard for monitoring Cl
 # Build (Release mode enforces all analyzer rules as errors)
 dotnet build -c Release
 
-# Run tests (65 tests across 8 test classes)
+# Run tests (97 tests across 9 test classes)
 dotnet test
 
 # Run the dashboard locally
@@ -29,21 +29,22 @@ src/Atc.Claude.Kanban/
   Program.cs                    # Entry point, CLI args, auto-port discovery, WebApplication wiring
   CliOptions.cs                 # Parsed CLI argument record
   EndpointDefinitions/          # Atc.Rest.MinimalApi IEndpointDefinition implementations
-    SessionEndpointDefinition   # /api/sessions, /api/sessions/{id}, /api/sessions/{id}/agents
+    SessionEndpointDefinition   # /api/sessions, /api/sessions/{id}, /api/sessions/{id}/agents, /api/sessions/{id}/messages
     TaskEndpointDefinition      # /api/tasks/all, PUT/DELETE/POST task operations
     TeamEndpointDefinition      # /api/teams/{name}
     ProjectEndpointDefinition   # /api/projects
     PlanEndpointDefinition      # /api/plans/{slug}, /api/plans/{slug}/open
-    SubagentEndpointDefinition  # /api/sessions/{id}/subagents
+    SubagentEndpointDefinition  # /api/sessions/{id}/subagents, /api/sessions/{id}/subagents/{agentId}/messages
     SseEndpointDefinition       # /api/events (SSE), /api/version, /api/cache/clear
-    UtilityEndpointDefinition   # /api/open-folder
+    UtilityEndpointDefinition   # /api/open-folder, /api/open-in-editor
   Contracts/
-    Models/                     # ClaudeTask, SessionInfo, TeamConfig, SubagentInfo, etc.
+    Models/                     # ClaudeTask, SessionInfo, TeamConfig, SubagentInfo, MessageEntry, SessionTokenUsage, etc.
     Events/                     # SseNotification, FileChangeEvent
     Responses/                  # ErrorResult, UpdateResult, AddNoteResult, etc.
     Parameters/                 # [AsParameters] records (SessionIdParameters, TaskIdParameters, etc.)
   Helpers/
     PathHelper                  # Path traversal prevention (shared by TaskService, PlanService)
+    TokenCostCalculator         # Model-aware token cost calculation (Opus/Sonnet/Haiku pricing)
   Extensions/                   # ServiceCollectionExtensions, WebApplicationExtensions
   Services/
     SessionService              # Session discovery from tasks/ + metadata from projects/, snapshots
@@ -51,6 +52,8 @@ src/Atc.Claude.Kanban/
     TeamService                 # Team config reading with 5s cache TTL
     PlanService                 # Plan markdown reading
     SubagentService             # Subagent JSONL transcript parsing from projects/
+    MessageService              # JSONL tail-reading for session/subagent conversation messages
+    SessionActivityService      # Activity status (thinking/waiting/idle/error) + token usage from JSONL
     ClaudeDirectoryWatcher      # BackgroundService with 4 FileSystemWatchers (extension-filtered)
     SseClientManager            # SSE client connection manager (singleton)
   UpdateCheck/
@@ -63,7 +66,8 @@ src/Atc.Claude.Kanban/
 test/Atc.Claude.Kanban.Tests/
   Helpers/                      # PathHelper, MockHttpMessageHandler
   Services/                     # SessionService, TaskService, TeamService, SubagentService,
-                                # PlanService, SseClientManager, UpdateCheckService tests
+                                # MessageService, SessionActivityService, PlanService,
+                                # SseClientManager, UpdateCheckService tests
 ```
 
 ## Architecture
@@ -73,8 +77,11 @@ test/Atc.Claude.Kanban.Tests/
 - **Server-Sent Events** via `Results.Stream` with raw UTF-8 byte writes (NOT StreamWriter — Kestrel disallows synchronous Flush)
 - **Heartbeats** via `Task.Delay` (NOT PeriodicTimer — can't call WaitForNextTickAsync concurrently)
 - **Async service layer** — all file I/O uses `ReadAllTextAsync`/`WriteAllTextAsync`
-- **IMemoryCache** with TTL expiration (10s sessions, 5s teams)
+- **IMemoryCache** with TTL expiration (10s sessions, 5s teams, 5s messages, 5s activity)
 - **Embedded static files** via `ManifestEmbeddedFileProvider`
+- **JSONL tail-reading** — 64KB adaptive buffer for messages, 32KB for activity status; seeks from end to avoid loading entire files
+- **Activity status derivation** — uses conversation entry timestamps (not file mtime) to detect thinking/waiting/idle/error states; hooks writing progress entries don't reset the timer
+- **Token cost calculation** — model-aware pricing (Opus $15/$75, Sonnet $3/$15, Haiku $0.80/$4 per 1M tokens) with cache creation/read multipliers
 
 ## Known Pitfalls
 
@@ -89,6 +96,9 @@ test/Atc.Claude.Kanban.Tests/
 - **Task timestamps** — Claude Code task JSON files don't store `createdAt`/`updatedAt`; enriched at read time from `File.GetCreationTimeUtc`/`File.GetLastWriteTimeUtc`
 - **Blocked badge** — must check actual status of blocking tasks, not just presence of `blockedBy` array (completed blockers should clear the badge)
 - **Auto-port** — probes port availability with `TcpListener` before building the app; explicit `--port` fails fast with a styled error
+- **JSONL pre-filter guard** — all JSONL parsers check `line[0] != '{'` before calling `JsonDocument.Parse` to avoid first-chance `JsonReaderException` spam from partial lines after tail seeks
+- **Activity status uses conversation timestamps** — file mtime is unreliable for elapsed time because Claude Code hooks write progress entries that reset the mtime; the `timestamp` field inside the last `assistant`/`user` JSONL entry is used instead
+- **Message panel tool result correlation** — `tool_use.id` from assistant messages is matched to `tool_result.tool_use_id` from user messages in a single-pass JSONL scan
 - **Auto-update** — `UpdateCheckService` (BackgroundService) checks NuGet flat container API on startup with 24h cache at `{LocalApplicationData}/atc-claude-kanban/update-check.json`. Suppressed by `ATC_NO_UPDATE_CHECK=1`, `--no-update-check`, or CI env vars (`CI`, `TF_BUILD`, `GITHUB_ACTIONS`). SSE broadcasts `version-update` notifications; `SseClientManager` replays pending version-update to late-connecting clients via `pendingVersionUpdate` field
 
 ## Coding Conventions
@@ -115,3 +125,12 @@ test/Atc.Claude.Kanban.Tests/
 - **View toggle** — Kanban vs Timeline views with `currentView` state; both render on data updates, visibility controlled by `applyView()`
 - **Notification API** — request permission on first bell-icon click; `previousTaskStatuses` Map tracks `in_progress → completed` transitions
 - **Web Audio API** — synthesized chime (C5 523Hz + E5 659Hz sine waves), no audio files
+- **Message panel** — toggleable right-side panel (Shift+L or toolbar icon) showing session JSONL conversation log with tool parameter badges and clickable file paths
+- **Activity status indicators** — green border (thinking), amber border (waiting), red border (error) on sidebar sessions; derived from JSONL tail-read
+- **Token/cost display** — accumulated token counts and model-aware cost per session in sidebar
+- **Drag-drop** — task cards are `draggable="true"`, drop on kanban columns to change status
+- **Scratchpad** — per-session notes modal (N key or toolbar icon), localStorage persistence with 500ms debounce
+- **Resizable panels** — drag handle on message panel edge, width persists in localStorage
+- **Open-in-editor** — clickable file paths in message log open in VS Code via `POST /api/open-in-editor`
+- **Wake detection** — heartbeat timer detects system sleep (>30s drift) and refreshes stale UI
+- **Activity polling** — unconditional 15s poll ensures status transitions are picked up even without SSE events

@@ -10,6 +10,12 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - 🧩 **Subagent visibility** — see active subagents spawned via the Task tool, parsed from JSONL transcripts
 - 🔗 **Task dependencies** — visual blockedBy/blocks relationships with smart badge clearing
 - 📡 **Server-Sent Events** — instant updates via file watching, no polling
+- 💬 **Session message log** — view conversation transcript (user/assistant/tool calls) in a side panel
+- 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
+- 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
+- 🖱️ **Drag-drop** — reorder tasks between kanban columns by dragging
+- 📓 **Scratchpad** — per-session quick notes with localStorage persistence
+- 🔧 **Open in editor** — click file paths in the message log to open in VS Code
 - ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
 - 🌙 **Dark/light themes** — system preference detection
 - 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
@@ -109,6 +115,35 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 - "Show all" toggle to view historical subagents (default: active only)
 - Parsed from JSONL transcript files at `~/.claude/projects/{hash}/{sessionId}/subagents/`
 
+### 💬 Session Message Log
+
+Toggle with the chat icon in the toolbar or `Shift+L`:
+
+- View the conversation transcript (user prompts, assistant responses, tool calls)
+- Tool parameter badges and expandable tool results
+- Clickable file paths open in VS Code
+- Subagent log drill-in (click agent tool calls to view subagent conversation)
+- Resizable panel (drag the left edge)
+
+### 🎯 Activity Status
+
+Sessions show real-time activity indicators in the sidebar:
+
+| Status | Indicator | Condition |
+|--------|-----------|-----------|
+| **Thinking** | Green border | Claude is actively working (tool calls, processing) |
+| **Waiting** | Amber border | Claude is waiting for user input (permission prompt) |
+| **Error** | Red border | Recent error in session |
+| **Idle** | No indicator | No activity for 15+ seconds |
+
+### 💰 Token & Cost Tracking
+
+Each session shows accumulated token usage and estimated cost:
+
+- Token count (e.g., "45.9M tokens") and cost (e.g., "$76.19")
+- Color-coded by cost: green (<$0.50), yellow (<$2), orange (<$5), red (>=$5)
+- Model-aware pricing: Opus ($15/$75), Sonnet ($3/$15), Haiku ($0.80/$4) per 1M tokens
+
 ### ⌨️ Keyboard Shortcuts
 
 | Key | Action |
@@ -124,6 +159,8 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 | `C` | Copy project path |
 | `F` | Open project folder |
 | `D` | Delete task |
+| `Shift+L` | Toggle message log panel |
+| `N` | Toggle scratchpad |
 
 ### 📡 How It Works
 
