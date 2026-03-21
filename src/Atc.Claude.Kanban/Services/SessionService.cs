@@ -13,6 +13,7 @@ public sealed class SessionService
     private readonly IMemoryCache cache;
     private readonly JsonSerializerOptions jsonSerializerOptions;
     private readonly SubagentService subagentService;
+    private readonly SessionActivityService activityService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SessionService"/> class.
@@ -21,16 +22,19 @@ public sealed class SessionService
     /// <param name="cache">Memory cache for session metadata.</param>
     /// <param name="jsonSerializerOptions">The shared JSON serializer options.</param>
     /// <param name="subagentService">The subagent service for enriching sessions with subagent counts.</param>
+    /// <param name="activityService">The activity service for enriching sessions with status and tokens.</param>
     public SessionService(
         string claudeDir,
         IMemoryCache cache,
         JsonSerializerOptions jsonSerializerOptions,
-        SubagentService subagentService)
+        SubagentService subagentService,
+        SessionActivityService activityService)
     {
         this.claudeDir = claudeDir;
         this.cache = cache;
         this.jsonSerializerOptions = jsonSerializerOptions;
         this.subagentService = subagentService;
+        this.activityService = activityService;
     }
 
     /// <summary>
@@ -376,6 +380,10 @@ public sealed class SessionService
         var (subagentTotal, subagentActive) = subagentService.GetSubagentCounts(sessionId);
         session.SubagentCount = subagentTotal;
         session.ActiveSubagentCount = subagentActive;
+
+        // Enrich with activity status and token usage
+        session.ActivityStatus = await activityService.GetActivityStatusAsync(sessionId, cancellationToken);
+        session.TokenUsage = await activityService.GetTokenUsageAsync(sessionId, cancellationToken);
 
         return session;
     }

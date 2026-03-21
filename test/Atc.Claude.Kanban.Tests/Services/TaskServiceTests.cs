@@ -17,7 +17,7 @@ public sealed class TaskServiceTests : IDisposable
         memoryCache = new MemoryCache(new MemoryCacheOptions());
         jsonSerializerOptions = JsonSerializerOptionsFactory.Create();
         var subagentService = new SubagentService(tempDir, memoryCache);
-        sessionService = new SessionService(tempDir, memoryCache, jsonSerializerOptions, subagentService);
+        sessionService = new SessionService(tempDir, memoryCache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, memoryCache));
     }
 
     public void Dispose()

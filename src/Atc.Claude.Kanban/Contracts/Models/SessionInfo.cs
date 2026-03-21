@@ -130,4 +130,17 @@ public sealed class SessionInfo
     /// </summary>
     [JsonPropertyName("activeSubagentCount")]
     public int ActiveSubagentCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the session activity status: "thinking", "waiting", "error", or "idle".
+    /// Derived from the tail of the JSONL transcript.
+    /// </summary>
+    [JsonPropertyName("activityStatus")]
+    public string? ActivityStatus { get; set; }
+
+    /// <summary>
+    /// Gets or sets the token usage and cost summary for this session.
+    /// </summary>
+    [JsonPropertyName("tokenUsage")]
+    public SessionTokenUsage? TokenUsage { get; set; }
 }

@@ -29,11 +29,16 @@ public static class ServiceCollectionExtensions
             claudeDir,
             sp.GetRequiredService<IMemoryCache>()));
 
+        services.AddSingleton(sp => new SessionActivityService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
         services.AddSingleton(sp => new SessionService(
             claudeDir,
             sp.GetRequiredService<IMemoryCache>(),
             sp.GetRequiredService<JsonSerializerOptions>(),
-            sp.GetRequiredService<SubagentService>()));
+            sp.GetRequiredService<SubagentService>(),
+            sp.GetRequiredService<SessionActivityService>()));
 
         services.AddSingleton(sp => new TaskService(
             claudeDir,
