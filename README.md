@@ -2,6 +2,18 @@
 
 Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.com/en/docs/claude-code) agent tasks, sessions, and subagents through a browser-based board.
 
+<p align="center">
+  <img src="docs/cli-started.png" alt="CLI startup" width="500">
+</p>
+
+<p align="center">
+  <img src="docs/UI-dark.png" alt="Dashboard — dark theme" width="800">
+</p>
+
+<p align="center">
+  <img src="docs/UI-white.png" alt="Dashboard — light theme" width="800">
+</p>
+
 - 📊 **Real-time Kanban board** — tasks flow through Pending → In Progress → Completed as Claude works
 - 📈 **Timeline view** — horizontal bar chart showing task durations, colored by status, with hover tooltips
 - 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
