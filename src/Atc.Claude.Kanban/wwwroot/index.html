@@ -4625,6 +4625,34 @@
       if (currentSessionId) fetchMessages(currentSessionId);
     }
 
+    async function findAndViewAgentLog(sessionId, agentDesc) {
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/subagents`);
+        if (!res.ok) return;
+        const subagents = await res.json();
+
+        // Match by description (Agent tool input description matches first user message)
+        let match = null;
+        if (agentDesc) {
+          match = subagents.find(a => a.description && a.description.includes(agentDesc.substring(0, 30)));
+          if (!match) {
+            match = subagents.find(a => agentDesc.includes((a.description || '').substring(0, 30)));
+          }
+        }
+
+        // Fallback: use the most recent subagent
+        if (!match && subagents.length > 0) {
+          match = subagents[subagents.length - 1];
+        }
+
+        if (match) {
+          viewAgentLog(sessionId, match.agentId);
+        }
+      } catch (err) {
+        log.error('[findAndViewAgentLog] failed:', err);
+      }
+    }
+
     function renderMessageList(messages) {
       if (!messages || messages.length === 0) {
         messageList.innerHTML = '<div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">No messages yet</div>';
@@ -4699,7 +4727,8 @@
 
       let agentLink = '';
       if ((msg.toolName === 'Agent' || msg.toolName === 'Task') && currentSessionId) {
-        agentLink = ` <button class="msg-result-toggle" data-action="viewAgentLogFromMsg" data-session-id="${currentSessionId}" data-tool-use-id="${msg.toolUseId || ''}" title="View agent log">⇗ log</button>`;
+        const agentDesc = msg.toolInput && msg.toolInput.description ? escapeAttr(String(msg.toolInput.description)) : '';
+        agentLink = ` <button class="msg-result-toggle" data-action="viewAgentLogFromMsg" data-session-id="${currentSessionId}" data-agent-desc="${agentDesc}" title="View agent log">⇗ log</button>`;
       }
 
       return `<div class="msg-entry msg-tool">
@@ -6373,8 +6402,8 @@
         }
         case 'viewAgentLogFromMsg': {
           const sid = actionEl.dataset.sessionId;
-          const tuId = actionEl.dataset.toolUseId;
-          if (sid && tuId) viewAgentLog(sid, tuId);
+          const agentDesc = actionEl.dataset.agentDesc;
+          if (sid) findAndViewAgentLog(sid, agentDesc);
           break;
         }
 
