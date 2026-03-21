@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.8.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.7.0...v1.8.0) (2026-03-21)
+
+
+### Features
+
+* add drag-drop, scratchpad, resizable panels, and open-in-editor ([151339f](https://github.com/atc-net/atc-claude-kanban/commit/151339f9abc38ac44cc75ee4cfffafd6361691cd))
+* add session activity status and token/cost tracking ([4daa58b](https://github.com/atc-net/atc-claude-kanban/commit/4daa58bc2caf58cffa57c15e2e9171a3675b5222))
+* add session message log panel with JSONL transcript parsing ([50affe2](https://github.com/atc-net/atc-claude-kanban/commit/50affe2d460af2f7fcbc7a26999296936c63ab09))
+
+
+### Bug Fixes
+
+* wire subagent log viewer to match agents by description ([b6c7206](https://github.com/atc-net/atc-claude-kanban/commit/b6c72063aaaabeca167899b5f2962b1c7082fd06))
+
+
+### Performance Improvements
+
+* add JSON pre-filter guard to reduce first-chance exceptions ([58286c6](https://github.com/atc-net/atc-claude-kanban/commit/58286c6fe0f1177fb0db6ca5abd4d88ffda26263))
+
 ## [1.7.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.6.0...v1.7.0) (2026-03-03)
 
 
