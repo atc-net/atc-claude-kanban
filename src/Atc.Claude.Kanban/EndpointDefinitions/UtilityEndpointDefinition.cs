@@ -14,6 +14,13 @@ public sealed class UtilityEndpointDefinition : IEndpointDefinition
             .WithName("OpenFolder")
             .WithDescription("Open a folder in the system file explorer.")
             .WithSummary("Open folder in explorer.");
+
+        app
+            .MapPost("/api/open-in-editor", OpenInEditor)
+            .WithTags("Utility")
+            .WithName("OpenInEditor")
+            .WithDescription("Open a file in the default code editor (VS Code).")
+            .WithSummary("Open file in editor.");
     }
 
     internal static Results<Ok, BadRequest, StatusCodeHttpResult> OpenFolder(
@@ -30,6 +37,35 @@ public sealed class UtilityEndpointDefinition : IEndpointDefinition
             Process.Start(new ProcessStartInfo
             {
                 FileName = request.Path,
+                UseShellExecute = true,
+            });
+
+            return TypedResults.Ok();
+        }
+        catch (InvalidOperationException)
+        {
+            return TypedResults.StatusCode(500);
+        }
+    }
+
+    internal static Results<Ok, BadRequest, StatusCodeHttpResult> OpenInEditor(
+        [FromBody] OpenInEditorRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Path))
+        {
+            return TypedResults.BadRequest();
+        }
+
+        try
+        {
+            var args = request.Line is > 0
+                ? $"-g \"{request.Path}\":{request.Line}"
+                : $"\"{request.Path}\"";
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "code",
+                Arguments = args,
                 UseShellExecute = true,
             });
 
