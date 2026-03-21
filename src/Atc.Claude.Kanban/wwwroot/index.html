@@ -2510,6 +2510,70 @@
       opacity: 1;
     }
 
+    /* Drag-Drop */
+    .task-card.dragging {
+      opacity: 0.4;
+    }
+
+    .column-tasks.drag-over {
+      background: var(--bg-hover);
+      border-radius: 8px;
+      outline: 2px dashed var(--accent);
+      outline-offset: -2px;
+    }
+
+    /* Scratchpad Modal */
+    .scratchpad-textarea {
+      width: 100%;
+      min-height: 200px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 13px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .scratchpad-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .scratchpad-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .scratchpad-charcount {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* Resize Handles */
+    .resize-handle {
+      position: absolute;
+      top: 0;
+      width: 4px;
+      height: 100%;
+      cursor: col-resize;
+      z-index: 102;
+    }
+
+    .resize-handle:hover,
+    .resize-handle.active {
+      background: var(--accent);
+      opacity: 0.5;
+    }
+
+    .resize-handle.left {
+      left: 0;
+    }
+
     /* Activity Status Indicators */
     .session-item.status-thinking {
       border-left: 3px solid #22c55e;
@@ -2728,6 +2792,16 @@
       text-decoration: underline;
     }
 
+    .msg-file-link {
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .msg-file-link:hover {
+      text-decoration: underline;
+    }
+
     .msg-timestamp {
       font-size: 10px;
       color: var(--text-secondary);
@@ -2868,6 +2942,12 @@
                 </svg>
               </button>
             </div>
+            <button class="icon-btn" data-action="toggleScratchpad" title="Scratchpad (N)" aria-label="Toggle scratchpad">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
             <button id="message-log-toggle" class="icon-btn" data-action="toggleMessagePanel" title="Session log (Shift+L)" aria-label="Toggle message log">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
@@ -2977,6 +3057,7 @@
 
     <!-- Message panel -->
     <aside id="message-panel" class="message-panel">
+      <div class="resize-handle left" id="message-panel-resize"></div>
       <header class="message-panel-header">
         <div style="display: flex; align-items: center;">
           <button id="msg-back-btn" class="back-btn" style="display: none;" data-action="exitAgentLog" title="Back to session log">← Back</button>
@@ -3990,6 +4071,7 @@
         <div
           role="listitem"
           tabindex="0"
+          draggable="true"
           data-task-id="${task.id}"
           data-session-id="${actualSessionId}"
           data-action="showTaskDetail"
@@ -4583,13 +4665,22 @@
 
     function renderToolUseEntry(msg) {
       const toolName = escapeHtml(msg.toolName || 'Tool');
-      const displayText = escapeHtml(msg.text || msg.toolName || '');
+      const rawDisplayText = escapeHtml(msg.text || msg.toolName || '');
       const ts = formatMsgTimestamp(msg.timestamp);
+
+      // Make file paths clickable for file-based tools
+      const filePath = msg.toolInput && (msg.toolInput.file_path || msg.toolInput.path);
+      const hasClickablePath = filePath && ['Read', 'Edit', 'Write', 'Glob'].includes(msg.toolName);
+      const displayText = hasClickablePath
+        ? rawDisplayText.replace(
+            escapeHtml(String(filePath)),
+            `<a href="#" class="msg-file-link" data-action="openInEditor" data-path="${escapeAttr(String(filePath))}" title="Open in VS Code">${escapeHtml(String(filePath))}</a>`)
+        : rawDisplayText;
 
       let paramsHtml = '';
       if (msg.toolInput) {
         const badges = Object.entries(msg.toolInput)
-          .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description'].includes(k))
+          .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description', 'file_path', 'path'].includes(k))
           .slice(0, 4)
           .map(([k, v]) => {
             const val = typeof v === 'string' ? v : JSON.stringify(v);
@@ -4660,6 +4751,199 @@
     function closeMsgDetailModal() {
       const overlay = document.getElementById('msg-detail-modal');
       if (overlay) overlay.classList.remove('visible');
+    }
+
+    // ── Drag-Drop Task Reordering ──────────────────────────────────
+
+    document.addEventListener('dragstart', (e) => {
+      const card = e.target.closest('.task-card');
+      if (!card) return;
+      card.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', JSON.stringify({
+        taskId: card.dataset.taskId,
+        sessionId: card.dataset.sessionId,
+      }));
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    document.addEventListener('dragend', (e) => {
+      const card = e.target.closest('.task-card');
+      if (card) card.classList.remove('dragging');
+      document.querySelectorAll('.column-tasks.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+
+    document.addEventListener('dragover', (e) => {
+      const col = e.target.closest('.column-tasks');
+      if (!col) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('drag-over');
+    });
+
+    document.addEventListener('dragleave', (e) => {
+      const col = e.target.closest('.column-tasks');
+      if (col && !col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+      }
+    });
+
+    document.addEventListener('drop', async (e) => {
+      const col = e.target.closest('.column-tasks');
+      if (!col) return;
+      e.preventDefault();
+      col.classList.remove('drag-over');
+
+      let data;
+      try { data = JSON.parse(e.dataTransfer.getData('text/plain')); } catch { return; }
+
+      const statusMap = {};
+      statusMap[pendingTasks.id] = 'pending';
+      statusMap[inProgressTasks.id] = 'in_progress';
+      statusMap[completedTasks.id] = 'completed';
+      const newStatus = statusMap[col.id];
+      if (!newStatus || !data.taskId) return;
+
+      const task = currentTasks.find(t => t.id === data.taskId);
+      if (!task || task.status === newStatus) return;
+
+      try {
+        const res = await fetch(`/api/tasks/${data.sessionId}/${data.taskId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: newStatus }),
+        });
+        if (res.ok) {
+          task.status = newStatus;
+          renderKanban();
+        }
+      } catch (err) {
+        log.error('[drag-drop] Failed to update task:', err);
+      }
+    });
+
+    // ── Per-Session Scratchpad ──────────────────────────────────────
+
+    let scratchpadTimer = null;
+
+    function toggleScratchpad() {
+      const sid = currentSessionId;
+      if (!sid) return;
+
+      let overlay = document.getElementById('scratchpad-modal');
+      if (overlay && overlay.classList.contains('visible')) {
+        closeScratchpad();
+        return;
+      }
+
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'scratchpad-modal';
+        overlay.className = 'modal-overlay';
+        overlay.dataset.action = 'closeScratchpad';
+        overlay.innerHTML = `<div class="modal" style="max-width: 540px;">
+          <div class="modal-header">
+            <h3 class="modal-title">Scratchpad</h3>
+            <button class="modal-close" data-action="closeScratchpad">&times;</button>
+          </div>
+          <div style="padding: 16px;">
+            <textarea id="scratchpad-text" class="scratchpad-textarea" placeholder="Quick notes for this session..."></textarea>
+            <div class="scratchpad-footer">
+              <span id="scratchpad-charcount" class="scratchpad-charcount">0 chars</span>
+              <button class="btn btn-primary" data-action="closeScratchpad">Done</button>
+            </div>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+      }
+
+      const textarea = document.getElementById('scratchpad-text');
+      const saved = localStorage.getItem(`scratchpad-${sid}`);
+      if (saved) textarea.value = saved;
+      updateScratchpadCount();
+
+      textarea.oninput = () => {
+        updateScratchpadCount();
+        clearTimeout(scratchpadTimer);
+        scratchpadTimer = setTimeout(() => {
+          localStorage.setItem(`scratchpad-${currentSessionId}`, textarea.value);
+        }, 500);
+      };
+
+      overlay.classList.add('visible');
+      textarea.focus();
+    }
+
+    function closeScratchpad() {
+      const overlay = document.getElementById('scratchpad-modal');
+      if (!overlay) return;
+      const textarea = document.getElementById('scratchpad-text');
+      if (textarea && currentSessionId) {
+        localStorage.setItem(`scratchpad-${currentSessionId}`, textarea.value);
+      }
+      clearTimeout(scratchpadTimer);
+      overlay.classList.remove('visible');
+    }
+
+    function updateScratchpadCount() {
+      const textarea = document.getElementById('scratchpad-text');
+      const counter = document.getElementById('scratchpad-charcount');
+      if (textarea && counter) {
+        counter.textContent = `${textarea.value.length} chars`;
+      }
+    }
+
+    // ── Resizable Message Panel ────────────────────────────────────
+
+    (function initPanelResize() {
+      const handle = document.getElementById('message-panel-resize');
+      if (!handle) return;
+
+      let startX = 0;
+      let startWidth = 0;
+
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startWidth = messagePanel.offsetWidth;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+
+        const onMove = (me) => {
+          const diff = startX - me.clientX;
+          const newWidth = Math.min(900, Math.max(320, startWidth + diff));
+          messagePanel.style.width = `${newWidth}px`;
+        };
+
+        const onUp = () => {
+          handle.classList.remove('active');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          localStorage.setItem('message-panel-width', messagePanel.style.width);
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+
+      const saved = localStorage.getItem('message-panel-width');
+      if (saved) messagePanel.style.width = saved;
+    })();
+
+    // ── Open in Editor ─────────────────────────────────────────────
+
+    async function openInEditor(filePath, line) {
+      try {
+        await fetch('/api/open-in-editor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: filePath, line: line || null }),
+        });
+      } catch (err) {
+        log.error('[openInEditor] Failed:', err);
+      }
     }
 
     let deleteTaskId = null;
@@ -4989,6 +5273,14 @@
         e.preventDefault();
         toggleMessagePanel();
         return;
+      }
+
+      if (e.key === 'n' || e.key === 'N') {
+        if (!e.target.closest('input, textarea, [contenteditable]')) {
+          e.preventDefault();
+          toggleScratchpad();
+          return;
+        }
       }
 
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
@@ -6052,6 +6344,15 @@
 
         // Message panel actions
         case 'toggleMessagePanel': toggleMessagePanel(); break;
+        case 'toggleScratchpad': toggleScratchpad(); break;
+        case 'closeScratchpad': closeScratchpad(); break;
+        case 'openInEditor': {
+          e.preventDefault();
+          const path = actionEl.dataset.path;
+          const line = actionEl.dataset.line ? parseInt(actionEl.dataset.line, 10) : null;
+          if (path) openInEditor(path, line);
+          break;
+        }
         case 'closeMessagePanel': closeMessagePanel(); break;
         case 'exitAgentLog': exitAgentLog(); break;
         case 'toggleToolResult': {
@@ -6189,6 +6490,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Shift+L</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Toggle message log panel</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">N</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Toggle scratchpad</td>
               </tr>
             </table>
           </div>
