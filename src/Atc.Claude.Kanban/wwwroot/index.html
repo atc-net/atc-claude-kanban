@@ -2510,6 +2510,57 @@
       opacity: 1;
     }
 
+    /* Activity Status Indicators */
+    .session-item.status-thinking {
+      border-left: 3px solid #22c55e;
+    }
+
+    .session-item.status-waiting {
+      border-left: 3px solid #f59e0b;
+    }
+
+    .session-item.status-error {
+      border-left: 3px solid #ef4444;
+    }
+
+    .activity-badge {
+      font-size: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .activity-badge.thinking {
+      color: #22c55e;
+    }
+
+    .activity-badge.waiting {
+      color: #f59e0b;
+      animation: pulse-fade 2s ease-in-out infinite;
+    }
+
+    .activity-badge.error {
+      color: #ef4444;
+    }
+
+    @keyframes pulse-fade {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .cost-low { color: #22c55e; }
+    .cost-medium { color: #f59e0b; }
+    .cost-high { color: #f97316; }
+    .cost-critical { color: #ef4444; }
+
+    .token-info {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+      display: flex;
+      justify-content: space-between;
+    }
+
     /* Message Panel */
     .message-panel {
       position: fixed;
@@ -3674,9 +3725,11 @@
       const isTeam = session.isTeam;
       const memberCount = session.memberCount || 0;
       const archivedClass = isArchived ? ' archived' : '';
+      const activity = session.activityStatus || 'idle';
+      const statusClass = activity !== 'idle' ? ` status-${activity}` : '';
 
       return `
-        <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass} ${isActive ? 'active' : ''}" title="${tooltip}">
+        <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass}${statusClass} ${isActive ? 'active' : ''}" title="${tooltip}">
           <div class="session-name">${escapeHtml(primaryName)}</div>
           ${secondaryName ? `<div class="session-secondary">${escapeHtml(secondaryName)}</div>` : ''}
           ${gitBranch ? `<div class="session-branch">${gitBranch}</div>` : ''}
@@ -3695,9 +3748,28 @@
             <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div></div>
             <span class="progress-text">${session.isCompleted ? 'Done' : `${session.completed}/${total}`}</span>
           </div>
+          ${renderActivityBadge(activity)}
+          ${renderTokenBar(session.tokenUsage)}
           <div class="session-time">${formatDate(session.modifiedAt)}</div>
         </button>
       `;
+    }
+
+    function renderActivityBadge(activity) {
+      if (activity === 'idle') return '';
+      const labels = { thinking: '⚙ Thinking', waiting: '⏳ Waiting for input', error: '⚠ Error' };
+      return `<span class="activity-badge ${activity}">${labels[activity] || activity}</span>`;
+    }
+
+    function renderTokenBar(tokenUsage) {
+      if (!tokenUsage) return '';
+      const cost = tokenUsage.costUsd || 0;
+      if (cost < 0.01) return '';
+      const costClass = cost < 0.5 ? 'cost-low' : cost < 2 ? 'cost-medium' : cost < 5 ? 'cost-high' : 'cost-critical';
+      const totalTokens = tokenUsage.totalTokens || 0;
+      const costDisplay = `$${cost.toFixed(2)}`;
+      const tokenDisplay = totalTokens > 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M` : totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(0)}K` : String(totalTokens);
+      return `<div class="token-info"><span>${tokenDisplay} tokens</span><span class="${costClass}">${costDisplay}</span></div>`;
     }
 
     function renderSessions() {
@@ -5861,6 +5933,28 @@
     loadPreferences();
     updateNotificationButton();
     setupEventSource();
+
+    // Heartbeat: detect wake from sleep/power saving and refresh stale UI.
+    // setInterval drifts massively after system sleep — if >30s drift detected,
+    // the system was asleep and we need to re-fetch everything.
+    let lastHeartbeat = Date.now();
+    setInterval(() => {
+      const now = Date.now();
+      const drift = now - lastHeartbeat;
+      lastHeartbeat = now;
+      if (drift > 30000) {
+        fetchSessions().catch(() => {});
+        if (currentSessionId && messagePanel.classList.contains('visible')) {
+          fetchMessages(currentSessionId);
+        }
+      }
+    }, 10000);
+
+    // Poll so activity status transitions are picked up
+    // even when no file changes trigger SSE events
+    setInterval(() => {
+      fetchSessions().catch(() => {});
+    }, 15000);
 
     if (urlState.search) {
       document.getElementById('search-input').value = urlState.search;

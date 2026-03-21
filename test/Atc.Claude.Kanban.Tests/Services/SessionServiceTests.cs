@@ -34,7 +34,7 @@ public sealed class SessionServiceTests : IDisposable
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
@@ -57,7 +57,7 @@ public sealed class SessionServiceTests : IDisposable
             JsonSerializer.Serialize(new { id = "1", subject = "Test task", status = "pending" }),
             cancellationToken);
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
@@ -93,7 +93,7 @@ public sealed class SessionServiceTests : IDisposable
             JsonSerializer.Serialize(new { id = "3", subject = "Task 3", status = "pending" }),
             cancellationToken);
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
@@ -125,7 +125,7 @@ public sealed class SessionServiceTests : IDisposable
                 cancellationToken);
         }
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(limit: 3, cancellationToken: cancellationToken);
@@ -139,7 +139,7 @@ public sealed class SessionServiceTests : IDisposable
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var projects = await service.GetProjectsAsync(cancellationToken);
@@ -167,7 +167,7 @@ public sealed class SessionServiceTests : IDisposable
             JsonSerializer.Serialize(new { id = "1", subject = "Good task", status = "pending" }),
             cancellationToken);
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
@@ -186,7 +186,7 @@ public sealed class SessionServiceTests : IDisposable
 
         Directory.CreateDirectory(sessionDir);
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // Act
         var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
@@ -225,7 +225,7 @@ public sealed class SessionServiceTests : IDisposable
             JsonSerializer.Serialize(new { id = "3", subject = "Task 3", status = "pending" }),
             cancellationToken);
 
-        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService);
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
 
         // First call snapshots the session with 3 tasks
         var before = await service.GetSessionsAsync(cancellationToken: cancellationToken);
