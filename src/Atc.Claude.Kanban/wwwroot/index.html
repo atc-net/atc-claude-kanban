@@ -2708,6 +2708,17 @@
       border-left: 3px solid #3b82f6;
     }
 
+    .msg-entry.msg-system {
+      border-left: 3px solid var(--border);
+      opacity: 0.7;
+    }
+
+    .msg-entry.msg-system .msg-text code {
+      background: none;
+      padding: 0;
+      font-size: 11px;
+    }
+
     .msg-entry.msg-assistant {
       border-left: 3px solid var(--text-secondary);
     }
@@ -4666,6 +4677,7 @@
 
       const html = messages.map(msg => {
         if (msg.type === 'tool_use') return renderToolUseEntry(msg);
+        if (msg.type === 'user' && msg.systemLabel) return renderSystemEntry(msg);
         if (msg.type === 'user') return renderUserEntry(msg);
         if (msg.type === 'assistant') return renderAssistantEntry(msg);
         return '';
@@ -4681,6 +4693,16 @@
       return `<div class="msg-entry msg-user" data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}">
         <div class="msg-role">You</div>
         <div class="msg-text">${text}</div>
+        ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
+      </div>`;
+    }
+
+    function renderSystemEntry(msg) {
+      const label = escapeHtml(msg.systemLabel || 'System');
+      const ts = formatMsgTimestamp(msg.timestamp);
+      return `<div class="msg-entry msg-system">
+        <div class="msg-role">System</div>
+        <div class="msg-text"><code>${label}</code></div>
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;
     }

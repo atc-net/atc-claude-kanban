@@ -12,6 +12,7 @@ public sealed class MessageService
     private const int MaxBufferSize = 1048576;
     private const int TextTruncateLength = 500;
     private const int ToolResultTruncateLength = 1500;
+    private const string NotASystemMessage = "__normal__";
 
     private readonly string claudeDir;
     private readonly IMemoryCache cache;
@@ -259,6 +260,16 @@ public sealed class MessageService
             doc.Dispose();
         }
 
+        // Deduplicate consecutive "Compacted" messages
+        for (var i = messages.Count - 1; i > 0; i--)
+        {
+            if (string.Equals(messages[i].SystemLabel, "Compacted", StringComparison.Ordinal) &&
+                string.Equals(messages[i - 1].SystemLabel, "Compacted", StringComparison.Ordinal))
+            {
+                messages.RemoveAt(i);
+            }
+        }
+
         return messages;
     }
 
@@ -340,45 +351,41 @@ public sealed class MessageService
         string? uuid,
         List<MessageEntry> messages)
     {
-        if (!root.TryGetProperty("message", out var msgEl) ||
-            !msgEl.TryGetProperty("content", out var contentEl))
+        var isMeta = root.TryGetProperty("isMeta", out var metaEl) &&
+                     metaEl.ValueKind == JsonValueKind.True;
+
+        var text = ExtractUserMessageText(root);
+        if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        string? text = null;
+        var label = GetSystemMessageLabel(text);
 
-        if (contentEl.ValueKind == JsonValueKind.String)
+        // null = skip entirely (e.g. /clear, session continuation)
+        if (label is null)
         {
-            text = contentEl.GetString();
-        }
-        else if (contentEl.ValueKind == JsonValueKind.Array)
-        {
-            // User messages can have text blocks and tool_result blocks
-            var textParts = new List<string>();
-            foreach (var block in contentEl.EnumerateArray())
-            {
-                if (block.TryGetProperty("type", out var bt) &&
-                    string.Equals(bt.GetString(), "text", StringComparison.Ordinal) &&
-                    block.TryGetProperty("text", out var txEl) &&
-                    txEl.ValueKind == JsonValueKind.String)
-                {
-                    var part = txEl.GetString();
-                    if (!string.IsNullOrEmpty(part))
-                    {
-                        textParts.Add(part);
-                    }
-                }
-            }
-
-            if (textParts.Count > 0)
-            {
-                text = string.Join("\n", textParts);
-            }
+            return;
         }
 
-        if (string.IsNullOrWhiteSpace(text))
+        // isMeta messages without a recognized label are internal — skip
+        if (isMeta && string.Equals(label, NotASystemMessage, StringComparison.Ordinal))
         {
+            return;
+        }
+
+        // Recognized system message — show with label
+        if (!string.Equals(label, NotASystemMessage, StringComparison.Ordinal))
+        {
+            messages.Add(new MessageEntry
+            {
+                Type = "user",
+                Timestamp = timestamp,
+                Text = label,
+                SystemLabel = label,
+                Uuid = uuid,
+            });
+
             return;
         }
 
@@ -390,6 +397,148 @@ public sealed class MessageService
             FullText = text,
             Uuid = uuid,
         });
+    }
+
+    /// <summary>
+    /// Extracts the text content from a user message entry,
+    /// handling both string and array content formats.
+    /// </summary>
+    private static string? ExtractUserMessageText(JsonElement root)
+    {
+        if (!root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl))
+        {
+            return null;
+        }
+
+        if (contentEl.ValueKind == JsonValueKind.String)
+        {
+            return contentEl.GetString();
+        }
+
+        if (contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var textParts = new List<string>();
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (block.TryGetProperty("type", out var bt) &&
+                string.Equals(bt.GetString(), "text", StringComparison.Ordinal) &&
+                block.TryGetProperty("text", out var txEl) &&
+                txEl.ValueKind == JsonValueKind.String)
+            {
+                var part = txEl.GetString();
+                if (!string.IsNullOrEmpty(part))
+                {
+                    textParts.Add(part);
+                }
+            }
+        }
+
+        return textParts.Count > 0 ? string.Join("\n", textParts) : null;
+    }
+
+    /// <summary>
+    /// Determines a system message label for special user messages.
+    /// Returns a label string for display, or null to skip the message entirely.
+    /// </summary>
+    private static string? GetSystemMessageLabel(string text)
+    {
+        // XML-structured system messages
+        var xmlLabel = GetXmlSystemLabel(text);
+        if (xmlLabel is not null)
+        {
+            return xmlLabel;
+        }
+
+        // Session continuation — skip entirely
+        if (text.StartsWith("This session is being continued from a previous conversation", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // /clear command — skip entirely
+        if (text.Contains("<command-name>/clear</command-name>", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        // /compact command
+        if (text.Contains("<command-name>/compact</command-name>", StringComparison.Ordinal))
+        {
+            return "Compacted";
+        }
+
+        return NotASystemMessage;
+    }
+
+    /// <summary>
+    /// Checks for XML-structured system message patterns (summaries, task notifications,
+    /// command output, etc.) and returns the appropriate label.
+    /// </summary>
+    private static string? GetXmlSystemLabel(string text)
+    {
+        var summaryValue = ExtractXmlTagContent(text, "summary");
+        if (summaryValue is not null)
+        {
+            return summaryValue.Trim();
+        }
+
+        if (text.Contains("<task-notification>", StringComparison.Ordinal))
+        {
+            var statusValue = ExtractXmlTagContent(text, "status");
+            return statusValue is not null
+                ? $"Background task {statusValue}"
+                : "Background task notification";
+        }
+
+        if (text.Contains("<local-command-stdout>", StringComparison.Ordinal))
+        {
+            return text.Contains("Compacted", StringComparison.Ordinal)
+                ? "Compacted"
+                : "Command output";
+        }
+
+        if (text.Contains("<local-command-caveat>", StringComparison.Ordinal))
+        {
+            return "System notification";
+        }
+
+        if (text.Contains(".output completed", StringComparison.Ordinal) &&
+            text.Contains("Background command", StringComparison.Ordinal))
+        {
+            return "Background task completed";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts text content between a simple XML open/close tag pair.
+    /// Returns null if the tag is not found.
+    /// </summary>
+    private static string? ExtractXmlTagContent(
+        string text,
+        string tagName)
+    {
+        var openTag = $"<{tagName}>";
+        var closeTag = $"</{tagName}>";
+        var startIdx = text.IndexOf(openTag, StringComparison.Ordinal);
+        if (startIdx < 0)
+        {
+            return null;
+        }
+
+        startIdx += openTag.Length;
+        var endIdx = text.IndexOf(closeTag, startIdx, StringComparison.Ordinal);
+        if (endIdx < 0)
+        {
+            return null;
+        }
+
+        return text[startIdx..endIdx];
     }
 
     private static void ParseAssistantEntry(
