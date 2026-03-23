@@ -2727,6 +2727,50 @@
       border-left: 3px solid #f59e0b;
     }
 
+    .msg-icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      vertical-align: middle;
+      margin-right: 4px;
+      opacity: 0.7;
+    }
+
+    .tool-count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 8px;
+      margin-left: 6px;
+    }
+
+    .msg-tool-group-items {
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      padding-left: 22px;
+      margin-top: 2px;
+    }
+
+    .msg-tool-group-items.show {
+      display: flex;
+    }
+
+    .msg-tool-grouped {
+      padding: 3px 8px;
+      min-height: auto;
+      font-size: 10px;
+      opacity: 0.8;
+    }
+
+    .msg-tool-grouped .msg-timestamp {
+      font-size: 9px;
+    }
+
     .msg-role {
       font-size: 10px;
       font-weight: 600;
@@ -4669,21 +4713,93 @@
       }
     }
 
+    const MSG_ICON_TOOL = '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+    const MSG_ICON_TASK = '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+    const MSG_ICON_WEB = '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+    const MSG_ICON_TEAMMATE = '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+
+    const TOOL_ICONS = {
+      Bash: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 10 10 13 7 16"/><line x1="13" y1="16" x2="17" y2="16"/></svg>',
+      Read: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+      Write: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>',
+      Edit: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      Glob: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><circle cx="14" cy="14" r="3"/><line x1="16.5" y1="16.5" x2="19" y2="19"/></svg>',
+      Grep: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+      Agent: MSG_ICON_TEAMMATE,
+      SendMessage: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+      TaskCreate: MSG_ICON_TASK, TaskUpdate: MSG_ICON_TASK, TaskGet: MSG_ICON_TASK, TaskList: MSG_ICON_TASK,
+      ToolSearch: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>',
+      AskUserQuestion: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+      Skill: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+      WebFetch: MSG_ICON_WEB, WebSearch: MSG_ICON_WEB,
+      NotebookEdit: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>',
+      LSP: '<svg class="msg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    };
+
+    function getToolIcon(toolName) {
+      return TOOL_ICONS[toolName] || MSG_ICON_TOOL;
+    }
+
+    function toolGroupKey(msg) {
+      return msg.type === 'tool_use' ? `${msg.toolName || ''}\0${msg.text || ''}` : null;
+    }
+
+    function toggleToolGroup(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('show');
+    }
+
     function renderMessageList(messages) {
       if (!messages || messages.length === 0) {
         messageList.innerHTML = '<div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">No messages yet</div>';
         return;
       }
 
-      const html = messages.map(msg => {
-        if (msg.type === 'tool_use') return renderToolUseEntry(msg);
-        if (msg.type === 'user' && msg.systemLabel) return renderSystemEntry(msg);
-        if (msg.type === 'user') return renderUserEntry(msg);
-        if (msg.type === 'assistant') return renderAssistantEntry(msg);
-        return '';
-      }).join('');
+      const parts = [];
+      let i = 0;
+      while (i < messages.length) {
+        const msg = messages[i];
 
-      messageList.innerHTML = html;
+        if (msg.type === 'tool_use') {
+          const key = toolGroupKey(msg);
+          let runEnd = i + 1;
+          while (runEnd < messages.length && toolGroupKey(messages[runEnd]) === key) runEnd++;
+          const count = runEnd - i;
+
+          if (count >= 2) {
+            const first = messages[i];
+            const last = messages[runEnd - 1];
+            const gid = 'tool-group-' + i;
+            const tsFirst = formatMsgTimestamp(first.timestamp);
+            const tsLast = formatMsgTimestamp(last.timestamp);
+            const timeRange = tsFirst && tsLast ? `${tsFirst} – ${tsLast}` : tsFirst || '';
+            const items = [];
+            for (let j = i; j < runEnd; j++) items.push(renderToolUseEntry(messages[j], true));
+            parts.push(`<div class="msg-tool-group">
+              <div class="msg-entry msg-tool" style="cursor:pointer" data-action="toggleToolGroup" data-group-id="${gid}">
+                ${getToolIcon(first.toolName)}
+                <div class="msg-tool-name">${escapeHtml(first.toolName || 'Tool')}<span class="tool-count-badge">&times;${count}</span></div>
+                <div class="msg-text">${escapeHtml(first.text || first.toolName || '')}</div>
+                ${timeRange ? `<div class="msg-timestamp">${timeRange}</div>` : ''}
+              </div>
+              <div class="msg-tool-group-items" id="${gid}">${items.join('')}</div>
+            </div>`);
+            i = runEnd;
+            continue;
+          }
+
+          parts.push(renderToolUseEntry(msg, false));
+          i++;
+          continue;
+        }
+
+        if (msg.type === 'user' && msg.systemLabel) { parts.push(renderSystemEntry(msg)); }
+        else if (msg.type === 'user') { parts.push(renderUserEntry(msg)); }
+        else if (msg.type === 'assistant') { parts.push(renderAssistantEntry(msg)); }
+        i++;
+      }
+
+      messageList.innerHTML = parts.join('');
       messageList.scrollTop = messageList.scrollHeight;
     }
 
@@ -4718,10 +4834,12 @@
       </div>`;
     }
 
-    function renderToolUseEntry(msg) {
+    function renderToolUseEntry(msg, compact) {
       const toolName = escapeHtml(msg.toolName || 'Tool');
       const rawDisplayText = escapeHtml(msg.text || msg.toolName || '');
       const ts = formatMsgTimestamp(msg.timestamp);
+      const compactClass = compact ? ' msg-tool-grouped' : '';
+      const icon = getToolIcon(msg.toolName);
 
       // Make file paths clickable for file-based tools
       const filePath = msg.toolInput && (msg.toolInput.file_path || msg.toolInput.path);
@@ -4733,7 +4851,7 @@
         : rawDisplayText;
 
       let paramsHtml = '';
-      if (msg.toolInput) {
+      if (msg.toolInput && !compact) {
         const badges = Object.entries(msg.toolInput)
           .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description', 'file_path', 'path'].includes(k))
           .slice(0, 4)
@@ -4745,7 +4863,7 @@
       }
 
       let resultHtml = '';
-      if (msg.toolResult) {
+      if (msg.toolResult && !compact) {
         const resultId = 'tr-' + (msg.toolUseId || Math.random().toString(36).substring(2, 8));
         resultHtml = `
           <button class="msg-result-toggle" data-action="toggleToolResult" data-target="${resultId}">Show result</button>
@@ -4753,13 +4871,13 @@
       }
 
       let agentLink = '';
-      if ((msg.toolName === 'Agent' || msg.toolName === 'Task') && currentSessionId) {
+      if ((msg.toolName === 'Agent' || msg.toolName === 'Task') && currentSessionId && !compact) {
         const agentDesc = msg.toolInput && msg.toolInput.description ? escapeAttr(String(msg.toolInput.description)) : '';
         agentLink = ` <button class="msg-result-toggle" data-action="viewAgentLogFromMsg" data-session-id="${currentSessionId}" data-agent-desc="${agentDesc}" title="View agent log">⇗ log</button>`;
       }
 
-      return `<div class="msg-entry msg-tool">
-        <div class="msg-tool-name">${toolName}${agentLink}</div>
+      return `<div class="msg-entry msg-tool${compactClass}">
+        <div class="msg-tool-name">${icon}${toolName}${agentLink}</div>
         <div class="msg-text">${displayText}</div>
         ${paramsHtml}
         ${resultHtml}
@@ -6411,6 +6529,11 @@
         }
         case 'closeMessagePanel': closeMessagePanel(); break;
         case 'exitAgentLog': exitAgentLog(); break;
+        case 'toggleToolGroup': {
+          const groupId = actionEl.dataset.groupId;
+          if (groupId) toggleToolGroup(groupId);
+          break;
+        }
         case 'toggleToolResult': {
           const targetId = actionEl.dataset.target;
           if (targetId) {
