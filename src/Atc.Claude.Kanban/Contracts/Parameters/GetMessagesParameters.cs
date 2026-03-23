@@ -5,4 +5,5 @@ namespace Atc.Claude.Kanban.Contracts.Parameters;
 /// </summary>
 public sealed record GetMessagesParameters(
     [FromRoute] string SessionId,
-    [FromQuery] int? Limit);
+    [FromQuery] int? Limit,
+    [FromQuery] string? Before);

@@ -2771,6 +2771,23 @@
       font-size: 9px;
     }
 
+    .msg-jump-latest {
+      display: block;
+      margin: 8px auto;
+      padding: 6px 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 16px;
+      font-size: 12px;
+      cursor: pointer;
+      opacity: 0.9;
+    }
+
+    .msg-jump-latest:hover {
+      opacity: 1;
+    }
+
     .msg-role {
       font-size: 10px;
       font-weight: 600;
@@ -3132,6 +3149,7 @@
         </div>
       </header>
       <div id="message-list" class="message-list"></div>
+      <button id="msg-jump-latest" class="msg-jump-latest" style="display:none" data-action="jumpToLatest">Jump to latest</button>
     </aside>
   </div>
 
@@ -3255,6 +3273,16 @@
     const msgPanelTitle = document.getElementById('msg-panel-title');
     const msgBackBtn = document.getElementById('msg-back-btn');
     const connectionStatus = document.getElementById('connection-status');
+
+    // Infinite scroll: load older messages when scrolled to top
+    messageList.addEventListener('scroll', () => {
+      const atBottom = messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight < 50;
+      msgUserScrolledUp = !atBottom;
+      updateJumpToLatest();
+      if (messageList.scrollTop < 100 && msgHasMore && !msgLoadingMore) {
+        loadOlderMessages();
+      }
+    });
     const COLUMNS = [
       { el: pendingTasks },
       { el: inProgressTasks },
@@ -3265,6 +3293,11 @@
     let lastTasksHash = '';
     let lastMessagesHash = '';
     let agentLogMode = false;
+    let msgHasMore = false;
+    let msgLoadingMore = false;
+    let msgUserScrolledUp = false;
+    let currentMessages = [];
+    const MSG_MAX_LOADED = 200;
     let viewingAgentId = null;
 
     async function fetchSessions() {
@@ -4639,6 +4672,11 @@
       viewingAgentId = null;
       msgBackBtn.style.display = 'none';
       msgPanelTitle.textContent = 'Session Log';
+      msgHasMore = false;
+      msgLoadingMore = false;
+      msgUserScrolledUp = false;
+      currentMessages = [];
+      lastMessagesHash = '';
     }
 
     async function fetchMessages(sessionId) {
@@ -4646,14 +4684,60 @@
       try {
         const res = await fetch(`/api/sessions/${sessionId}/messages?limit=30`);
         if (!res.ok) return;
-        const messages = await res.json();
+        const data = await res.json();
+        const messages = data.messages || data;
+        msgHasMore = data.hasMore || false;
         const hash = JSON.stringify(messages);
-        if (hash === lastMessagesHash) return;
+        if (hash === lastMessagesHash && !msgUserScrolledUp) return;
         lastMessagesHash = hash;
-        renderMessageList(messages);
+        if (msgUserScrolledUp && currentMessages.length > 0) {
+          // Append only newer messages when user has scrolled up
+          const lastTs = currentMessages[currentMessages.length - 1]?.timestamp;
+          const newer = messages.filter(m => m.timestamp > lastTs);
+          if (newer.length > 0) currentMessages = currentMessages.concat(newer);
+        } else {
+          currentMessages = messages;
+        }
+        renderMessageList(currentMessages);
+        updateJumpToLatest();
       } catch (err) {
         log.error('[fetchMessages] failed:', err);
       }
+    }
+
+    async function loadOlderMessages() {
+      if (msgLoadingMore || !msgHasMore || !currentSessionId) return;
+      if (currentMessages.length === 0) return;
+      msgLoadingMore = true;
+      try {
+        const oldest = currentMessages[0]?.timestamp;
+        if (!oldest) return;
+        const res = await fetch(`/api/sessions/${currentSessionId}/messages?limit=30&before=${encodeURIComponent(oldest)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const older = data.messages || data;
+        msgHasMore = data.hasMore || false;
+        if (older.length === 0) { msgHasMore = false; return; }
+
+        // Preserve scroll position
+        const list = document.querySelector('.message-list');
+        const prevHeight = list ? list.scrollHeight : 0;
+        currentMessages = older.concat(currentMessages);
+        if (currentMessages.length > MSG_MAX_LOADED) {
+          currentMessages = currentMessages.slice(0, MSG_MAX_LOADED);
+        }
+        renderMessageList(currentMessages);
+        if (list) list.scrollTop = list.scrollHeight - prevHeight;
+      } catch (err) {
+        log.error('[loadOlderMessages] failed:', err);
+      } finally {
+        msgLoadingMore = false;
+      }
+    }
+
+    function updateJumpToLatest() {
+      const btn = document.getElementById('msg-jump-latest');
+      if (btn) btn.style.display = msgUserScrolledUp ? '' : 'none';
     }
 
     async function fetchAgentMessages(sessionId, agentId) {
@@ -4800,7 +4884,7 @@
       }
 
       messageList.innerHTML = parts.join('');
-      messageList.scrollTop = messageList.scrollHeight;
+      if (!msgUserScrolledUp) messageList.scrollTop = messageList.scrollHeight;
     }
 
     function renderUserEntry(msg) {
@@ -6529,6 +6613,12 @@
         }
         case 'closeMessagePanel': closeMessagePanel(); break;
         case 'exitAgentLog': exitAgentLog(); break;
+        case 'jumpToLatest': {
+          msgUserScrolledUp = false;
+          messageList.scrollTop = messageList.scrollHeight;
+          updateJumpToLatest();
+          break;
+        }
         case 'toggleToolGroup': {
           const groupId = actionEl.dataset.groupId;
           if (groupId) toggleToolGroup(groupId);
