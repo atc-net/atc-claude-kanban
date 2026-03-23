@@ -504,4 +504,71 @@ public sealed class MessageServiceTests : IDisposable
         messages.Should().HaveCount(1);
         messages[0].Type.Should().Be("user");
     }
+
+    [Fact]
+    public void ParseJsonlMessages_FiltersSystemMessages()
+    {
+        // Arrange — /clear should be skipped, /compact should become "Compacted" label
+        var content = string.Join(
+            "\n",
+            """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"Hello"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:01:00Z","isMeta":true,"message":{"role":"user","content":"<command-name>/clear</command-name>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:02:00Z","message":{"role":"user","content":"<command-name>/compact</command-name>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:03:00Z","message":{"role":"user","content":"World"}}""");
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — /clear is skipped, /compact becomes system label
+        messages.Should().HaveCount(3);
+        messages[0].Type.Should().Be("user");
+        messages[0].Text.Should().Be("Hello");
+        messages[0].SystemLabel.Should().BeNull();
+
+        messages[1].Type.Should().Be("user");
+        messages[1].SystemLabel.Should().Be("Compacted");
+
+        messages[2].Type.Should().Be("user");
+        messages[2].Text.Should().Be("World");
+        messages[2].SystemLabel.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_DeduplicatesConsecutiveCompactedMessages()
+    {
+        // Arrange — three consecutive compacted messages should be collapsed to one
+        var content = string.Join(
+            "\n",
+            """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 5 messages</local-command-stdout>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:01:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 3 messages</local-command-stdout>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:02:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 2 messages</local-command-stdout>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:03:00Z","message":{"role":"user","content":"Hello after compaction"}}""");
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — only one "Compacted" message should remain
+        var compactedCount = messages.Count(m => m.SystemLabel == "Compacted");
+        compactedCount.Should().Be(1);
+        messages.Should().HaveCount(2);
+        messages[0].SystemLabel.Should().Be("Compacted");
+        messages[1].Text.Should().Be("Hello after compaction");
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_SkipsIsMetaWithoutRecognizedLabel()
+    {
+        // Arrange — isMeta message without a recognized pattern should be skipped
+        var content = string.Join(
+            "\n",
+            """{"type":"user","timestamp":"2026-01-01T00:00:00Z","isMeta":true,"message":{"role":"user","content":"Some internal meta message"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:01:00Z","message":{"role":"user","content":"Real user message"}}""");
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — only the real user message should appear
+        messages.Should().HaveCount(1);
+        messages[0].Text.Should().Be("Real user message");
+    }
 }

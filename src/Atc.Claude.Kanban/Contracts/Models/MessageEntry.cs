@@ -70,4 +70,12 @@ public sealed class MessageEntry
     /// </summary>
     [JsonPropertyName("uuid")]
     public string? Uuid { get; set; }
+
+    /// <summary>
+    /// Gets or sets a label for system messages (e.g. "Compacted", "Command output").
+    /// Null for regular user/assistant messages.
+    /// </summary>
+    [JsonPropertyName("systemLabel")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SystemLabel { get; set; }
 }
