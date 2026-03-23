@@ -52,6 +52,47 @@ public sealed class MessageService
     }
 
     /// <summary>
+    /// Returns a page of messages older than the given timestamp for backward pagination.
+    /// </summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <param name="limit">Maximum number of messages to return.</param>
+    /// <param name="beforeTimestamp">ISO 8601 timestamp; only messages before this are returned.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A <see cref="MessagesResponse"/> with messages and a hasMore flag.</returns>
+    [SuppressMessage("AsyncUsage", "AsyncFixer02:Long-running or blocking operations inside an async method", Justification = "In-memory LINQ on already-awaited collection.")]
+    public async Task<MessagesResponse> GetMessagesPageAsync(
+        string sessionId,
+        int limit,
+        string beforeTimestamp,
+        CancellationToken cancellationToken = default)
+    {
+        var jsonlPath = FindSessionJsonlPath(sessionId);
+        if (jsonlPath is null)
+        {
+            return new MessagesResponse([], false);
+        }
+
+        // Read a large batch and filter by timestamp
+        var fetchLimit = System.Math.Max(limit * 5, 100);
+        var allMessages = await ReadMessagesFromFileAsync(
+            jsonlPath,
+            fetchLimit,
+            $"messages-page:{sessionId}:{fetchLimit}",
+            cancellationToken);
+
+        var filtered = allMessages
+            .Where(m => string.Compare(m.Timestamp, beforeTimestamp, StringComparison.Ordinal) < 0)
+            .ToList();
+
+        var hasMore = filtered.Count > limit;
+        var page = hasMore
+            ? filtered.GetRange(filtered.Count - limit, limit)
+            : filtered;
+
+        return new MessagesResponse(page, hasMore);
+    }
+
+    /// <summary>
     /// Returns recent messages from a subagent's JSONL transcript file.
     /// </summary>
     /// <param name="sessionId">The parent session identifier.</param>

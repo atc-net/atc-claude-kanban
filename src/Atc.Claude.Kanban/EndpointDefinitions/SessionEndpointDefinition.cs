@@ -67,13 +67,35 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
         return TypedResults.Ok(agentTasks);
     }
 
-    internal static async Task<Ok<IReadOnlyList<MessageEntry>>> GetMessagesForSession(
+    [SuppressMessage("AsyncUsage", "AsyncFixer02:Long-running or blocking operations inside an async method", Justification = "In-memory LINQ on already-awaited collection.")]
+    internal static async Task<Ok<MessagesResponse>> GetMessagesForSession(
         [FromServices] MessageService messageService,
         [AsParameters] GetMessagesParameters parameters,
         CancellationToken cancellationToken)
     {
         var limit = parameters.Limit ?? 15;
-        var messages = await messageService.GetRecentMessagesAsync(parameters.SessionId, limit, cancellationToken);
-        return TypedResults.Ok(messages);
+
+        if (!string.IsNullOrEmpty(parameters.Before))
+        {
+            var page = await messageService.GetMessagesPageAsync(
+                parameters.SessionId,
+                limit,
+                parameters.Before,
+                cancellationToken);
+            return TypedResults.Ok(page);
+        }
+
+        // Fetch one extra to detect if there are more messages
+        var messages = await messageService.GetRecentMessagesAsync(
+            parameters.SessionId,
+            limit + 1,
+            cancellationToken);
+
+        var hasMore = messages.Count > limit;
+        IReadOnlyList<MessageEntry> result = hasMore
+            ? messages.TakeLast(limit).ToList()
+            : messages;
+
+        return TypedResults.Ok(new MessagesResponse(result, hasMore));
     }
 }
