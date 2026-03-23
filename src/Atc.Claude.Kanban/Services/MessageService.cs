@@ -47,7 +47,7 @@ public sealed class MessageService
             return [];
         }
 
-        return await ReadMessagesFromFileAsync(jsonlPath, limit, $"messages:{sessionId}", cancellationToken);
+        return await ReadMessagesFromFileAsync(jsonlPath, limit, $"messages:{sessionId}:{limit}", cancellationToken);
     }
 
     /// <summary>
@@ -70,7 +70,7 @@ public sealed class MessageService
             return [];
         }
 
-        return await ReadMessagesFromFileAsync(jsonlPath, limit, $"messages:{sessionId}:{agentId}", cancellationToken);
+        return await ReadMessagesFromFileAsync(jsonlPath, limit, $"messages:{sessionId}:{agentId}:{limit}", cancellationToken);
     }
 
     private async Task<IReadOnlyList<MessageEntry>> ReadMessagesFromFileAsync(

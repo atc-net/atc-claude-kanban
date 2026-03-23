@@ -1957,11 +1957,15 @@
     }
 
     .modal.plan-modal {
-      width: 60vw;
-      max-width: 60vw;
-      max-height: 90vh;
+      width: 90vw;
+      max-width: 90vw;
+      max-height: 92vh;
       display: flex;
       flex-direction: column;
+    }
+
+    .modal-sm {
+      max-width: 440px;
     }
 
     .modal {
@@ -2682,7 +2686,8 @@
     }
 
     .message-list {
-      flex: 1;
+      flex: 1 1 0;
+      height: 0;
       overflow-y: auto;
       padding: 8px 0;
       min-height: 0;
@@ -3504,7 +3509,7 @@
       if (text.includes(query)) return true;
 
       // Split by common delimiters to search in individual words
-      const words = text.split(/[\s\-_\/\.]+/);
+      const words = text.split(/[\s\-_\/\\.]+/);
 
       // Check if query matches start of any word
       for (const word of words) {
@@ -6536,7 +6541,7 @@
 
   <!-- Delete Confirmation Modal -->
   <div id="delete-confirm-modal" class="modal-overlay" data-action="closeDeleteConfirmModal">
-    <div class="modal" style="max-width: 400px;">
+    <div class="modal modal-sm">
       <div class="modal-header">
         <h3 class="modal-title">Delete Task</h3>
         <button class="modal-close" aria-label="Close dialog" data-action="closeDeleteConfirmModal">
