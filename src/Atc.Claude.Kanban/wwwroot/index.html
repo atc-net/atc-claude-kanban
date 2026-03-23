@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css" id="hljs-theme-dark">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css" id="hljs-theme-light" disabled>
   <script defer src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
   <style>
     :root {
       --bg-deep: #101114;
@@ -6044,6 +6045,9 @@
       }
       updateThemeIcon();
       syncHljsTheme();
+      if (typeof mermaid !== 'undefined') {
+        mermaid.initialize({ startOnLoad: false, theme: isCurrentlyLight ? 'dark' : 'default', securityLevel: 'loose' });
+      }
     }
 
     function syncHljsTheme() {
@@ -6309,6 +6313,7 @@
             _pendingPlanContent = data.content;
             const body = document.getElementById('plan-modal-body');
             body.innerHTML = DOMPurify.sanitize(marked.parse(_pendingPlanContent));
+            initMermaidBlocks(body);
           }
         })
         .catch(() => {});
@@ -6331,6 +6336,7 @@
       if (!_pendingPlanContent) return;
       const body = document.getElementById('plan-modal-body');
       body.innerHTML = DOMPurify.sanitize(marked.parse(_pendingPlanContent));
+      initMermaidBlocks(body);
       document.getElementById('plan-modal').classList.add('visible');
 
       if (_planModalKeyHandler) {
@@ -6452,10 +6458,32 @@
     // Init
     loadTheme();
 
+    function initMermaidBlocks(container) {
+      if (typeof mermaid === 'undefined') return;
+      const blocks = container.querySelectorAll('pre.mermaid-pending');
+      blocks.forEach((pre, i) => {
+        const id = 'mermaid-' + Date.now() + '-' + i;
+        const code = pre.textContent;
+        const div = document.createElement('div');
+        div.className = 'mermaid';
+        div.id = id;
+        div.textContent = code;
+        pre.replaceWith(div);
+      });
+      try { mermaid.run({ querySelector: '.mermaid:not([data-processed])' }); } catch (_) {}
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+      if (typeof mermaid !== 'undefined') {
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'loose' });
+      }
       if (typeof marked !== 'undefined' && typeof hljs !== 'undefined') {
         const renderer = new marked.Renderer();
         renderer.code = function({ text, lang }) {
+          if (lang === 'mermaid') {
+            return `<pre class="mermaid-pending">${escapeHtml(text)}</pre>`;
+          }
           let highlighted;
           if (lang && hljs.getLanguage(lang)) {
             highlighted = hljs.highlight(text, { language: lang }).value;
