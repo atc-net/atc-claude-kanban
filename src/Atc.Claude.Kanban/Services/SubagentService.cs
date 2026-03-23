@@ -63,6 +63,8 @@ public sealed class SubagentService
             }
         }
 
+        EnrichAgentNames(sessionId, subagents);
+
         var result = (IReadOnlyList<SubagentInfo>)subagents;
         cache.Set(cacheKey, result, TimeSpan.FromSeconds(10));
         return result;
@@ -409,6 +411,185 @@ public sealed class SubagentService
         }
 
         return parts.Count > 0 ? string.Join(' ', parts) : null;
+    }
+
+    /// <summary>
+    /// Enriches subagent entries with agent names extracted from Agent tool_use blocks
+    /// in the parent session's JSONL file. Matches by correlating tool_use.id with
+    /// agent_progress.parentToolUseID entries.
+    /// </summary>
+    private void EnrichAgentNames(
+        string sessionId,
+        List<SubagentInfo> subagents)
+    {
+        if (subagents.Count == 0)
+        {
+            return;
+        }
+
+        var sessionJsonlPath = FindSessionJsonlPath(sessionId);
+        if (sessionJsonlPath is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var nameMap = BuildAgentNameMap(sessionJsonlPath);
+            foreach (var agent in subagents)
+            {
+                if (nameMap.TryGetValue(agent.AgentId, out var name))
+                {
+                    agent.AgentName = name;
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Parent session file may be inaccessible
+        }
+    }
+
+    /// <summary>
+    /// Builds a mapping of agentId to agent name by scanning the parent session JSONL
+    /// for Agent tool_use blocks and agent_progress entries.
+    /// </summary>
+    private static Dictionary<string, string> BuildAgentNameMap(
+        string jsonlPath)
+    {
+        var nameByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var agentIdByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        using var reader = new StreamReader(jsonlPath);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0 || line[0] != '{')
+            {
+                continue;
+            }
+
+            // Quick string checks to avoid parsing every line
+            if (line.Contains("\"agent_progress\"", StringComparison.Ordinal))
+            {
+                ExtractAgentProgressMapping(line, agentIdByToolUseId);
+            }
+            else if (line.Contains("\"Agent\"", StringComparison.Ordinal) &&
+                     line.Contains("\"tool_use\"", StringComparison.Ordinal))
+            {
+                ExtractAgentToolUseName(line, nameByToolUseId);
+            }
+        }
+
+        // Merge: map agentId → name via toolUseId
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (toolUseId, agentId) in agentIdByToolUseId)
+        {
+            if (nameByToolUseId.TryGetValue(toolUseId, out var name))
+            {
+                result[agentId] = name;
+            }
+        }
+
+        return result;
+    }
+
+    private static void ExtractAgentProgressMapping(
+        string line,
+        Dictionary<string, string> agentIdByToolUseId)
+    {
+        // Fields may be nested at varying depths — use string extraction
+        var agentId = ExtractJsonStringValue(line, "agentId");
+        var parentToolUseId = ExtractJsonStringValue(line, "parentToolUseID");
+
+        if (agentId is not null && parentToolUseId is not null)
+        {
+            agentIdByToolUseId.TryAdd(parentToolUseId, agentId);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the first occurrence of a JSON string value by key name from raw text.
+    /// Avoids full JSON parsing for performance on large JSONL files.
+    /// </summary>
+    private static string? ExtractJsonStringValue(
+        string line,
+        string key)
+    {
+        var marker = $"\"{key}\":\"";
+        var idx = line.IndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            return null;
+        }
+
+        var start = idx + marker.Length;
+        var end = line.IndexOf('"', start);
+        return end > start ? line[start..end] : null;
+    }
+
+    private static void ExtractAgentToolUseName(
+        string line,
+        Dictionary<string, string> nameByToolUseId)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("message", out var msgEl) ||
+                !msgEl.TryGetProperty("content", out var contentEl) ||
+                contentEl.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            foreach (var block in contentEl.EnumerateArray())
+            {
+                if (!block.TryGetProperty("type", out var bt) ||
+                    !string.Equals(bt.GetString(), "tool_use", StringComparison.Ordinal) ||
+                    !block.TryGetProperty("name", out var nameEl) ||
+                    !string.Equals(nameEl.GetString(), "Agent", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var toolUseId = block.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                var agentName = block.TryGetProperty("input", out var inputEl) &&
+                                inputEl.TryGetProperty("name", out var anEl)
+                    ? anEl.GetString()
+                    : null;
+
+                if (toolUseId is not null && agentName is not null)
+                {
+                    nameByToolUseId[toolUseId] = agentName;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed lines
+        }
+    }
+
+    private string? FindSessionJsonlPath(string sessionId)
+    {
+        var projectsDir = Path.Combine(claudeDir, "projects");
+        if (!Directory.Exists(projectsDir))
+        {
+            return null;
+        }
+
+        foreach (var hashDir in Directory.GetDirectories(projectsDir))
+        {
+            var jsonlFile = Path.Combine(hashDir, $"{sessionId}.jsonl");
+            if (File.Exists(jsonlFile))
+            {
+                return jsonlFile;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

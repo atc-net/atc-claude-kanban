@@ -3713,7 +3713,7 @@
         <div class="subagent-card ${agent.status} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
           <div class="subagent-card-header">
             <span class="subagent-status-dot ${agent.status}"></span>
-            <span>${escapeHtml(agent.slug || agent.agentId)}</span>
+            <span>${escapeHtml(agent.agentName || agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
             ${agent.description ? `<button class="subagent-copy-btn" data-action="copyText" data-text="${escapeHtml(cleanAgentDescription(agent.description))}" data-label="Description copied" title="Copy description"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
           </div>
@@ -3721,6 +3721,7 @@
           <div class="subagent-time">${agent.startedAt ? formatDate(agent.startedAt) : ''} ${statusLabel(agent)}</div>
           <div class="subagent-detail">
             <div class="subagent-detail-row"><span class="subagent-detail-label">Agent</span><span class="subagent-detail-value">${escapeHtml(agent.agentId)}</span></div>
+            ${agent.agentName ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Name</span><span class="subagent-detail-value">${escapeHtml(agent.agentName)}</span></div>` : ''}
             ${agent.model ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Model</span><span class="subagent-detail-value">${escapeHtml(agent.model)}</span></div>` : ''}
             ${agent.cwd ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Dir</span><span class="subagent-detail-value" title="${escapeHtml(agent.cwd)}">${escapeHtml(agent.cwd)}</span></div>` : ''}
             ${agent.startedAt ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Started</span><span class="subagent-detail-value">${new Date(agent.startedAt).toLocaleString()}</span></div>` : ''}

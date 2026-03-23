@@ -79,4 +79,11 @@ public sealed class SubagentInfo
     /// </summary>
     [JsonPropertyName("transcriptDir")]
     public string? TranscriptDir { get; set; }
+
+    /// <summary>
+    /// Gets or sets the agent name extracted from the parent session's Agent tool_use block.
+    /// </summary>
+    [JsonPropertyName("agentName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AgentName { get; set; }
 }
