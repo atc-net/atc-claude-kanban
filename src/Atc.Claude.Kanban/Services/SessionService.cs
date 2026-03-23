@@ -139,6 +139,9 @@ public sealed class SessionService
         // Discover sessions that have subagents but no tasks
         DiscoverSubagentOnlySessions(sessions, sessionIndexes, discoveredIds);
 
+        // Discover sessions that only exist as JSONL files (e.g. after /clear)
+        DiscoverJsonlOnlySessions(sessions, sessionIndexes, discoveredIds);
+
         // Merge lead sessions into their team sessions so subagents and metadata
         // appear on the team row instead of a separate subagent-only row
         await MergeLeadSessionsAsync(sessions, cancellationToken);
@@ -255,6 +258,65 @@ public sealed class SessionService
     /// project paths, and git branches appear on the team row in the sidebar.
     /// Lead sessions that have no tasks of their own are removed from the list.
     /// </summary>
+    /// <summary>
+    /// Discovers sessions that exist only as JSONL transcript files (e.g. created by /clear)
+    /// with no corresponding task directory or subagent directory.
+    /// </summary>
+    private void DiscoverJsonlOnlySessions(
+        List<SessionInfo> sessions,
+        Dictionary<string, SessionIndex> sessionIndexes,
+        HashSet<string> discoveredIds)
+    {
+        var projectsDir = Path.Combine(claudeDir, "projects");
+        if (!Directory.Exists(projectsDir))
+        {
+            return;
+        }
+
+        foreach (var hashDir in Directory.GetDirectories(projectsDir))
+        {
+            foreach (var jsonlFile in Directory.GetFiles(hashDir, "*.jsonl"))
+            {
+                var sessionId = Path.GetFileNameWithoutExtension(jsonlFile);
+                if (discoveredIds.Contains(sessionId))
+                {
+                    continue;
+                }
+
+                DateTime lastWriteUtc;
+                try
+                {
+                    lastWriteUtc = File.GetLastWriteTimeUtc(jsonlFile);
+                }
+                catch (IOException)
+                {
+                    continue;
+                }
+
+                var index = sessionIndexes.GetValueOrDefault(sessionId);
+
+                sessions.Add(new SessionInfo
+                {
+                    Id = sessionId,
+                    Name = index?.CustomTitle
+                           ?? index?.Description
+                           ?? ProjectDisplayName(index?.ProjectPath)
+                           ?? ProjectDisplayName(index?.Cwd)
+                           ?? sessionId,
+                    Project = index?.ProjectPath ?? index?.Cwd,
+                    Description = index?.Description,
+                    GitBranch = index?.GitBranch,
+                    HasPlan = PlanExistsForSession(index?.Slug ?? sessionId),
+                    ModifiedAt = lastWriteUtc,
+                    CreatedAt = index?.CreatedAt,
+                    Slug = index?.Slug ?? sessionId,
+                });
+
+                discoveredIds.Add(sessionId);
+            }
+        }
+    }
+
     private async Task MergeLeadSessionsAsync(
         List<SessionInfo> sessions,
         CancellationToken cancellationToken)
