@@ -3941,7 +3941,7 @@
       if (!tokenUsage) return '';
       const cost = tokenUsage.costUsd || 0;
       if (cost < 0.01) return '';
-      const costClass = cost < 0.5 ? 'cost-low' : cost < 2 ? 'cost-medium' : cost < 5 ? 'cost-high' : 'cost-critical';
+      const costClass = cost < 2 ? 'cost-low' : cost < 10 ? 'cost-medium' : cost < 25 ? 'cost-high' : 'cost-critical';
       const totalTokens = tokenUsage.totalTokens || 0;
       const costDisplay = `$${cost.toFixed(2)}`;
       const tokenDisplay = totalTokens > 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M` : totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(0)}K` : String(totalTokens);
@@ -3954,8 +3954,11 @@
 
       let filteredSessions = sessions;
       if (sessionFilter === 'active') {
+        const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
         filteredSessions = filteredSessions.filter(s =>
-          s.isCompleted || s.pending > 0 || s.inProgress > 0 || s.hasPlan || s.activeSubagentCount > 0
+          s.isCompleted || s.pending > 0 || s.inProgress > 0 || s.hasPlan
+          || s.activeSubagentCount > 0 || (s.activityStatus && s.activityStatus !== 'idle')
+          || (s.modifiedAt && new Date(s.modifiedAt).getTime() > recentCutoff)
         );
       }
       if (filterProject) {
