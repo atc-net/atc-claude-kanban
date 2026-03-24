@@ -137,10 +137,19 @@ public sealed class SessionService
         }
 
         // Discover sessions that have subagents but no tasks
+        var preEnrichCount = sessions.Count;
         DiscoverSubagentOnlySessions(sessions, sessionIndexes, discoveredIds);
 
         // Discover sessions that only exist as JSONL files (e.g. after /clear)
         DiscoverJsonlOnlySessions(sessions, sessionIndexes, discoveredIds);
+
+        // Enrich non-task sessions with activity status and token usage
+        // (task-based sessions are already enriched inside BuildSessionInfoAsync)
+        for (var i = preEnrichCount; i < sessions.Count; i++)
+        {
+            sessions[i].ActivityStatus = await activityService.GetActivityStatusAsync(sessions[i].Id, cancellationToken);
+            sessions[i].TokenUsage = await activityService.GetTokenUsageAsync(sessions[i].Id, cancellationToken);
+        }
 
         // Merge lead sessions into their team sessions so subagents and metadata
         // appear on the team row instead of a separate subagent-only row
