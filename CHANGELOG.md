@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.8.0...v1.9.0) (2026-03-24)
+
+
+### Features
+
+* add mermaid.js diagram rendering in plan modals ([572e1d4](https://github.com/atc-net/atc-claude-kanban/commit/572e1d4fbac40ce6cbc462a906f75ad768d311ea))
+* add message pagination with infinite scroll ([ebc4408](https://github.com/atc-net/atc-claude-kanban/commit/ebc4408b69cd85bf7cdddf6a0cf2eb920efc2200))
+* add system message filtering and compaction labels ([399f25a](https://github.com/atc-net/atc-claude-kanban/commit/399f25aa42dbbbbf7ce4cf733a8f6820e564b186))
+* add tool-specific icons and consecutive tool grouping ([c6ca882](https://github.com/atc-net/atc-claude-kanban/commit/c6ca8829bf4d2a79ec43546f7126f26dda467775))
+* extract and display agent names from JSONL ([ef2b4f2](https://github.com/atc-net/atc-claude-kanban/commit/ef2b4f25bd0e5e594d74144f7353ecbc17404e38))
+
+
+### Bug Fixes
+
+* discover sessions from JSONL files without task directories ([ccabe49](https://github.com/atc-net/atc-claude-kanban/commit/ccabe4917a429344d2fff84bb24e6804b9667156))
+* fuzzy search backslash paths, scroll overflow, modal sizing, cache keys ([a353184](https://github.com/atc-net/atc-claude-kanban/commit/a3531846afdd8507cddf89ed2cadc63ddaed5067))
+
 ## [1.8.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.7.0...v1.8.0) (2026-03-21)
 
 
