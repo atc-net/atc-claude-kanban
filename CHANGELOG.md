@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.0...v1.9.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* enrich non-task sessions with activity status and token usage ([560cdb5](https://github.com/atc-net/atc-claude-kanban/commit/560cdb5d14fdba523ae8a765034485e1f649fa70))
+* improve active filter and token cost thresholds ([66e6a9d](https://github.com/atc-net/atc-claude-kanban/commit/66e6a9dab91b862b8d91385eef4a2b86564d5662))
+
 ## [1.9.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.8.0...v1.9.0) (2026-03-24)
 
 
