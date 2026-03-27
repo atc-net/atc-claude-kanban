@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.1...v1.9.2) (2026-03-27)
+
+
+### Bug Fixes
+
+* preserve subagent panel collapsed state across SSE updates ([66a8f3d](https://github.com/atc-net/atc-claude-kanban/commit/66a8f3d4f615b9ff3e679b8d458cc9dab279325e))
+
 ## [1.9.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.0...v1.9.1) (2026-03-24)
 
 
