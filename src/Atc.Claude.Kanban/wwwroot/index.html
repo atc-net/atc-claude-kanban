@@ -3701,7 +3701,10 @@
 
     function renderSubagentCards(agents) {
       const container = document.getElementById('subagent-cards');
-      container.style.display = '';
+      const header = document.querySelector('.subagent-header');
+      if (!header || !header.classList.contains('collapsed')) {
+        container.style.display = '';
+      }
       const savedContainerScroll = container.scrollTop;
       const savedDescScrolls = {};
       container.querySelectorAll('.subagent-card.expanded').forEach(card => {
