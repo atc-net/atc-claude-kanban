@@ -6246,6 +6246,9 @@
       if (session.project) {
         const projectName = session.project.split(/[/\\]/).pop();
         infoRows.push(['Project', `${escapeHtml(projectName)}<br><span style="font-size: 10px; color: var(--text-tertiary);">${escapeHtml(session.project)}</span>`]);
+        if (session.cwd && session.cwd !== session.project) {
+          infoRows.push(['CWD', `<span style="font-size: 10px; color: var(--text-tertiary);">${escapeHtml(session.cwd)}</span>`]);
+        }
         if (session.gitBranch) {
           infoRows.push(['Branch', escapeHtml(session.gitBranch)]);
         }
