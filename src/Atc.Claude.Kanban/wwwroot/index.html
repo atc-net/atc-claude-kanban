@@ -3293,6 +3293,7 @@
     let lastSessionsHash = '';
     let lastTasksHash = '';
     let lastMessagesHash = '';
+    let _pollMissed = false;
     let agentLogMode = false;
     let msgHasMore = false;
     let msgLoadingMore = false;
@@ -3301,23 +3302,34 @@
     const MSG_MAX_LOADED = 200;
     let viewingAgentId = null;
 
-    async function fetchSessions() {
-      log.debug('[fetchSessions] Starting...');
+    async function fetchSessions(includeTasks = true) {
+      log.debug('[fetchSessions] Starting... includeTasks:', includeTasks);
       try {
         const limitParam = sessionLimit === 'all' ? '9999' : sessionLimit;
         const res = await fetch(`/api/sessions?limit=${limitParam}`);
         const newSessions = await res.json();
-        const tasksRes = await fetch('/api/tasks/all');
-        const newTasks = await tasksRes.json();
+
+        let newTasks;
+        if (includeTasks) {
+          const tasksRes = await fetch('/api/tasks/all');
+          newTasks = await tasksRes.json();
+        }
 
         const sessionsHash = JSON.stringify(newSessions);
-        const tasksHash = JSON.stringify(newTasks);
-        if (sessionsHash === lastSessionsHash && tasksHash === lastTasksHash) {
-          log.debug('[fetchSessions] No changes, skipping render');
-          return;
+        if (includeTasks) {
+          const tasksHash = JSON.stringify(newTasks);
+          if (sessionsHash === lastSessionsHash && tasksHash === lastTasksHash) {
+            log.debug('[fetchSessions] No changes, skipping render');
+            return;
+          }
+          lastTasksHash = tasksHash;
+        } else {
+          if (sessionsHash === lastSessionsHash) {
+            log.debug('[fetchSessions] No changes, skipping render');
+            return;
+          }
         }
         lastSessionsHash = sessionsHash;
-        lastTasksHash = tasksHash;
 
         // Track live session IDs
         const liveIds = new Set(newSessions.map(s => s.id));
@@ -3359,25 +3371,28 @@
           'completed:', [...knownSessions.values()].filter(s => s.isCompleted).length);
 
         sessions = [...knownSessions.values()];
-        allTasksCache = [...newTasks, ...completedTasksCache];
 
-        // Detect task completions and fire notifications
-        const newStatuses = new Map();
-        for (const task of allTasksCache) {
-          if (task.sessionId && task.id) {
-            newStatuses.set(`${task.sessionId}:${task.id}`, task.status);
-          }
-        }
-        if (notificationsEnabled && previousTaskStatuses.size > 0) {
+        if (includeTasks) {
+          allTasksCache = [...newTasks, ...completedTasksCache];
+
+          // Detect task completions and fire notifications
+          const newStatuses = new Map();
           for (const task of allTasksCache) {
-            const key = `${task.sessionId}:${task.id}`;
-            const oldStatus = previousTaskStatuses.get(key);
-            if (oldStatus === 'in_progress' && task.status === 'completed') {
-              fireTaskNotification(task);
+            if (task.sessionId && task.id) {
+              newStatuses.set(`${task.sessionId}:${task.id}`, task.status);
             }
           }
+          if (notificationsEnabled && previousTaskStatuses.size > 0) {
+            for (const task of allTasksCache) {
+              const key = `${task.sessionId}:${task.id}`;
+              const oldStatus = previousTaskStatuses.get(key);
+              if (oldStatus === 'in_progress' && task.status === 'completed') {
+                fireTaskNotification(task);
+              }
+            }
+          }
+          previousTaskStatuses = newStatuses;
         }
-        previousTaskStatuses = newStatuses;
 
         log.debug('[fetchSessions] Sessions loaded:', sessions.length, '(known:', knownSessions.size, ')');
         renderSessions();
@@ -5608,7 +5623,7 @@
           const delay = isMetadata ? 2000 : 500;
           refreshTimer = setTimeout(() => {
             if (!isServerConnected) return;
-            fetchSessions().catch(err => log.error('[SSE] fetchSessions failed:', err));
+            fetchSessions(!isMetadata).catch(err => log.error('[SSE] fetchSessions failed:', err));
             if (currentSessionId) {
               fetchTasks(currentSessionId);
               fetchSubagents(currentSessionId);
@@ -6535,9 +6550,22 @@
       }
     }, 10000);
 
+    // When the tab becomes visible after being hidden, catch up immediately
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && _pollMissed) {
+        _pollMissed = false;
+        fetchSessions().catch(() => {});
+        if (currentSessionId) fetchTasks(currentSessionId).catch(() => {});
+      }
+    });
+
     // Poll so activity status transitions are picked up
-    // even when no file changes trigger SSE events
+    // even when no file changes trigger SSE events; skip when tab is hidden
     setInterval(() => {
+      if (document.hidden) {
+        _pollMissed = true;
+        return;
+      }
       fetchSessions().catch(() => {});
     }, 15000);
 
