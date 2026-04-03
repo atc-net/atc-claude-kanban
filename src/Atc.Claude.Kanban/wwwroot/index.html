@@ -3302,6 +3302,8 @@
     let lastTasksHash = '';
     let lastMessagesHash = '';
     let _pollMissed = false;
+    const dismissedSessionIds = new Set();
+    let _infoModalSessionId = null;
     let agentLogMode = false;
     let msgHasMore = false;
     let msgLoadingMore = false;
@@ -3990,6 +3992,7 @@
           || s.activeSubagentCount > 0 || (s.activityStatus && s.activityStatus !== 'idle')
           || (s.modifiedAt && new Date(s.modifiedAt).getTime() > recentCutoff)
         );
+        filteredSessions = filteredSessions.filter(s => !dismissedSessionIds.has(s.id));
       }
       if (filterProject) {
         filteredSessions = filteredSessions.filter(s =>
@@ -6321,6 +6324,8 @@
       }
 
       bodyEl.innerHTML = html;
+      _infoModalSessionId = session.id;
+      updateDismissBtnState();
       modal.classList.add('visible');
 
       if (_teamModalKeyHandler) {
@@ -6342,6 +6347,24 @@
         document.removeEventListener('keydown', _teamModalKeyHandler);
         _teamModalKeyHandler = null;
       }
+    }
+
+    function toggleDismissSession(sessionId) {
+      if (dismissedSessionIds.has(sessionId)) {
+        dismissedSessionIds.delete(sessionId);
+      } else {
+        dismissedSessionIds.add(sessionId);
+      }
+      updateDismissBtnState();
+      renderSessions();
+    }
+
+    function updateDismissBtnState() {
+      const btn = document.getElementById('session-info-dismiss-btn');
+      if (!btn || !_infoModalSessionId) return;
+      const isDismissed = dismissedSessionIds.has(_infoModalSessionId);
+      btn.textContent = isDismissed ? 'Restore' : 'Dismiss';
+      btn.title = isDismissed ? 'Restore \u2014 show in active list again' : 'Dismiss \u2014 hide from active list';
     }
 
     let _planSlug = null;
@@ -6740,6 +6763,7 @@
         case 'closeDeleteSessionTasksModal': closeDeleteSessionTasksModal(); break;
         case 'closeDeleteResultModal': closeDeleteResultModal(); break;
         case 'closeTeamModal': closeTeamModal(); break;
+        case 'dismissSession': toggleDismissSession(_infoModalSessionId); break;
         case 'closeAgentModal': closeAgentModal(); break;
         case 'closePlanModal': closePlanModal(); break;
         case 'closeBlockedTaskModal': closeBlockedTaskModal(); break;
@@ -6937,6 +6961,7 @@
       </div>
       <div id="team-modal-body" class="modal-body" style="overflow-y: auto; flex: 1;"></div>
       <div class="modal-footer">
+        <button id="session-info-dismiss-btn" class="btn btn-secondary" data-action="dismissSession">Dismiss</button>
         <button class="btn btn-primary" data-action="closeTeamModal">Close</button>
       </div>
     </div>
