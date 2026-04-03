@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.2...v1.10.0) (2026-04-03)
+
+
+### Features
+
+* add CWD field to session info modal ([b791c88](https://github.com/atc-net/atc-claude-kanban/commit/b791c8880e909ed864a35e5d7624595f28134a22))
+* add dismiss button to session info modal ([ca25cde](https://github.com/atc-net/atc-claude-kanban/commit/ca25cde46ebd550e3f6899a3c03fe16b68133dd2))
+* show agent description in subagent cards with copy button ([4a939ef](https://github.com/atc-net/atc-claude-kanban/commit/4a939ef4953b0f516d8aa1bfbfeb5e7094f106b7))
+* show Read tool offset/limit inline in message panel ([0ad4d7f](https://github.com/atc-net/atc-claude-kanban/commit/0ad4d7fee7b8b8786a659352eeb6d0c8c692084c))
+
+
+### Performance Improvements
+
+* skip task fetch on metadata events and poll on hidden tab ([65deb62](https://github.com/atc-net/atc-claude-kanban/commit/65deb62955b5dad8fb320dcc419f94ff6072f70c))
+
 ## [1.9.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.1...v1.9.2) (2026-03-27)
 
 
