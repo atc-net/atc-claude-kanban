@@ -24,6 +24,13 @@ public sealed class SessionInfo
     public string? Project { get; set; }
 
     /// <summary>
+    /// Gets or sets the working directory from the JSONL transcript metadata.
+    /// May differ from Project when Claude Code runs from a subdirectory.
+    /// </summary>
+    [JsonPropertyName("cwd")]
+    public string? Cwd { get; set; }
+
+    /// <summary>
     /// Gets or sets the session description from the sessions-index.
     /// </summary>
     [JsonPropertyName("description")]

@@ -248,6 +248,7 @@ public sealed class SessionService
                            ?? ProjectDisplayName(index?.Cwd)
                            ?? sessionId,
                     Project = index?.ProjectPath ?? index?.Cwd,
+                    Cwd = index?.Cwd,
                     Description = index?.Description,
                     GitBranch = index?.GitBranch,
                     HasPlan = PlanExistsForSession(index?.Slug ?? sessionId),
@@ -313,6 +314,7 @@ public sealed class SessionService
                            ?? ProjectDisplayName(index?.Cwd)
                            ?? sessionId,
                     Project = index?.ProjectPath ?? index?.Cwd,
+                    Cwd = index?.Cwd,
                     Description = index?.Description,
                     GitBranch = index?.GitBranch,
                     HasPlan = PlanExistsForSession(index?.Slug ?? sessionId),
@@ -360,6 +362,11 @@ public sealed class SessionService
             if (string.IsNullOrEmpty(session.Project))
             {
                 session.Project = lead.Project;
+            }
+
+            if (string.IsNullOrEmpty(session.Cwd))
+            {
+                session.Cwd = lead.Cwd;
             }
 
             if (string.IsNullOrEmpty(session.GitBranch))
@@ -426,6 +433,7 @@ public sealed class SessionService
                 Project = index?.ProjectPath ?? index?.Cwd
                           ?? leadIndex?.ProjectPath ?? leadIndex?.Cwd
                           ?? teamConfig?.WorkingDir,
+                Cwd = index?.Cwd ?? leadIndex?.Cwd,
                 Description = index?.Description ?? leadIndex?.Description,
                 GitBranch = index?.GitBranch ?? leadIndex?.GitBranch,
                 HasPlan = PlanExistsForSession(slug),
@@ -482,6 +490,7 @@ public sealed class SessionService
             Id = sessionId,
             Name = ResolveSessionName(sessionId, index, teamConfig),
             Project = project,
+            Cwd = index?.Cwd ?? leadIndex?.Cwd,
             Description = index?.Description ?? leadIndex?.Description,
             GitBranch = index?.GitBranch ?? leadIndex?.GitBranch,
             TaskCount = tasks.Count,
