@@ -4951,6 +4951,14 @@
       // Make file paths clickable for file-based tools
       const filePath = msg.toolInput && (msg.toolInput.file_path || msg.toolInput.path);
       const hasClickablePath = filePath && ['Read', 'Edit', 'Write', 'Glob'].includes(msg.toolName);
+      let readRange = '';
+      if (msg.toolName === 'Read' && msg.toolInput) {
+        const parts = [];
+        if (msg.toolInput.offset) parts.push(`L${msg.toolInput.offset}`);
+        if (msg.toolInput.limit) parts.push(`+${msg.toolInput.limit}`);
+        if (parts.length) readRange = ` <span style="color:var(--text-secondary);opacity:.7">${parts.join(' ')}</span>`;
+      }
+
       const displayText = hasClickablePath
         ? rawDisplayText.replace(
             escapeHtml(String(filePath)),
@@ -4960,7 +4968,7 @@
       let paramsHtml = '';
       if (msg.toolInput && !compact) {
         const badges = Object.entries(msg.toolInput)
-          .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description', 'file_path', 'path'].includes(k))
+          .filter(([k]) => !['command', 'content', 'old_string', 'new_string', 'prompt', 'description', 'file_path', 'path', 'offset', 'limit'].includes(k))
           .slice(0, 4)
           .map(([k, v]) => {
             const val = typeof v === 'string' ? v : JSON.stringify(v);
@@ -4985,7 +4993,7 @@
 
       return `<div class="msg-entry msg-tool${compactClass}">
         <div class="msg-tool-name">${icon}${toolName}${agentLink}</div>
-        <div class="msg-text">${displayText}</div>
+        <div class="msg-text">${displayText}${readRange}</div>
         ${paramsHtml}
         ${resultHtml}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
