@@ -19,7 +19,7 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
 - 📦 **Auto-archive** — stale sessions (>7 days, no active tasks) collapse into an "Archived" section
 - 🤖 **Agent team support** — color-coded team members, owner filtering, member badges
-- 🧩 **Subagent visibility** — see active subagents spawned via the Task tool, parsed from JSONL transcripts
+- 🧩 **Subagent visibility** — see active subagents with agent descriptions, names, and copy-to-clipboard prompts
 - 🔗 **Task dependencies** — visual blockedBy/blocks relationships with smart badge clearing
 - 📡 **Server-Sent Events** — instant updates via file watching, no polling
 - 💬 **Session message log** — view conversation transcript (user/assistant/tool calls) in a side panel
@@ -31,9 +31,11 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
 - 🌙 **Dark/light themes** — system preference detection
 - 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
-- 📝 **Plan viewer** — view and open Claude Code plans directly from the dashboard
+- 📝 **Plan viewer** — view and open Claude Code plans with Mermaid.js diagram rendering
 - 🔌 **Auto-port discovery** — automatically finds an available port when the default is taken
 - 🔄 **Auto-update** — checks NuGet for new versions on startup and updates automatically
+- 🚫 **Session dismiss** — temporarily hide sessions from the active list without deleting them
+- ⚡ **Smart polling** — skips polling when the browser tab is hidden, catches up on focus
 
 ## 📋 Requirements
 
@@ -124,6 +126,9 @@ When Claude Code spawns agent teams, the dashboard shows:
 When Claude Code spawns subagents via the Task tool, the dashboard shows:
 - Active subagent count badge in the sidebar (only when subagents are running)
 - Collapsible subagent panel below Kanban columns with status dots, model info, and descriptions
+- Agent names and short descriptions extracted from the parent session's Agent tool_use blocks
+- Foreground agent correlation via `toolUseResult` entries
+- Copy button on task prompts and expandable/scrollable detail view
 - "Show all" toggle to view historical subagents (default: active only)
 - Parsed from JSONL transcript files at `~/.claude/projects/{hash}/{sessionId}/subagents/`
 
@@ -133,9 +138,20 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 
 - View the conversation transcript (user prompts, assistant responses, tool calls)
 - Tool parameter badges and expandable tool results
+- Read tool calls show inline offset/limit annotations (e.g., `L45 +30`)
 - Clickable file paths open in VS Code
 - Subagent log drill-in (click agent tool calls to view subagent conversation)
+- Infinite scroll with pagination for long conversations
 - Resizable panel (drag the left edge)
+
+### ℹ️ Session Info
+
+Click the info button on any session to view detailed metadata:
+
+- Session ID, project path, git branch, and description
+- Working directory (CWD) shown when it differs from the project root
+- Plan viewer, copy path, and open folder actions
+- **Dismiss button** — temporarily hide a session from the active list (in-memory only, restores on reload or in "All" view)
 
 ### 🎯 Activity Status
 
@@ -241,6 +257,8 @@ The update check is also automatically suppressed in CI environments (`CI`, `TF_
 - **Async service layer** — all file I/O uses `ReadAllTextAsync`/`WriteAllTextAsync`
 - **IMemoryCache** with TTL expiration (10s sessions, 5s teams)
 - **Embedded static files** — single HTML dashboard served via `ManifestEmbeddedFileProvider`
+- **Smart polling** — skips activity polls when browser tab is hidden; catches up on focus
+- **Selective fetching** — metadata SSE events skip task list fetching for reduced API overhead
 
 ## 🤝 How to contribute
 
