@@ -86,4 +86,11 @@ public sealed class SubagentInfo
     [JsonPropertyName("agentName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AgentName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the agent description extracted from the parent session's Agent tool_use block (input.description).
+    /// </summary>
+    [JsonPropertyName("agentDescription")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AgentDescription { get; set; }
 }

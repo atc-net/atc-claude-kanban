@@ -63,7 +63,7 @@ public sealed class SubagentService
             }
         }
 
-        EnrichAgentNames(sessionId, subagents);
+        EnrichAgentInfo(sessionId, subagents);
 
         var result = (IReadOnlyList<SubagentInfo>)subagents;
         cache.Set(cacheKey, result, TimeSpan.FromSeconds(10));
@@ -418,7 +418,7 @@ public sealed class SubagentService
     /// in the parent session's JSONL file. Matches by correlating tool_use.id with
     /// agent_progress.parentToolUseID entries.
     /// </summary>
-    private void EnrichAgentNames(
+    private void EnrichAgentInfo(
         string sessionId,
         List<SubagentInfo> subagents)
     {
@@ -435,12 +435,17 @@ public sealed class SubagentService
 
         try
         {
-            var nameMap = BuildAgentNameMap(sessionJsonlPath);
+            var (nameMap, descMap) = BuildAgentMaps(sessionJsonlPath);
             foreach (var agent in subagents)
             {
                 if (nameMap.TryGetValue(agent.AgentId, out var name))
                 {
                     agent.AgentName = name;
+                }
+
+                if (descMap.TryGetValue(agent.AgentId, out var desc))
+                {
+                    agent.AgentDescription = desc;
                 }
             }
         }
@@ -451,13 +456,14 @@ public sealed class SubagentService
     }
 
     /// <summary>
-    /// Builds a mapping of agentId to agent name by scanning the parent session JSONL
-    /// for Agent tool_use blocks and agent_progress entries.
+    /// Builds mappings of agentId to agent name and description by scanning the parent session JSONL
+    /// for Agent tool_use blocks, agent_progress entries, and toolUseResult entries (foreground agents).
     /// </summary>
-    private static Dictionary<string, string> BuildAgentNameMap(
+    private static (Dictionary<string, string> Names, Dictionary<string, string> Descriptions) BuildAgentMaps(
         string jsonlPath)
     {
         var nameByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var descByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
         var agentIdByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
 
         using var reader = new StreamReader(jsonlPath);
@@ -474,24 +480,36 @@ public sealed class SubagentService
             {
                 ExtractAgentProgressMapping(line, agentIdByToolUseId);
             }
+            else if (line.Contains("\"toolUseResult\"", StringComparison.Ordinal) &&
+                     line.Contains("\"agentId\"", StringComparison.Ordinal) &&
+                     line.Contains("\"tool_result\"", StringComparison.Ordinal))
+            {
+                ExtractToolUseResultMapping(line, agentIdByToolUseId);
+            }
             else if (line.Contains("\"Agent\"", StringComparison.Ordinal) &&
                      line.Contains("\"tool_use\"", StringComparison.Ordinal))
             {
-                ExtractAgentToolUseName(line, nameByToolUseId);
+                ExtractAgentToolUseInfo(line, nameByToolUseId, descByToolUseId);
             }
         }
 
-        // Merge: map agentId → name via toolUseId
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Merge: map agentId → name/description via toolUseId
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        var descriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (toolUseId, agentId) in agentIdByToolUseId)
         {
             if (nameByToolUseId.TryGetValue(toolUseId, out var name))
             {
-                result[agentId] = name;
+                names[agentId] = name;
+            }
+
+            if (descByToolUseId.TryGetValue(toolUseId, out var desc))
+            {
+                descriptions[agentId] = desc;
             }
         }
 
-        return result;
+        return (names, descriptions);
     }
 
     private static void ExtractAgentProgressMapping(
@@ -505,6 +523,28 @@ public sealed class SubagentService
         if (agentId is not null && parentToolUseId is not null)
         {
             agentIdByToolUseId.TryAdd(parentToolUseId, agentId);
+        }
+    }
+
+    /// <summary>
+    /// Extracts foreground agent correlation from toolUseResult entries.
+    /// These map tool_result.tool_use_id → toolUseResult.agentId for agents spawned in the foreground.
+    /// </summary>
+    private static void ExtractToolUseResultMapping(
+        string line,
+        Dictionary<string, string> agentIdByToolUseId)
+    {
+        var agentId = ExtractJsonStringValue(line, "agentId");
+        if (agentId is null)
+        {
+            return;
+        }
+
+        // Extract tool_use_id from the tool_result content block
+        var toolUseId = ExtractJsonStringValue(line, "tool_use_id");
+        if (toolUseId is not null)
+        {
+            agentIdByToolUseId.TryAdd(toolUseId, agentId);
         }
     }
 
@@ -528,9 +568,10 @@ public sealed class SubagentService
         return end > start ? line[start..end] : null;
     }
 
-    private static void ExtractAgentToolUseName(
+    private static void ExtractAgentToolUseInfo(
         string line,
-        Dictionary<string, string> nameByToolUseId)
+        Dictionary<string, string> nameByToolUseId,
+        Dictionary<string, string> descByToolUseId)
     {
         try
         {
@@ -555,14 +596,27 @@ public sealed class SubagentService
                 }
 
                 var toolUseId = block.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
-                var agentName = block.TryGetProperty("input", out var inputEl) &&
-                                inputEl.TryGetProperty("name", out var anEl)
-                    ? anEl.GetString()
-                    : null;
-
-                if (toolUseId is not null && agentName is not null)
+                if (toolUseId is null || !block.TryGetProperty("input", out var inputEl))
                 {
-                    nameByToolUseId[toolUseId] = agentName;
+                    continue;
+                }
+
+                if (inputEl.TryGetProperty("name", out var anEl))
+                {
+                    var agentName = anEl.GetString();
+                    if (agentName is not null)
+                    {
+                        nameByToolUseId[toolUseId] = agentName;
+                    }
+                }
+
+                if (inputEl.TryGetProperty("description", out var adEl))
+                {
+                    var agentDesc = adEl.GetString();
+                    if (agentDesc is not null)
+                    {
+                        descByToolUseId[toolUseId] = agentDesc;
+                    }
                 }
             }
         }
