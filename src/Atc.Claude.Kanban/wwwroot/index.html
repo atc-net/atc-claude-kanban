@@ -4355,7 +4355,11 @@
         return;
       }
       const newIdx = selectedSessionIdx + direction;
-      if (newIdx >= 0 && newIdx < items.length) {
+      if (newIdx >= items.length) {
+        selectSessionByIndex(0);
+      } else if (newIdx < 0) {
+        selectSessionByIndex(items.length - 1);
+      } else {
         selectSessionByIndex(newIdx);
       }
     }
