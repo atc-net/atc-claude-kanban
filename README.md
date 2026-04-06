@@ -182,6 +182,8 @@ Each session shows accumulated token usage and estimated cost:
 | `Enter` | Toggle task detail |
 | `Tab` | Switch sidebar/board focus |
 | `[` | Toggle sidebar |
+| `T` | Toggle theme |
+| `A` | Show all tasks |
 | `I` | Session info |
 | `P` | Open session plan |
 | `C` | Copy project path |
