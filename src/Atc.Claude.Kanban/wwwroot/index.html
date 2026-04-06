@@ -3975,9 +3975,9 @@
       if (cost < 0.01) return '';
       const costClass = cost < 2 ? 'cost-low' : cost < 10 ? 'cost-medium' : cost < 25 ? 'cost-high' : 'cost-critical';
       const totalTokens = tokenUsage.totalTokens || 0;
-      const costDisplay = `$${cost.toFixed(2)}`;
+      const costDisplay = `~$${cost.toFixed(2)}`;
       const tokenDisplay = totalTokens > 1000000 ? `${(totalTokens / 1000000).toFixed(1)}M` : totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(0)}K` : String(totalTokens);
-      return `<div class="token-info"><span>${tokenDisplay} tokens</span><span class="${costClass}">${costDisplay}</span></div>`;
+      return `<div class="token-info"><span>${tokenDisplay} tokens</span><span class="${costClass}" title="Estimated cost based on token usage — not an actual charge">${costDisplay}</span></div>`;
     }
 
     function renderSessions() {
@@ -5443,6 +5443,12 @@
         return;
       }
 
+      if (e.key === 'a' || e.key === 'A') {
+        e.preventDefault();
+        showAllTasks();
+        return;
+      }
+
       // Tab toggles focus zone
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -6833,6 +6839,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">T</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Toggle theme</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">A</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Show all tasks</td>
               </tr>
             </table>
           </div>
