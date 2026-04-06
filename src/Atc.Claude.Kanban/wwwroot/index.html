@@ -5437,6 +5437,12 @@
         return;
       }
 
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        toggleTheme();
+        return;
+      }
+
       // Tab toggles focus zone
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -6823,6 +6829,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">[</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Toggle sidebar collapse</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">T</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Toggle theme</td>
               </tr>
             </table>
           </div>
