@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.11.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.10.0...v1.11.0) (2026-04-06)
+
+
+### Features
+
+* add A shortcut for all-tasks view and indicate estimated cost ([28b9d9b](https://github.com/atc-net/atc-claude-kanban/commit/28b9d9b7317385ef7eb0adef3fc37957e60be995))
+* add T keyboard shortcut for theme toggle ([0a18bba](https://github.com/atc-net/atc-claude-kanban/commit/0a18bba38cb16abdae734e80d8f304cd131c3bed))
+* add wrap-around session navigation ([c182753](https://github.com/atc-net/atc-claude-kanban/commit/c182753ecc314e4996ce4a7b258d36af2fd6f867))
+
+
+### Bug Fixes
+
+* close modal and deselect session on dismiss ([75856e0](https://github.com/atc-net/atc-claude-kanban/commit/75856e0c80a125eec00411ee7e9e01abe8835f34))
+
 ## [1.10.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.9.2...v1.10.0) (2026-04-03)
 
 
