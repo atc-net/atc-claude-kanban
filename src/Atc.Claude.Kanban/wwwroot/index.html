@@ -6354,6 +6354,10 @@
         dismissedSessionIds.delete(sessionId);
       } else {
         dismissedSessionIds.add(sessionId);
+        closeTeamModal();
+        if (currentSessionId === sessionId) {
+          showAllTasks();
+        }
       }
       updateDismissBtnState();
       renderSessions();
