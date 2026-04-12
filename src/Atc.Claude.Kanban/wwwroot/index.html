@@ -3207,6 +3207,7 @@
     let focusZone = 'board'; // 'board' | 'sidebar'
     let selectedSessionIdx = -1;
     let currentSubagents = [];
+    let _manualRefreshing = false;
     let showAllSubagents = false;
     let subagentPollTimer = null;
 
@@ -5464,6 +5465,18 @@
         return;
       }
 
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        if (_manualRefreshing) return;
+        _manualRefreshing = true;
+        const refreshes = [fetchSessions()];
+        if (currentSessionId) refreshes.push(fetchTasks(currentSessionId));
+        Promise.all(refreshes)
+          .then(() => showToast('Data refreshed', 'success'))
+          .finally(() => { _manualRefreshing = false; });
+        return;
+      }
+
       // Tab toggles focus zone
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -6865,6 +6878,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">A</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Show all tasks</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">R</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Refresh data</td>
               </tr>
             </table>
           </div>

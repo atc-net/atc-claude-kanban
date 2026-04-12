@@ -184,6 +184,7 @@ Each session shows accumulated token usage and estimated cost:
 | `[` | Toggle sidebar |
 | `T` | Toggle theme |
 | `A` | Show all tasks |
+| `R` | Refresh data |
 | `I` | Session info |
 | `P` | Open session plan |
 | `C` | Copy project path |
