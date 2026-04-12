@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.12.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.11.0...v1.12.0) (2026-04-12)
+
+
+### Features
+
+* add R keyboard shortcut for soft data refresh ([5167a5f](https://github.com/atc-net/atc-claude-kanban/commit/5167a5fbe338e7cd0f308b6b4d8488be3abef8d3))
+* add toast type variants with success, error, and info styling ([f248b5a](https://github.com/atc-net/atc-claude-kanban/commit/f248b5aa908202e751f2b075344f5fae8c521d24))
+* improve help modal with two-column layout and wider width ([d028a6f](https://github.com/atc-net/atc-claude-kanban/commit/d028a6f42fec4502d3e5e5b66f5f9e12540d276d))
+* keep current session visible in sidebar when active filter is on ([9969385](https://github.com/atc-net/atc-claude-kanban/commit/996938548d52a8e8147d0802c76e3aa752f29163))
+
 ## [1.11.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.10.0...v1.11.0) (2026-04-06)
 
 
