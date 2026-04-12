@@ -4009,6 +4009,15 @@
           || (s.modifiedAt && new Date(s.modifiedAt).getTime() > recentCutoff)
         );
         filteredSessions = filteredSessions.filter(s => !dismissedSessionIds.has(s.id));
+        // Force-include the currently selected session so it stays visible in the sidebar
+        if (currentSessionId && !filteredSessions.some(s => s.id === currentSessionId)) {
+          const current = sessions.find(s => s.id === currentSessionId);
+          if (current) {
+            const insertAt = filteredSessions.findIndex(s => s.modifiedAt < current.modifiedAt);
+            if (insertAt === -1) filteredSessions.push(current);
+            else filteredSessions.splice(insertAt, 0, current);
+          }
+        }
       }
       if (filterProject) {
         filteredSessions = filteredSessions.filter(s =>
