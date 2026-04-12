@@ -2490,6 +2490,21 @@
       transform: translateX(-50%) translateY(0);
     }
 
+    #toast.toast-success {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    #toast.toast-error {
+      border-color: #f85149;
+      color: #f85149;
+    }
+
+    #toast.toast-info {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
     #update-banner {
       position: fixed;
       top: 12px;
@@ -4640,11 +4655,11 @@
           }
           showTaskDetail(taskId, sessionId);
         } else {
-          showToast('Failed to save task');
+          showToast('Failed to save task', 'error');
         }
       } catch (error) {
         log.error('Failed to update task:', error);
-        showToast('Failed to save task');
+        showToast('Failed to save task', 'error');
       }
     }
 
@@ -4678,11 +4693,11 @@
           }
           showTaskDetail(taskId, sessionId);
         } else {
-          showToast('Failed to add note');
+          showToast('Failed to add note', 'error');
         }
       } catch (error) {
         log.error('Failed to add note:', error);
-        showToast('Failed to add note');
+        showToast('Failed to add note', 'error');
       } finally {
         if (btn) {
           btn.disabled = false;
@@ -5371,12 +5386,12 @@
         } else {
           const error = await res.json();
           closeDeleteConfirmModal();
-          showToast('Failed to delete: ' + (error.error || 'Unknown error'));
+          showToast('Failed to delete: ' + (error.error || 'Unknown error'), 'error');
         }
       } catch (error) {
         log.error('Failed to delete task:', error);
         closeDeleteConfirmModal();
-        showToast('Failed to delete task');
+        showToast('Failed to delete task', 'error');
       } finally {
         confirmBtn.disabled = false;
         cancelBtn.disabled = false;
@@ -5727,19 +5742,26 @@
       return text.replace(/<\/?[^>]+>/g, '').trim();
     }
 
-    function showToast(message, duration = 2000) {
+    let _toastTimer = null;
+    function showToast(message, type, duration = 2000) {
       const el = document.getElementById('toast');
+      clearTimeout(_toastTimer);
+      el.style.transition = 'none';
+      el.classList.remove('visible', 'toast-success', 'toast-error', 'toast-info');
+      void el.offsetHeight;
+      el.style.transition = '';
       el.textContent = message;
+      if (type) el.classList.add('toast-' + type);
       el.classList.add('visible');
-      setTimeout(() => el.classList.remove('visible'), duration);
+      _toastTimer = setTimeout(() => el.classList.remove('visible'), duration);
     }
 
     function copyPath(path) {
-      navigator.clipboard.writeText(path).then(() => showToast('Path copied', 1500));
+      navigator.clipboard.writeText(path).then(() => showToast('Path copied', null, 1500));
     }
 
     function copyText(text, label) {
-      navigator.clipboard.writeText(text).then(() => showToast(label || 'Copied', 1500));
+      navigator.clipboard.writeText(text).then(() => showToast(label || 'Copied', null, 1500));
     }
 
     function openFolder(path) {
