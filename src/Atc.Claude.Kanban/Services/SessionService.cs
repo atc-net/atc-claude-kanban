@@ -7,6 +7,8 @@ namespace Atc.Claude.Kanban.Services;
 /// </summary>
 public sealed class SessionService
 {
+    private const int MetadataTailReadSize = 16384;
+
     private readonly ConcurrentDictionary<string, SessionInfo> sessionSnapshots = new(StringComparer.Ordinal);
 
     private readonly string claudeDir;
@@ -646,7 +648,7 @@ public sealed class SessionService
                 existing.Slug ??= metadata.Slug;
                 existing.CustomTitle ??= metadata.CustomTitle;
                 existing.ProjectPath ??= projectPath;
-                existing.Cwd ??= metadata.Cwd;
+                existing.Cwd = metadata.LatestCwd ?? existing.Cwd;
                 continue;
             }
 
@@ -654,7 +656,7 @@ public sealed class SessionService
             {
                 Id = fileSessionId,
                 ProjectPath = projectPath ?? metadata.Cwd,
-                Cwd = metadata.Cwd,
+                Cwd = metadata.LatestCwd,
                 GitBranch = metadata.GitBranch,
                 Slug = metadata.Slug,
                 CustomTitle = metadata.CustomTitle,
@@ -663,22 +665,27 @@ public sealed class SessionService
     }
 
     /// <summary>
-    /// Scans the beginning of a session JSONL file to extract metadata.
-    /// Scans up to 250 lines because hook/progress entries can push the
-    /// first user message (which carries the slug) deep into the file.
+    /// Scans a session JSONL file to extract metadata. The head scan reads up to
+    /// 250 lines to find slug, parent session, and custom title. A tail scan then
+    /// captures the most recent cwd so sessions that change directory mid-run
+    /// surface the current cwd rather than the original.
     /// </summary>
     private static async Task<JsonlMetadata> TryReadJsonlMetadataAsync(
         string jsonlFile,
         CancellationToken cancellationToken)
     {
-        string? cwd = null;
+        string? firstCwd = null;
+        string? latestCwd = null;
         string? gitBranch = null;
         string? slug = null;
         string? parentSessionId = null;
         string? customTitle = null;
+        long fileLength = 0;
 
         try
         {
+            fileLength = new FileInfo(jsonlFile).Length;
+
             using var reader = new StreamReader(jsonlFile);
             for (var i = 0; i < 250; i++)
             {
@@ -693,12 +700,7 @@ public sealed class SessionService
                     continue;
                 }
 
-                ExtractJsonlFields(line, ref cwd, ref gitBranch, ref slug, ref parentSessionId, ref customTitle);
-
-                if (cwd is not null && slug is not null && customTitle is not null)
-                {
-                    break;
-                }
+                ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref slug, ref parentSessionId, ref customTitle);
             }
         }
         catch (IOException)
@@ -706,9 +708,22 @@ public sealed class SessionService
             // Skip on error — metadata is best-effort
         }
 
+        // Tail scan: always capture the most recent cwd when the file is large enough
+        // that a late cwd switch could sit past the head window. projectPath stays
+        // anchored to firstCwd so it represents the original project.
+        if (fileLength > MetadataTailReadSize)
+        {
+            var tailCwd = await TryReadLatestCwdFromTailAsync(jsonlFile, fileLength, cancellationToken);
+            if (tailCwd is not null)
+            {
+                latestCwd = tailCwd;
+            }
+        }
+
         return new JsonlMetadata
         {
-            Cwd = cwd,
+            Cwd = firstCwd,
+            LatestCwd = latestCwd ?? firstCwd,
             GitBranch = gitBranch,
             Slug = slug,
             ParentSessionId = parentSessionId,
@@ -717,12 +732,68 @@ public sealed class SessionService
     }
 
     /// <summary>
-    /// Extracts known metadata fields from a single JSONL line, filling in
-    /// only those values that are still null.
+    /// Reads the tail of a session JSONL file and returns the most recent cwd value found.
+    /// </summary>
+    private static async Task<string?> TryReadLatestCwdFromTailAsync(
+        string jsonlFile,
+        long fileLength,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = new FileStream(jsonlFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var readSize = (int)System.Math.Min(MetadataTailReadSize, fileLength);
+            stream.Seek(fileLength - readSize, SeekOrigin.Begin);
+
+            var buffer = new byte[readSize];
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, readSize), cancellationToken);
+            var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            // First (partial) line is discarded — the seek likely lands mid-line.
+            var lines = tail.Split('\n');
+            for (var i = lines.Length - 1; i >= 1; i--)
+            {
+                var line = lines[i];
+                if (line.Length == 0 || line[0] != '{')
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    if (doc.RootElement.TryGetProperty("cwd", out var cwdEl))
+                    {
+                        var value = cwdEl.GetString();
+                        if (!string.IsNullOrEmpty(value))
+                        {
+                            return value;
+                        }
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Skip malformed lines
+                }
+            }
+        }
+        catch (IOException)
+        {
+            // Skip on error — tail scan is best-effort
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Extracts known metadata fields from a single JSONL line. <paramref name="firstCwd"/>
+    /// captures the first cwd seen; <paramref name="latestCwd"/> is overwritten with every
+    /// cwd found so the head scan's last value wins.
     /// </summary>
     private static void ExtractJsonlFields(
         string line,
-        ref string? cwd,
+        ref string? firstCwd,
+        ref string? latestCwd,
         ref string? gitBranch,
         ref string? slug,
         ref string? parentSessionId,
@@ -738,9 +809,14 @@ public sealed class SessionService
             using var doc = JsonDocument.Parse(line);
             var root = doc.RootElement;
 
-            if (cwd is null && root.TryGetProperty("cwd", out var cwdEl))
+            if (root.TryGetProperty("cwd", out var cwdEl))
             {
-                cwd = cwdEl.GetString();
+                var value = cwdEl.GetString();
+                if (!string.IsNullOrEmpty(value))
+                {
+                    firstCwd ??= value;
+                    latestCwd = value;
+                }
             }
 
             if (gitBranch is null && root.TryGetProperty("gitBranch", out var branchEl))
