@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.12.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.12.0...v1.12.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* cancel deferred session info hydration when modal is closed ([d449d06](https://github.com/atc-net/atc-claude-kanban/commit/d449d06b0f8a1ac4eb98f67daad26dc8981ef4c6))
+* surface latest cwd when a session changes directory mid-run ([dcf7bd8](https://github.com/atc-net/atc-claude-kanban/commit/dcf7bd8d7d7b4a7889c0a4a01eec32b680f12fd3))
+
+
+### Performance Improvements
+
+* open session info modal instantly and hydrate in background ([405d23e](https://github.com/atc-net/atc-claude-kanban/commit/405d23e091addc8793187c64850961fb4a1b0d70))
+
 ## [1.12.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.11.0...v1.12.0) (2026-04-12)
 
 
