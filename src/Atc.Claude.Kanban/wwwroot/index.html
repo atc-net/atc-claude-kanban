@@ -6277,6 +6277,8 @@
 
       const [teamConfig, planContent] = await Promise.all([teamPromise, planPromise]);
       if (_planSlug !== planSlug) return; // user opened a different modal mid-fetch
+      const modal = document.getElementById('team-modal');
+      if (!modal?.classList.contains('visible')) return; // user closed the modal mid-fetch
       showInfoModal(session, teamConfig, tasks, planContent);
     }
 
@@ -6401,6 +6403,7 @@
 
     function closeTeamModal() {
       document.getElementById('team-modal').classList.remove('visible');
+      _planSlug = null;
       if (_teamModalKeyHandler) {
         document.removeEventListener('keydown', _teamModalKeyHandler);
         _teamModalKeyHandler = null;
