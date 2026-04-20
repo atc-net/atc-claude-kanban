@@ -6259,29 +6259,24 @@
       const session = sessions.find(s => s.id === sessionId);
       if (!session) return;
 
-      const promises = [];
-
-      // Fetch team config
-      let teamConfig = null;
-      if (session.isTeam) {
-        promises.push(
-          fetch(`/api/teams/${sessionId}`).then(r => r.ok ? r.json() : null).catch(() => null)
-            .then(data => { teamConfig = data; })
-        );
-      }
-
-      // Fetch plan (plan files are named by slug, not session UUID)
-      let planContent = null;
+      // Open the modal immediately with the in-memory session data (project, cwd,
+      // branch are already populated). Team and plan fetches run in parallel and
+      // re-render when they resolve, so slow endpoints never block the modal.
       const planSlug = session.slug || sessionId;
-      promises.push(
-        fetch(`/api/plans/${planSlug}`).then(r => r.ok ? r.json() : null).catch(() => null)
-          .then(data => { planContent = data?.content || null; })
-      );
-
-      await Promise.all(promises);
-
-      const tasks = currentSessionId === sessionId ? currentTasks : [];
       _planSlug = planSlug;
+      const tasks = currentSessionId === sessionId ? currentTasks : [];
+      showInfoModal(session, null, tasks, null);
+
+      const teamPromise = session.isTeam
+        ? fetch(`/api/teams/${sessionId}`).then(r => r.ok ? r.json() : null).catch(() => null)
+        : Promise.resolve(null);
+
+      const planPromise = fetch(`/api/plans/${planSlug}`)
+        .then(r => r.ok ? r.json() : null).catch(() => null)
+        .then(data => data?.content || null);
+
+      const [teamConfig, planContent] = await Promise.all([teamPromise, planPromise]);
+      if (_planSlug !== planSlug) return; // user opened a different modal mid-fetch
       showInfoModal(session, teamConfig, tasks, planContent);
     }
 
@@ -6383,10 +6378,13 @@
         }
       }
 
+      const alreadyVisible = modal.classList.contains('visible');
       bodyEl.innerHTML = html;
       _infoModalSessionId = session.id;
       updateDismissBtnState();
       modal.classList.add('visible');
+
+      if (alreadyVisible) return; // re-render during deferred hydration — key handler already attached
 
       if (_teamModalKeyHandler) {
         document.removeEventListener('keydown', _teamModalKeyHandler);
