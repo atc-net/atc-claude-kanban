@@ -6,9 +6,16 @@ namespace Atc.Claude.Kanban.Contracts.Models;
 public sealed record JsonlMetadata
 {
     /// <summary>
-    /// Gets the working directory recorded in the transcript.
+    /// Gets the first working directory recorded in the transcript.
+    /// Anchors the project path for the lifetime of the session.
     /// </summary>
     public string? Cwd { get; init; }
+
+    /// <summary>
+    /// Gets the most recent working directory recorded in the transcript.
+    /// Differs from <see cref="Cwd"/> when the session changes directory mid-run.
+    /// </summary>
+    public string? LatestCwd { get; init; }
 
     /// <summary>
     /// Gets the git branch name recorded in the transcript.
