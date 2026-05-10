@@ -4730,6 +4730,7 @@
         const sid = currentSessionId;
         if (sid) fetchMessages(sid);
         messagePanel.classList.add('visible');
+        try { localStorage.setItem('message-panel-open', 'true'); } catch (_) {}
       }
     }
 
@@ -4744,6 +4745,7 @@
       msgUserScrolledUp = false;
       currentMessages = [];
       lastMessagesHash = '';
+      try { localStorage.setItem('message-panel-open', 'false'); } catch (_) {}
     }
 
     async function fetchMessages(sessionId) {
@@ -6723,10 +6725,18 @@
     fetchSessions().then(() => {
       document.getElementById('loading-state').style.display = 'none';
       document.querySelector('.sidebar').classList.remove('loading');
-      if (urlState.session) {
-        fetchTasks(urlState.session);
-      } else {
-        showAllTasks();
+      const restoreMessagePanel = (() => {
+        try { return localStorage.getItem('message-panel-open') === 'true'; } catch (_) { return false; }
+      })();
+      const afterLoad = urlState.session
+        ? fetchTasks(urlState.session)
+        : showAllTasks();
+      if (restoreMessagePanel) {
+        Promise.resolve(afterLoad).then(() => {
+          if (currentSessionId && !messagePanel.classList.contains('visible')) {
+            toggleMessagePanel();
+          }
+        });
       }
     });
 
