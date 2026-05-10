@@ -190,6 +190,7 @@ Each session shows accumulated token usage and estimated cost:
 | `C` | Copy project path |
 | `F` | Open project folder |
 | `D` | Delete task |
+| `Shift+C` | Copy session id |
 | `Shift+L` | Toggle message log panel |
 | `N` | Toggle scratchpad |
 

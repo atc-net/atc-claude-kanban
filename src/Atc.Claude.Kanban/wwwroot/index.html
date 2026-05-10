@@ -5486,6 +5486,22 @@
         return;
       }
 
+      // Shift+C copies the active session id to the clipboard from any focus zone.
+      if (e.code === 'KeyC' && e.shiftKey) {
+        e.preventDefault();
+        const highlighted = sessionsList?.querySelector('.session-item.kb-selected');
+        const sid = highlighted?.dataset.sessionId || currentSessionId;
+        if (!sid) {
+          showToast('No session selected', 'info');
+          return;
+        }
+        navigator.clipboard
+          .writeText(sid)
+          .then(() => showToast(`Copied session id: ${sid.slice(0, 8)}`, 'success'))
+          .catch(() => showToast('Failed to copy session id', 'error'));
+        return;
+      }
+
       // Tab toggles focus zone
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -6948,6 +6964,10 @@
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">N</kbd></td>
                 <td style="padding: 4px 0; color: var(--text-primary);">Toggle scratchpad</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Shift+C</kbd></td>
+                <td style="padding: 4px 0; color: var(--text-primary);">Copy session id</td>
               </tr>
               <tr>
                 <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Shift+L</kbd></td>
