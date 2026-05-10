@@ -621,7 +621,7 @@ public sealed class SessionService
         }
     }
 
-    private async Task DiscoverJsonlSessionsAsync(
+    private static async Task DiscoverJsonlSessionsAsync(
         string hashDir,
         string? projectPath,
         Dictionary<string, SessionIndex> indexes,
@@ -631,37 +631,74 @@ public sealed class SessionService
         {
             var fileSessionId = Path.GetFileNameWithoutExtension(jsonlFile);
             var metadata = await TryReadJsonlMetadataAsync(jsonlFile, cancellationToken);
+            PropagateSlugToParent(metadata, indexes);
+            MergeOrInsertIndexEntry(fileSessionId, projectPath, metadata, indexes);
+        }
+    }
 
-            // Child JSONL files reference the parent sessionId and carry the slug.
-            // Propagate the slug to the parent session's index entry.
-            if (metadata.ParentSessionId is not null &&
-                metadata.Slug is not null &&
-                indexes.TryGetValue(metadata.ParentSessionId, out var parentIndex) &&
-                parentIndex.Slug is null)
-            {
-                parentIndex.Slug = metadata.Slug;
-            }
+    /// <summary>
+    /// Child JSONL files reference the parent sessionId and carry the slug. Propagate
+    /// the slug to the parent session's index entry when missing.
+    /// </summary>
+    private static void PropagateSlugToParent(
+        JsonlMetadata metadata,
+        Dictionary<string, SessionIndex> indexes)
+    {
+        if (metadata.ParentSessionId is null ||
+            metadata.Slug is null ||
+            !indexes.TryGetValue(metadata.ParentSessionId, out var parentIndex) ||
+            parentIndex.Slug is not null)
+        {
+            return;
+        }
 
-            if (indexes.TryGetValue(fileSessionId, out var existing))
-            {
-                // Merge fields from JSONL into existing index entry (sessions-index.json lacks slug/customTitle)
-                existing.Slug ??= metadata.Slug;
-                existing.CustomTitle ??= metadata.CustomTitle;
-                existing.ProjectPath ??= projectPath;
-                existing.Cwd = metadata.LatestCwd ?? existing.Cwd;
-                continue;
-            }
+        parentIndex.Slug = metadata.Slug;
+    }
 
+    /// <summary>
+    /// Merges metadata into an existing index entry, or inserts a new one when not present.
+    /// "Shadow" JSONLs (those without any cwd records, e.g. files that only carry a
+    /// custom-title or agent-name when a session is continued from a worktree) can only
+    /// fill in scalars they uniquely carry — they must not overwrite a previously
+    /// resolved entry's project or cwd.
+    /// </summary>
+    private static void MergeOrInsertIndexEntry(
+        string fileSessionId,
+        string? projectPath,
+        JsonlMetadata metadata,
+        Dictionary<string, SessionIndex> indexes)
+    {
+        var candidateProject = projectPath ?? metadata.Cwd;
+        var isShadow = metadata.Cwd is null;
+
+        if (!indexes.TryGetValue(fileSessionId, out var existing))
+        {
             indexes[fileSessionId] = new SessionIndex
             {
                 Id = fileSessionId,
-                ProjectPath = projectPath ?? metadata.Cwd,
+                ProjectPath = candidateProject,
                 Cwd = metadata.LatestCwd,
                 GitBranch = metadata.GitBranch,
                 Slug = metadata.Slug,
                 CustomTitle = metadata.CustomTitle,
             };
+            return;
         }
+
+        existing.Slug ??= metadata.Slug;
+        existing.CustomTitle ??= metadata.CustomTitle;
+        existing.GitBranch ??= metadata.GitBranch;
+
+        if (isShadow)
+        {
+            // Shadow contributes scalars only — preserve any previously resolved project/cwd.
+            existing.ProjectPath ??= candidateProject;
+            return;
+        }
+
+        // Strong entry — let its project/cwd take precedence over earlier siblings.
+        existing.ProjectPath = candidateProject ?? existing.ProjectPath;
+        existing.Cwd = metadata.LatestCwd ?? existing.Cwd;
     }
 
     /// <summary>

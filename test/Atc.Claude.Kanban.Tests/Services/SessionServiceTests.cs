@@ -198,6 +198,61 @@ public sealed class SessionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSessions_StrongMetadataWinsOverShadowJsonl()
+    {
+        // Arrange — same session in two project dirs:
+        //   "a-shadow": iterated first; only carries a custom-title record (no cwd) and points at a worktree
+        //   "b-strong": iterated second; carries the real cwd / git branch / slug for the main repo
+        // The resolved session must reflect the strong project, not the worktree shadow.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-shared";
+
+        var shadowDir = Path.Combine(tempDir, "projects", "a-shadow");
+        Directory.CreateDirectory(shadowDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(shadowDir, "sessions-index.json"),
+            JsonSerializer.Serialize(new { originalPath = "/worktree/path", entries = Array.Empty<object>() }),
+            cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(shadowDir, $"{sessionId}.jsonl"),
+            JsonSerializer.Serialize(new { type = "custom-title", customTitle = "From worktree" }),
+            cancellationToken);
+
+        var strongDir = Path.Combine(tempDir, "projects", "b-strong");
+        Directory.CreateDirectory(strongDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(strongDir, "sessions-index.json"),
+            JsonSerializer.Serialize(new { originalPath = "/main/repo", entries = Array.Empty<object>() }),
+            cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(strongDir, $"{sessionId}.jsonl"),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                cwd = "/main/repo",
+                gitBranch = "feature/foo",
+                slug = "real-slug",
+                message = new { role = "user", content = "Hello" },
+            }),
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert — the strong entry's project/cwd/slug must take precedence even though the shadow was seen first
+        sessions.Should().HaveCount(1);
+        var session = sessions[0];
+        session.Id.Should().Be(sessionId);
+        session.Project.Should().Be("/main/repo");
+        session.Cwd.Should().Be("/main/repo");
+        session.GitBranch.Should().Be("feature/foo");
+        session.Slug.Should().Be("real-slug");
+        session.Name.Should().Be("From worktree");
+    }
+
+    [Fact]
     public async Task GetSessions_PreservesProgressAfterTaskFilesRemoved()
     {
         // Arrange — create a session with 3 tasks, then remove the task files
