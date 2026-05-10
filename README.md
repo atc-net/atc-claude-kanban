@@ -144,6 +144,7 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Infinite scroll with pagination for long conversations
 - Resizable panel (drag the left edge)
 - Open/closed state persists across page reloads (localStorage)
+- Click a message to open a detail modal with a fullscreen toggle for wide tool outputs
 
 ### ℹ️ Session Info
 

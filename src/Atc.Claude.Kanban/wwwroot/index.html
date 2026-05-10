@@ -2921,6 +2921,21 @@
       overflow-y: auto;
       max-height: 70vh;
     }
+    #msg-detail-modal .modal {
+      max-width: 640px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      transition: max-width 120ms ease, max-height 120ms ease;
+    }
+    #msg-detail-modal .modal.fullscreen {
+      max-width: 80vw;
+      width: 80vw;
+      max-height: 92vh;
+    }
+    #msg-detail-modal .modal.fullscreen .msg-detail-full {
+      max-height: 80vh;
+    }
   </style>
 </head>
 <body>
@@ -5067,10 +5082,17 @@
         overlay.id = 'msg-detail-modal';
         overlay.className = 'modal-overlay';
         overlay.dataset.action = 'closeMsgDetailModal';
-        overlay.innerHTML = `<div class="modal" style="max-width: 640px; max-height: 80vh; display: flex; flex-direction: column;">
+        overlay.innerHTML = `<div class="modal">
           <div class="modal-header">
             <h3 class="modal-title">Message Detail</h3>
-            <button class="modal-close" data-action="closeMsgDetailModal">&times;</button>
+            <div style="display:flex;gap:4px;">
+              <button class="icon-btn" data-action="toggleMsgDetailFullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+                  <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+                </svg>
+              </button>
+              <button class="modal-close" data-action="closeMsgDetailModal">&times;</button>
+            </div>
           </div>
           <div id="msg-detail-body" class="msg-detail-full"></div>
           <div class="modal-footer">
@@ -5086,6 +5108,11 @@
     function closeMsgDetailModal() {
       const overlay = document.getElementById('msg-detail-modal');
       if (overlay) overlay.classList.remove('visible');
+    }
+
+    function toggleMsgDetailFullscreen() {
+      const modal = document.querySelector('#msg-detail-modal .modal');
+      if (modal) modal.classList.toggle('fullscreen');
     }
 
     // ── Drag-Drop Task Reordering ──────────────────────────────────
@@ -6864,6 +6891,7 @@
 
         // Modal close actions
         case 'closeMsgDetailModal': closeMsgDetailModal(); break;
+        case 'toggleMsgDetailFullscreen': toggleMsgDetailFullscreen(); break;
         case 'closeHelpModal': closeHelpModal(); break;
         case 'closeDeleteConfirmModal': closeDeleteConfirmModal(); break;
         case 'closeDeleteSessionTasksModal': closeDeleteSessionTasksModal(); break;
