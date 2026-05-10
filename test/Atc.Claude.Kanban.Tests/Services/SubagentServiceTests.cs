@@ -328,4 +328,106 @@ public sealed class SubagentServiceTests : IDisposable
         // Active count uses IdleThreshold (90s), so active + idle = 2, stopped = 1
         active.Should().Be(2);
     }
+
+    [Fact]
+    public async Task GetSubagents_MarksRejectedAgentAsStopped()
+    {
+        // Arrange — fresh subagent file (would be "active" by mtime) for an agent
+        // whose Agent tool_use was rejected by the user. Status must be overridden to "stopped".
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-rej";
+        const string agentId = "rej123";
+        const string toolUseId = "toolu_rejected";
+
+        var hashDir = Path.Combine(tempDir, "projects", "hash-rej");
+        var subagentsDir = Path.Combine(hashDir, sessionId, "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, $"agent-{agentId}.jsonl"),
+            JsonSerializer.Serialize(new { type = "user", timestamp = "2026-05-10T10:00:00Z", message = new { content = "spawn me" } }),
+            cancellationToken);
+
+        var sessionJsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                message = new
+                {
+                    role = "assistant",
+                    content = new object[]
+                    {
+                        new { type = "tool_use", id = toolUseId, name = "Agent", input = new { description = "Run something" } },
+                    },
+                },
+            }),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                message = new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "tool_result", tool_use_id = toolUseId, content = "User rejected tool use" },
+                    },
+                },
+            }),
+            JsonSerializer.Serialize(new { agent_progress = true, agentId, parentToolUseID = toolUseId }));
+
+        await File.WriteAllTextAsync(
+            Path.Combine(hashDir, $"{sessionId}.jsonl"),
+            sessionJsonl,
+            cancellationToken);
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync(sessionId, cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].AgentId.Should().Be(agentId);
+        subagents[0].Status.Should().Be("stopped");
+    }
+
+    [Fact]
+    public async Task GetSubagents_MarksKilledAgentAsStopped()
+    {
+        // Arrange — fresh subagent file but the parent JSONL has a task-notification
+        // marking this agent as killed; status must be overridden to "stopped".
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-kill";
+        const string agentId = "kill456";
+
+        var hashDir = Path.Combine(tempDir, "projects", "hash-kill");
+        var subagentsDir = Path.Combine(hashDir, sessionId, "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, $"agent-{agentId}.jsonl"),
+            JsonSerializer.Serialize(new { type = "user", timestamp = "2026-05-10T10:00:00Z", message = new { content = "doing work" } }),
+            cancellationToken);
+
+        // Real Claude Code JSONL keeps angle brackets unescaped, so write the line by hand.
+        var sessionJsonl =
+            $"{{\"type\":\"user\",\"message\":{{\"role\":\"user\",\"content\":" +
+            $"\"<task-notification><task-id>{agentId}</task-id><status>killed</status></task-notification>\"}}}}";
+
+        await File.WriteAllTextAsync(
+            Path.Combine(hashDir, $"{sessionId}.jsonl"),
+            sessionJsonl,
+            cancellationToken);
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync(sessionId, cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].AgentId.Should().Be(agentId);
+        subagents[0].Status.Should().Be("stopped");
+    }
 }

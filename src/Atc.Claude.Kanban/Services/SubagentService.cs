@@ -416,7 +416,9 @@ public sealed class SubagentService
     /// <summary>
     /// Enriches subagent entries with agent names extracted from Agent tool_use blocks
     /// in the parent session's JSONL file. Matches by correlating tool_use.id with
-    /// agent_progress.parentToolUseID entries.
+    /// agent_progress.parentToolUseID entries. Also detects rejected (Esc'd) and
+    /// killed agents and forces their status to "stopped" so orphans don't linger
+    /// as active in the UI.
     /// </summary>
     private void EnrichAgentInfo(
         string sessionId,
@@ -435,17 +437,22 @@ public sealed class SubagentService
 
         try
         {
-            var (nameMap, descMap) = BuildAgentMaps(sessionJsonlPath);
+            var digest = BuildAgentMaps(sessionJsonlPath);
             foreach (var agent in subagents)
             {
-                if (nameMap.TryGetValue(agent.AgentId, out var name))
+                if (digest.Names.TryGetValue(agent.AgentId, out var name))
                 {
                     agent.AgentName = name;
                 }
 
-                if (descMap.TryGetValue(agent.AgentId, out var desc))
+                if (digest.Descriptions.TryGetValue(agent.AgentId, out var desc))
                 {
                     agent.AgentDescription = desc;
+                }
+
+                if (digest.StoppedAgentIds.Contains(agent.AgentId))
+                {
+                    agent.Status = "stopped";
                 }
             }
         }
@@ -456,44 +463,30 @@ public sealed class SubagentService
     }
 
     /// <summary>
+    /// Aggregated agent metadata derived from a single parent-JSONL scan: names and
+    /// descriptions per agent, plus the set of agents that were rejected or killed.
+    /// </summary>
+    private sealed record SessionAgentDigest(
+        Dictionary<string, string> Names,
+        Dictionary<string, string> Descriptions,
+        HashSet<string> StoppedAgentIds);
+
+    /// <summary>
     /// Builds mappings of agentId to agent name and description by scanning the parent session JSONL
     /// for Agent tool_use blocks, agent_progress entries, and toolUseResult entries (foreground agents).
+    /// Also collects rejected tool_use ids and killed/errored task ids so callers can mark those
+    /// agents as stopped.
     /// </summary>
-    private static (Dictionary<string, string> Names, Dictionary<string, string> Descriptions) BuildAgentMaps(
-        string jsonlPath)
+    private static SessionAgentDigest BuildAgentMaps(string jsonlPath)
     {
         var nameByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
         var descByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
         var agentIdByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rejectedToolUseIds = new HashSet<string>(StringComparer.Ordinal);
+        var killedAgentIds = new HashSet<string>(StringComparer.Ordinal);
 
-        using var reader = new StreamReader(jsonlPath);
-        string? line;
-        while ((line = reader.ReadLine()) is not null)
-        {
-            if (line.Length == 0 || line[0] != '{')
-            {
-                continue;
-            }
+        ScanSessionJsonl(jsonlPath, nameByToolUseId, descByToolUseId, agentIdByToolUseId, rejectedToolUseIds, killedAgentIds);
 
-            // Quick string checks to avoid parsing every line
-            if (line.Contains("\"agent_progress\"", StringComparison.Ordinal))
-            {
-                ExtractAgentProgressMapping(line, agentIdByToolUseId);
-            }
-            else if (line.Contains("\"toolUseResult\"", StringComparison.Ordinal) &&
-                     line.Contains("\"agentId\"", StringComparison.Ordinal) &&
-                     line.Contains("\"tool_result\"", StringComparison.Ordinal))
-            {
-                ExtractToolUseResultMapping(line, agentIdByToolUseId);
-            }
-            else if (line.Contains("\"Agent\"", StringComparison.Ordinal) &&
-                     line.Contains("\"tool_use\"", StringComparison.Ordinal))
-            {
-                ExtractAgentToolUseInfo(line, nameByToolUseId, descByToolUseId);
-            }
-        }
-
-        // Merge: map agentId → name/description via toolUseId
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var descriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (toolUseId, agentId) in agentIdByToolUseId)
@@ -509,7 +502,90 @@ public sealed class SubagentService
             }
         }
 
-        return (names, descriptions);
+        var stoppedAgentIds = new HashSet<string>(killedAgentIds, StringComparer.Ordinal);
+        foreach (var toolUseId in rejectedToolUseIds)
+        {
+            if (agentIdByToolUseId.TryGetValue(toolUseId, out var agentId))
+            {
+                stoppedAgentIds.Add(agentId);
+            }
+        }
+
+        return new SessionAgentDigest(names, descriptions, stoppedAgentIds);
+    }
+
+    private static void ScanSessionJsonl(
+        string jsonlPath,
+        Dictionary<string, string> nameByToolUseId,
+        Dictionary<string, string> descByToolUseId,
+        Dictionary<string, string> agentIdByToolUseId,
+        HashSet<string> rejectedToolUseIds,
+        HashSet<string> killedAgentIds)
+    {
+        using var reader = new StreamReader(jsonlPath);
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0 || line[0] != '{')
+            {
+                continue;
+            }
+
+            if (line.Contains("\"agent_progress\"", StringComparison.Ordinal))
+            {
+                ExtractAgentProgressMapping(line, agentIdByToolUseId);
+            }
+            else if (line.Contains("\"toolUseResult\"", StringComparison.Ordinal) &&
+                     line.Contains("\"agentId\"", StringComparison.Ordinal) &&
+                     line.Contains("\"tool_result\"", StringComparison.Ordinal))
+            {
+                ExtractToolUseResultMapping(line, agentIdByToolUseId);
+            }
+            else if (line.Contains("\"Agent\"", StringComparison.Ordinal) &&
+                     line.Contains("\"tool_use\"", StringComparison.Ordinal))
+            {
+                ExtractAgentToolUseInfo(line, nameByToolUseId, descByToolUseId);
+            }
+
+            if (line.Contains("User rejected tool use", StringComparison.Ordinal) &&
+                line.Contains("\"tool_use_id\"", StringComparison.Ordinal))
+            {
+                var toolUseId = ExtractJsonStringValue(line, "tool_use_id");
+                if (toolUseId is not null)
+                {
+                    rejectedToolUseIds.Add(toolUseId);
+                }
+            }
+
+            if (line.Contains("<task-notification>", StringComparison.Ordinal) &&
+                (line.Contains("<status>killed</status>", StringComparison.Ordinal) ||
+                 line.Contains("<status>error</status>", StringComparison.Ordinal)))
+            {
+                var taskId = ExtractTaskId(line);
+                if (taskId is not null)
+                {
+                    killedAgentIds.Add(taskId);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Pulls the agent id out of a &lt;task-id&gt;...&lt;/task-id&gt; element embedded in a JSONL line.
+    /// </summary>
+    private static string? ExtractTaskId(string line)
+    {
+        const string openTag = "<task-id>";
+        const string closeTag = "</task-id>";
+        var start = line.IndexOf(openTag, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += openTag.Length;
+        var end = line.IndexOf(closeTag, start, StringComparison.Ordinal);
+        return end > start ? line[start..end] : null;
     }
 
     private static void ExtractAgentProgressMapping(
