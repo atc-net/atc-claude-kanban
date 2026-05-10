@@ -13,6 +13,7 @@ public sealed class MessageService
     private const int TextTruncateLength = 500;
     private const int ToolResultTruncateLength = 1500;
     private const string NotASystemMessage = "__normal__";
+    private const string InterruptMarker = "[Request interrupted by user]";
 
     private readonly string claudeDir;
     private readonly IMemoryCache cache;
@@ -401,10 +402,10 @@ public sealed class MessageService
             return;
         }
 
-        // Newer Claude Code embeds the /compact summary inline as a user message
-        // with isCompactSummary: true; without this branch the "Compacted" label
-        // would have no body text attached.
-        if (TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages))
+        // Drop messages whose entire body is the interrupt marker, and route
+        // inline /compact summaries to a dedicated "Compacted" entry.
+        if (ShouldSkipUserText(text) ||
+            TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages))
         {
             return;
         }
@@ -447,6 +448,9 @@ public sealed class MessageService
             Uuid = uuid,
         });
     }
+
+    private static bool ShouldSkipUserText(string text)
+        => string.Equals(text.Trim(), InterruptMarker, StringComparison.Ordinal);
 
     /// <summary>
     /// Detects an inline /compact summary entry and appends a "Compacted" message
