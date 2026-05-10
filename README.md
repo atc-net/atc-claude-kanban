@@ -143,6 +143,7 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Subagent log drill-in (click agent tool calls to view subagent conversation)
 - Infinite scroll with pagination for long conversations
 - Resizable panel (drag the left edge)
+- Open/closed state persists across page reloads (localStorage)
 
 ### ℹ️ Session Info
 
