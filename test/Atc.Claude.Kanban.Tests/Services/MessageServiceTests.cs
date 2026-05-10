@@ -556,6 +556,88 @@ public sealed class MessageServiceTests : IDisposable
     }
 
     [Fact]
+    public void ParseJsonlMessages_ExtractsInlineCompactSummary()
+    {
+        // Arrange — newer Claude Code embeds /compact summaries inline with isCompactSummary: true.
+        const string summary = "## Summary\n\nUser asked about feature X. Implemented Y.";
+        var content = JsonSerializer.Serialize(new
+        {
+            type = "user",
+            timestamp = "2026-05-10T10:00:00Z",
+            isCompactSummary = true,
+            message = new
+            {
+                role = "user",
+                content = $"This session is being continued from a previous conversation that ran out of context.\nThe summary below provides the important context.\n\n{summary}",
+            },
+        });
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — the entry should surface as a Compacted system message with the stripped summary as full text
+        messages.Should().HaveCount(1);
+        messages[0].SystemLabel.Should().Be("Compacted");
+        messages[0].FullText.Should().Be(summary);
+        messages[0].FullText.Should().NotContain("This session is being continued");
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_DropsInterruptMarkerOnlyMessage()
+    {
+        // Arrange — a user message that's nothing but the interrupt marker carries no information.
+        var content = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-05-10T10:00:00Z",
+                message = new { role = "user", content = "[Request interrupted by user]" },
+            }),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-05-10T10:00:01Z",
+                message = new { role = "user", content = "Real follow-up" },
+            }));
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — the marker-only message is dropped, the follow-up survives
+        messages.Should().HaveCount(1);
+        messages[0].Text.Should().Be("Real follow-up");
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_ExtractsTextFromMixedArrayContent()
+    {
+        // Arrange — user messages with mixed text + image arrays must surface their text portion.
+        var content = JsonSerializer.Serialize(new
+        {
+            type = "user",
+            timestamp = "2026-05-10T10:00:00Z",
+            message = new
+            {
+                role = "user",
+                content = new object[]
+                {
+                    new { type = "text", text = "Look at this screenshot:" },
+                    new { type = "image", source = new { type = "base64", media_type = "image/png", data = "abcd" } },
+                },
+            },
+        });
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert
+        messages.Should().HaveCount(1);
+        messages[0].Type.Should().Be("user");
+        messages[0].Text.Should().Be("Look at this screenshot:");
+    }
+
+    [Fact]
     public void ParseJsonlMessages_SkipsIsMetaWithoutRecognizedLabel()
     {
         // Arrange — isMeta message without a recognized pattern should be skipped
