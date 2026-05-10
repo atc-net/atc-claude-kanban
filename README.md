@@ -7,11 +7,11 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 </p>
 
 <p align="center">
-  <img src="docs/UI-dark.png" alt="Dashboard — dark theme" width="800">
+  <img src="docs/overview-dark.png" alt="Dashboard overview — dark theme" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/UI-white.png" alt="Dashboard — light theme" width="800">
+  <img src="docs/UI-white.png" alt="Dashboard — light theme" width="900">
 </p>
 
 - 📊 **Real-time Kanban board** — tasks flow through Pending → In Progress → Completed as Claude works
@@ -95,6 +95,10 @@ Toggle between Kanban and Timeline views using the view toggle buttons in the he
 - Time axis adapts to data range (seconds/minutes/hours/days)
 - View preference persists across page reloads
 
+<p align="center">
+  <img src="docs/timeline-dark.png" alt="Timeline view" width="900">
+</p>
+
 ### 🔔 Desktop Notifications
 
 Click the bell icon in the header to enable browser notifications:
@@ -121,6 +125,14 @@ When Claude Code spawns agent teams, the dashboard shows:
 - Team info modal with member details
 - Task counts per agent
 
+<p align="center">
+  <img src="docs/session-info-dark.png" alt="Team session info modal" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/team-board-dark.png" alt="Team session board with subagents footer" width="900">
+</p>
+
 ### 🧩 Subagents
 
 When Claude Code spawns subagents via the Task tool, the dashboard shows:
@@ -145,6 +157,10 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Resizable panel (drag the left edge)
 - Open/closed state persists across page reloads (localStorage)
 - Click a message to open a detail modal with a fullscreen toggle for wide tool outputs
+
+<p align="center">
+  <img src="docs/msg-detail-fullscreen-dark.png" alt="Message detail modal in fullscreen" width="900">
+</p>
 
 ### ℹ️ Session Info
 
@@ -196,6 +212,10 @@ Each session shows accumulated token usage and estimated cost:
 | `Shift+C` | Copy session id |
 | `Shift+L` | Toggle message log panel |
 | `N` | Toggle scratchpad |
+
+<p align="center">
+  <img src="docs/help-modal-dark.png" alt="Keyboard shortcuts overlay" width="900">
+</p>
 
 ### 📡 How It Works
 
