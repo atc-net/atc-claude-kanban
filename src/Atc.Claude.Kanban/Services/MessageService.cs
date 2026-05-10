@@ -401,6 +401,14 @@ public sealed class MessageService
             return;
         }
 
+        // Newer Claude Code embeds the /compact summary inline as a user message
+        // with isCompactSummary: true; without this branch the "Compacted" label
+        // would have no body text attached.
+        if (TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages))
+        {
+            return;
+        }
+
         var label = GetSystemMessageLabel(text);
 
         // null = skip entirely (e.g. /clear, session continuation)
@@ -438,6 +446,72 @@ public sealed class MessageService
             FullText = text,
             Uuid = uuid,
         });
+    }
+
+    /// <summary>
+    /// Detects an inline /compact summary entry and appends a "Compacted" message
+    /// carrying the stripped summary text. Returns true when the entry was handled.
+    /// </summary>
+    private static bool TryAppendInlineCompactSummary(
+        JsonElement root,
+        string text,
+        string? timestamp,
+        string? uuid,
+        List<MessageEntry> messages)
+    {
+        if (!root.TryGetProperty("isCompactSummary", out var compactEl) ||
+            compactEl.ValueKind != JsonValueKind.True)
+        {
+            return false;
+        }
+
+        var summary = StripCompactSummaryPreamble(text);
+        if (!string.IsNullOrWhiteSpace(summary))
+        {
+            messages.Add(new MessageEntry
+            {
+                Type = "user",
+                Timestamp = timestamp,
+                Text = "Compacted",
+                FullText = summary,
+                SystemLabel = "Compacted",
+                Uuid = uuid,
+            });
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Strips the "This session is being continued..." preamble that Claude Code
+    /// prepends to inline /compact summaries.
+    /// </summary>
+    private static string StripCompactSummaryPreamble(string text)
+    {
+        const string preamble = "This session is being continued";
+        if (!text.StartsWith(preamble, StringComparison.OrdinalIgnoreCase))
+        {
+            return text.Trim();
+        }
+
+        var firstNewline = text.IndexOf('\n', StringComparison.Ordinal);
+        if (firstNewline < 0)
+        {
+            return string.Empty;
+        }
+
+        var remainder = text[(firstNewline + 1)..].TrimStart();
+
+        const string summaryHeader = "The summary below";
+        if (remainder.StartsWith(summaryHeader, StringComparison.OrdinalIgnoreCase))
+        {
+            var nextNewline = remainder.IndexOf('\n', StringComparison.Ordinal);
+            remainder = nextNewline < 0
+                ? string.Empty
+                : remainder[(nextNewline + 1)..].TrimStart();
+        }
+
+        return remainder.Trim();
     }
 
     /// <summary>
