@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.13.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.12.1...v1.13.0) (2026-05-11)
+
+
+### Features
+
+* add Ctrl+D shortcut to dismiss selected session ([e5fbd17](https://github.com/atc-net/atc-claude-kanban/commit/e5fbd17641eaef611ca3885f6369183b1c33345a))
+* add fullscreen toggle to message detail modal ([ec30a42](https://github.com/atc-net/atc-claude-kanban/commit/ec30a4270e8138ae1dcb2c3b0e0835654812006b))
+* copy current session id with Shift+C ([c7de4f9](https://github.com/atc-net/atc-claude-kanban/commit/c7de4f9abfe0b7cfd7b808f242ca85394989b1d5))
+* mark rejected and killed sub-agents as stopped ([9f9636e](https://github.com/atc-net/atc-claude-kanban/commit/9f9636e36f504386d461ed4fae4da265915ce12a))
+* persist message panel open state across reloads ([c80cd50](https://github.com/atc-net/atc-claude-kanban/commit/c80cd50f8f74606114ff9825e9ebf9b8bc206973))
+
+
+### Bug Fixes
+
+* drop interrupt-only user messages and cover array-content text ([18fa3cd](https://github.com/atc-net/atc-claude-kanban/commit/18fa3cd565454e0c4eea221c4d329aaf7a163b28))
+* extract inline /compact summary from session JSONL ([79d3cce](https://github.com/atc-net/atc-claude-kanban/commit/79d3cce3c557626ebc882ef2256dc4d7432cfd78))
+* prevent shadow JSONL from overwriting resolved session metadata ([ab6296a](https://github.com/atc-net/atc-claude-kanban/commit/ab6296a3690606ee61544c2d7176f33bd3a225f2))
+
 ## [1.12.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.12.0...v1.12.1) (2026-04-20)
 
 
