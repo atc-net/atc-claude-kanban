@@ -26,7 +26,7 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
 - 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
 - 🖱️ **Drag-drop** — reorder tasks between kanban columns by dragging
-- 📓 **Scratchpad** — per-session quick notes with localStorage persistence
+- 📓 **Scratchpad** — per-session quick notes with localStorage persistence and a sidebar badge for sessions with notes
 - 🔧 **Open in editor** — click file paths in the message log to open in VS Code
 - ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
 - 🌙 **Dark/light themes** — system preference detection
