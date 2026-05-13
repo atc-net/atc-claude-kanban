@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.14.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.13.0...v1.14.0) (2026-05-13)
+
+
+### Features
+
+* show scratchpad badge in sidebar for sessions with notes ([7154b9f](https://github.com/atc-net/atc-claude-kanban/commit/7154b9f09cd2affa4a0d3832ab86af00b11e5ea8))
+
+
+### Bug Fixes
+
+* scope scratchpad to the session it was opened for ([d3c214c](https://github.com/atc-net/atc-claude-kanban/commit/d3c214c3729b356afd714e456ebb763955037f7f))
+
 ## [1.13.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.12.1...v1.13.0) (2026-05-11)
 
 
