@@ -5263,17 +5263,17 @@
         document.body.appendChild(overlay);
       }
 
+      overlay.dataset.sessionId = sid;
       const textarea = document.getElementById('scratchpad-text');
       const key = sessionScratchpadKey(sid);
-      const saved = localStorage.getItem(key);
-      if (saved) textarea.value = saved;
+      textarea.value = localStorage.getItem(key) || '';
       updateScratchpadCount();
 
       textarea.oninput = () => {
         updateScratchpadCount();
         clearTimeout(scratchpadTimer);
         scratchpadTimer = setTimeout(() => {
-          persistScratchpad(currentSessionId, textarea.value);
+          persistScratchpad(sid, textarea.value);
         }, 500);
       };
 
@@ -5285,8 +5285,9 @@
       const overlay = document.getElementById('scratchpad-modal');
       if (!overlay) return;
       const textarea = document.getElementById('scratchpad-text');
-      if (textarea && currentSessionId) {
-        persistScratchpad(currentSessionId, textarea.value);
+      const sid = overlay.dataset.sessionId;
+      if (textarea && sid) {
+        persistScratchpad(sid, textarea.value);
       }
       clearTimeout(scratchpadTimer);
       overlay.classList.remove('visible');
