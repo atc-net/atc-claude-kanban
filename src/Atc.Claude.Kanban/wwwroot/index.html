@@ -5023,13 +5023,14 @@
             const tsFirst = formatMsgTimestamp(first.timestamp);
             const tsLast = formatMsgTimestamp(last.timestamp);
             const timeRange = tsFirst && tsLast ? `${tsFirst} – ${tsLast}` : tsFirst || '';
+            const headerDetail = escapeHtml(toolDetailText(first));
             const items = [];
             for (let j = i; j < runEnd; j++) items.push(renderToolUseEntry(messages[j], true));
             parts.push(`<div class="msg-tool-group">
               <div class="msg-entry msg-tool" style="cursor:pointer" data-action="toggleToolGroup" data-group-id="${gid}">
                 ${getToolIcon(first.toolName)}
                 <div class="msg-tool-name">${escapeHtml(first.toolName || 'Tool')}<span class="tool-count-badge">&times;${count}</span></div>
-                <div class="msg-text">${escapeHtml(first.text || first.toolName || '')}</div>
+                ${headerDetail ? `<div class="msg-text">${headerDetail}</div>` : ''}
                 ${timeRange ? `<div class="msg-timestamp">${timeRange}</div>` : ''}
               </div>
               <div class="msg-tool-group-items" id="${gid}">${items.join('')}</div>
@@ -5084,9 +5085,19 @@
       </div>`;
     }
 
+    // The tool name already heads line 1; return just the argument detail for line 2,
+    // dropping a redundant leading "ToolName"/"ToolName:" prefix (empty for bare tools).
+    function toolDetailText(msg) {
+      let text = msg.text || '';
+      if (msg.toolName && text.startsWith(msg.toolName)) {
+        text = text.slice(msg.toolName.length).replace(/^[:\s]+/, '');
+      }
+      return text;
+    }
+
     function renderToolUseEntry(msg, compact) {
       const toolName = escapeHtml(msg.toolName || 'Tool');
-      const rawDisplayText = escapeHtml(msg.text || msg.toolName || '');
+      const rawDisplayText = escapeHtml(toolDetailText(msg));
       const ts = formatMsgTimestamp(msg.timestamp);
       const compactClass = compact ? ' msg-tool-grouped' : '';
       const icon = getToolIcon(msg.toolName);
@@ -5143,7 +5154,7 @@
 
       return `<div class="msg-entry msg-tool${compactClass}"${detailAttrs}>
         <div class="msg-tool-name">${icon}${toolName}${agentLink}</div>
-        <div class="msg-text">${displayText}${readRange}</div>
+        ${(displayText || readRange) ? `<div class="msg-text">${displayText}${readRange}</div>` : ''}
         ${paramsHtml}
         ${resultHtml}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
