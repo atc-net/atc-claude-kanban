@@ -3038,6 +3038,72 @@
       border-radius: 6px;
       display: block;
     }
+    #tool-stats-modal .modal {
+      max-width: 640px;
+      width: 92vw;
+    }
+    .tool-stats-body {
+      padding: 16px;
+      overflow-y: auto;
+      max-height: 70vh;
+    }
+    .tool-stats-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .tool-stats-chip {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    .tool-stats-chip-failed {
+      color: var(--warning);
+      border-color: var(--warning-dim);
+    }
+    .tool-stats-chip-rejected {
+      color: var(--accent);
+      border-color: var(--accent-dim);
+    }
+    .tool-stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .tool-stats-table th {
+      text-align: right;
+      padding: 6px 8px;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+      white-space: nowrap;
+    }
+    .tool-stats-table th:first-child,
+    .tool-stats-table td:first-child {
+      text-align: left;
+    }
+    .tool-stats-table td {
+      text-align: right;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--bg-hover);
+      color: var(--text-primary);
+      font-family: var(--mono);
+    }
+    .tool-stats-table tbody tr:hover {
+      background: var(--bg-hover);
+    }
+    .badge-failed {
+      color: var(--warning);
+      font-weight: 600;
+    }
+    .badge-rejected {
+      color: var(--accent);
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -5350,6 +5416,101 @@
       if (modal) modal.classList.toggle('fullscreen');
     }
 
+    // ── Tool Statistics modal ──────────────────────────────────────
+    let _toolStatsData = null;
+    let _toolStatsSort = { key: 'count', dir: 'desc' };
+
+    function ensureToolStatsOverlay() {
+      let overlay = document.getElementById('tool-stats-modal');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'tool-stats-modal';
+        overlay.className = 'modal-overlay';
+        overlay.dataset.action = 'closeToolStatsModal';
+        overlay.innerHTML = `<div class="modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Tool Statistics</h3>
+            <button class="modal-close" data-action="closeToolStatsModal">&times;</button>
+          </div>
+          <div id="tool-stats-body" class="tool-stats-body"></div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" data-action="closeToolStatsModal">Close</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+      }
+      return overlay;
+    }
+
+    async function showToolStatsModal(sessionId) {
+      const overlay = ensureToolStatsOverlay();
+      const body = document.getElementById('tool-stats-body');
+      body.innerHTML = '<div style="color:var(--text-secondary)">Loading…</div>';
+      overlay.classList.add('visible');
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/tool-stats`);
+        if (!res.ok) {
+          body.innerHTML = '<div style="color:var(--text-secondary)">No tool statistics available.</div>';
+          return;
+        }
+        _toolStatsData = await res.json();
+        _toolStatsSort = { key: 'count', dir: 'desc' };
+        renderToolStats();
+      } catch (err) {
+        log.error('[toolStats] failed to load', err);
+        body.innerHTML = '<div style="color:var(--text-secondary)">Failed to load tool statistics.</div>';
+      }
+    }
+
+    function renderToolStats() {
+      const data = _toolStatsData;
+      const body = document.getElementById('tool-stats-body');
+      if (!data || !body) return;
+      const chips = `<div class="tool-stats-chips">
+        <span class="tool-stats-chip">${data.totalCalls} calls</span>
+        <span class="tool-stats-chip">${data.uniqueTools} tools</span>
+        <span class="tool-stats-chip tool-stats-chip-failed">${data.totalFailed} failed</span>
+        <span class="tool-stats-chip tool-stats-chip-rejected">${data.totalRejected} rejected</span>
+      </div>`;
+      const { key, dir } = _toolStatsSort;
+      const sorted = [...(data.tools || [])].sort((a, b) => {
+        if (key === 'name') {
+          const an = String(a.name).toLowerCase();
+          const bn = String(b.name).toLowerCase();
+          return dir === 'asc' ? an.localeCompare(bn) : bn.localeCompare(an);
+        }
+        return dir === 'asc' ? a[key] - b[key] : b[key] - a[key];
+      });
+      const cols = [['name', 'Tool'], ['count', 'Calls'], ['success', 'OK'], ['failed', 'Failed'], ['rejected', 'Rejected'], ['impact', 'Impact %']];
+      const arrow = (k) => key === k ? (dir === 'asc' ? ' ▲' : ' ▼') : '';
+      const header = cols.map(([k, label]) => `<th data-action="sortToolStats" data-key="${k}">${label}${arrow(k)}</th>`).join('');
+      const rows = sorted.length
+        ? sorted.map((t) => `<tr>
+            <td>${escapeHtml(t.name)}</td>
+            <td>${t.count}</td>
+            <td>${t.success}</td>
+            <td>${t.failed ? `<span class="badge-failed">${t.failed}</span>` : '0'}</td>
+            <td>${t.rejected ? `<span class="badge-rejected">${t.rejected}</span>` : '0'}</td>
+            <td>${t.impact}%</td>
+          </tr>`).join('')
+        : '<tr><td colspan="6" style="color:var(--text-secondary)">No tool calls recorded.</td></tr>';
+      body.innerHTML = chips + `<table class="tool-stats-table"><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function sortToolStats(key) {
+      if (_toolStatsSort.key === key) {
+        _toolStatsSort.dir = _toolStatsSort.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _toolStatsSort = { key, dir: key === 'name' ? 'asc' : 'desc' };
+      }
+      renderToolStats();
+    }
+
+    function closeToolStatsModal() {
+      const overlay = document.getElementById('tool-stats-modal');
+      if (overlay) overlay.classList.remove('visible');
+    }
+
     // ── Drag-Drop Task Reordering ──────────────────────────────────
 
     document.addEventListener('dragstart', (e) => {
@@ -6658,6 +6819,7 @@
 
       // Action icons row (plan, copy, folder) — matching sidebar indicator style
       const actionIcons = [];
+      actionIcons.push(`<span class="session-project-btn" data-action="showToolStats" data-session-id="${escapeHtml(session.id)}" title="Tool statistics" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>`);
       if (planContent) {
         _pendingPlanContent = planContent;
         actionIcons.push(`<span class="plan-indicator" data-action="openPlanModal" title="View plan" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>`);
@@ -7167,6 +7329,9 @@
           if (src) showImagePreview(src);
           break;
         }
+        case 'showToolStats': e.stopPropagation(); if (sessionId) showToolStatsModal(sessionId); break;
+        case 'sortToolStats': sortToolStats(actionEl.dataset.key); break;
+        case 'closeToolStatsModal': closeToolStatsModal(); break;
         case 'viewAgentLogFromMsg': {
           const sid = actionEl.dataset.sessionId;
           const agentDesc = actionEl.dataset.agentDesc;

@@ -33,6 +33,10 @@ public static class ServiceCollectionExtensions
             claudeDir,
             sp.GetRequiredService<IMemoryCache>()));
 
+        services.AddSingleton(sp => new ToolStatsService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
         services.AddSingleton(sp => new SessionService(
             claudeDir,
             sp.GetRequiredService<IMemoryCache>(),

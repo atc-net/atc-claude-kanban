@@ -43,6 +43,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithName("GetUserImage")
             .WithDescription("Retrieve a base64 image attached to a user message by block index.")
             .WithSummary("Retrieve a user message image.");
+
+        group
+            .MapGet("/{sessionId}/tool-stats", GetToolStats)
+            .WithName("GetToolStats")
+            .WithDescription("Retrieve aggregated tool usage statistics for a session.")
+            .WithSummary("Retrieve tool statistics for a session.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SessionInfo>>> GetSessions(
@@ -119,5 +125,16 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
         return image is null
             ? TypedResults.NotFound()
             : TypedResults.File(image.Value.Data, image.Value.MediaType);
+    }
+
+    internal static async Task<Results<Ok<ToolStatsResponse>, NotFound>> GetToolStats(
+        [FromServices] ToolStatsService toolStatsService,
+        [AsParameters] SessionIdParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var stats = await toolStatsService.GetToolStatsAsync(parameters.SessionId, cancellationToken);
+        return stats is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(stats);
     }
 }
