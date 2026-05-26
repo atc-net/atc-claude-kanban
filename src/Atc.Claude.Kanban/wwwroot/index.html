@@ -3013,6 +3013,31 @@
     .answer-list li {
       margin: 2px 0;
     }
+    .user-attach-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .user-attach-chip {
+      font-size: 11px;
+      padding: 2px 9px;
+      border-radius: 10px;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .user-attach-chip:hover {
+      color: var(--text-primary);
+      border-color: var(--text-muted);
+    }
+    .user-attach-full {
+      max-width: 100%;
+      max-height: 74vh;
+      border-radius: 6px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -5057,11 +5082,33 @@
     function renderUserEntry(msg) {
       const text = escapeHtml(msg.text || '');
       const ts = formatMsgTimestamp(msg.timestamp);
-      return `<div class="msg-entry msg-user" data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}">
+      const hasText = !!(msg.text || msg.fullText);
+      const detailAttrs = hasText ? ` data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}"` : '';
+      return `<div class="msg-entry msg-user"${detailAttrs}>
         <div class="msg-role">You</div>
-        <div class="msg-text">${text}</div>
+        ${text ? `<div class="msg-text">${text}</div>` : ''}
+        ${renderUserAttachments(msg)}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;
+    }
+
+    // Renders chips for images attached to a user message; each opens a preview.
+    function renderUserAttachments(msg) {
+      if (!msg.images || !msg.images.length || !msg.uuid || !currentSessionId) return '';
+      const chips = msg.images.map((img) => {
+        const src = `/api/sessions/${encodeURIComponent(currentSessionId)}/messages/${encodeURIComponent(msg.uuid)}/image/${img.blockIndex}`;
+        return `<button class="user-attach-chip" data-action="showImage" data-src="${escapeAttr(src)}" title="View image">🖼 image</button>`;
+      }).join('');
+      return `<div class="user-attach-chips">${chips}</div>`;
+    }
+
+    function showImagePreview(src) {
+      const overlay = ensureMsgDetailOverlay();
+      overlay.querySelector('.modal-title').textContent = 'Image';
+      const body = document.getElementById('msg-detail-body');
+      body.className = 'msg-detail-full msg-detail-structured';
+      body.innerHTML = `<img src="${escapeAttr(src)}" alt="User attachment" class="user-attach-full">`;
+      overlay.classList.add('visible');
     }
 
     function renderSystemEntry(msg) {
@@ -7103,6 +7150,11 @@
         case 'showToolDetail': {
           const entry = toolDetailCache.get(actionEl.dataset.toolKey);
           if (entry) showToolDetailModal(entry.toolName, entry.toolInput, entry.answerPayload);
+          break;
+        }
+        case 'showImage': {
+          const src = actionEl.dataset.src;
+          if (src) showImagePreview(src);
           break;
         }
         case 'viewAgentLogFromMsg': {

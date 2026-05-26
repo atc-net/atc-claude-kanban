@@ -37,6 +37,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithName("GetMessagesForSession")
             .WithDescription("Retrieve recent conversation messages from a session's JSONL transcript.")
             .WithSummary("Retrieve messages for a session.");
+
+        group
+            .MapGet("/{sessionId}/messages/{messageUuid}/image/{blockIndex:int}", GetUserImage)
+            .WithName("GetUserImage")
+            .WithDescription("Retrieve a base64 image attached to a user message by block index.")
+            .WithSummary("Retrieve a user message image.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SessionInfo>>> GetSessions(
@@ -97,5 +103,21 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             : messages;
 
         return TypedResults.Ok(new MessagesResponse(result, hasMore));
+    }
+
+    internal static async Task<Results<FileContentHttpResult, NotFound>> GetUserImage(
+        [FromServices] MessageService messageService,
+        [AsParameters] UserImageParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var image = await messageService.GetUserImageAsync(
+            parameters.SessionId,
+            parameters.MessageUuid,
+            parameters.BlockIndex,
+            cancellationToken);
+
+        return image is null
+            ? TypedResults.NotFound()
+            : TypedResults.File(image.Value.Data, image.Value.MediaType);
     }
 }
