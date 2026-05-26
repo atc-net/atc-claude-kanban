@@ -501,17 +501,53 @@ public sealed class MessageService
                      metaEl.ValueKind == JsonValueKind.True;
 
         var text = ExtractUserMessageText(root);
-        if (string.IsNullOrWhiteSpace(text))
+        var images = ExtractUserImages(root);
+        var hasText = !string.IsNullOrWhiteSpace(text);
+
+        // Nothing to show: no text and no attachments.
+        if (!hasText && images.Count == 0)
         {
             return;
         }
 
+        // Text that maps to a skip/compact/system entry is consumed there; an
+        // image-only message falls straight through to the regular entry below.
+        if (hasText &&
+            !ShouldEmitRegularUserEntry(root, text!, isMeta, timestamp, uuid, messages))
+        {
+            return;
+        }
+
+        messages.Add(new MessageEntry
+        {
+            Type = "user",
+            Timestamp = timestamp,
+            Text = hasText ? Truncate(text!, TextTruncateLength) : null,
+            FullText = hasText ? text : null,
+            Uuid = uuid,
+            Images = images.Count > 0 ? images : null,
+        });
+    }
+
+    /// <summary>
+    /// Handles interrupt/compact/system user text. Returns false when the text was
+    /// consumed (skipped or emitted as a system entry); true when a regular user
+    /// entry should still be produced.
+    /// </summary>
+    private static bool ShouldEmitRegularUserEntry(
+        JsonElement root,
+        string text,
+        bool isMeta,
+        string? timestamp,
+        string? uuid,
+        List<MessageEntry> messages)
+    {
         // Drop messages whose entire body is the interrupt marker, and route
         // inline /compact summaries to a dedicated "Compacted" entry.
         if (ShouldSkipUserText(text) ||
             TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages))
         {
-            return;
+            return false;
         }
 
         var label = GetSystemMessageLabel(text);
@@ -519,16 +555,16 @@ public sealed class MessageService
         // null = skip entirely (e.g. /clear, session continuation)
         if (label is null)
         {
-            return;
+            return false;
         }
 
         // isMeta messages without a recognized label are internal — skip
         if (isMeta && string.Equals(label, NotASystemMessage, StringComparison.Ordinal))
         {
-            return;
+            return false;
         }
 
-        // Recognized system message — show with label
+        // Recognized system message — show with label, not as a regular entry
         if (!string.Equals(label, NotASystemMessage, StringComparison.Ordinal))
         {
             messages.Add(new MessageEntry
@@ -540,17 +576,42 @@ public sealed class MessageService
                 Uuid = uuid,
             });
 
-            return;
+            return false;
         }
 
-        messages.Add(new MessageEntry
+        return true;
+    }
+
+    private static List<MessageImage> ExtractUserImages(JsonElement root)
+    {
+        var images = new List<MessageImage>();
+        if (!root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
         {
-            Type = "user",
-            Timestamp = timestamp,
-            Text = Truncate(text, TextTruncateLength),
-            FullText = text,
-            Uuid = uuid,
-        });
+            return images;
+        }
+
+        var index = 0;
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (block.TryGetProperty("type", out var typeEl) &&
+                string.Equals(typeEl.GetString(), "image", StringComparison.Ordinal) &&
+                block.TryGetProperty("source", out var sourceEl) &&
+                sourceEl.ValueKind == JsonValueKind.Object &&
+                sourceEl.TryGetProperty("type", out var sourceTypeEl) &&
+                string.Equals(sourceTypeEl.GetString(), "base64", StringComparison.Ordinal))
+            {
+                var mediaType = sourceEl.TryGetProperty("media_type", out var mediaTypeEl)
+                    ? mediaTypeEl.GetString() ?? "image/png"
+                    : "image/png";
+                images.Add(new MessageImage { BlockIndex = index, MediaType = mediaType });
+            }
+
+            index++;
+        }
+
+        return images;
     }
 
     private static bool ShouldSkipUserText(string text)
@@ -969,6 +1030,119 @@ public sealed class MessageService
             "WebSearch" when input.TryGetValue("query", out var q) => $"WebSearch \"{q}\"",
             _ => toolName,
         };
+    }
+
+    /// <summary>
+    /// Reads a single base64 image attached to a user message and returns its decoded
+    /// bytes and media type, or null when the message or image block cannot be found.
+    /// </summary>
+    /// <param name="sessionId">The session whose transcript holds the image.</param>
+    /// <param name="messageUuid">The uuid of the user message carrying the image.</param>
+    /// <param name="blockIndex">The index of the image block within the message content array.</param>
+    /// <param name="cancellationToken">A token to cancel the read.</param>
+    /// <returns>The media type and decoded image bytes, or null when not found.</returns>
+    public async Task<(string MediaType, byte[] Data)?> GetUserImageAsync(
+        string sessionId,
+        string messageUuid,
+        int blockIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (blockIndex < 0 || string.IsNullOrEmpty(messageUuid))
+        {
+            return null;
+        }
+
+        var jsonlPath = FindSessionJsonlPath(sessionId);
+        if (jsonlPath is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(jsonlPath);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
+        {
+            if (line.Length == 0 ||
+                line[0] != '{' ||
+                !line.Contains(messageUuid, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                var image = TryReadUserImage(line, messageUuid, blockIndex);
+                if (image is not null)
+                {
+                    return image;
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip malformed lines.
+            }
+        }
+
+        return null;
+    }
+
+    private static (string MediaType, byte[] Data)? TryReadUserImage(
+        string line,
+        string messageUuid,
+        int blockIndex)
+    {
+        using var doc = JsonDocument.Parse(line);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("uuid", out var uuidEl) ||
+            !string.Equals(uuidEl.GetString(), messageUuid, StringComparison.Ordinal) ||
+            !root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var index = 0;
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (index != blockIndex)
+            {
+                index++;
+                continue;
+            }
+
+            if (!block.TryGetProperty("type", out var typeEl) ||
+                !string.Equals(typeEl.GetString(), "image", StringComparison.Ordinal) ||
+                !block.TryGetProperty("source", out var sourceEl) ||
+                sourceEl.ValueKind != JsonValueKind.Object ||
+                !sourceEl.TryGetProperty("data", out var dataEl) ||
+                dataEl.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+
+            var data = dataEl.GetString();
+            if (string.IsNullOrEmpty(data))
+            {
+                return null;
+            }
+
+            var mediaType = sourceEl.TryGetProperty("media_type", out var mediaTypeEl)
+                ? mediaTypeEl.GetString() ?? "image/png"
+                : "image/png";
+
+            try
+            {
+                return (mediaType, Convert.FromBase64String(data));
+            }
+            catch (FormatException)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private string? FindSessionJsonlPath(string sessionId)

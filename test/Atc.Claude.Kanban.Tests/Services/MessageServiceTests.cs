@@ -717,4 +717,93 @@ public sealed class MessageServiceTests : IDisposable
         entry.AnswerPayload.Questions.Should().ContainSingle();
         entry.AnswerPayload.Questions![0].Options.Should().Contain(option => option.Label == "Label A" && option.Description == "Desc A");
     }
+
+    [Fact]
+    public void ParseJsonlMessages_ExtractsUserImageAttachments()
+    {
+        // Arrange — a user message with text + image, and an image-only message.
+        var content = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-05-10T10:00:00Z",
+                uuid = "u-img-1",
+                message = new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = "See screenshot" },
+                        new { type = "image", source = new { type = "base64", media_type = "image/jpeg", data = "Zm9v" } },
+                    },
+                },
+            }),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-05-10T10:00:01Z",
+                uuid = "u-img-2",
+                message = new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "image", source = new { type = "base64", media_type = "image/png", data = "YmFy" } },
+                    },
+                },
+            }));
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert
+        messages.Should().HaveCount(2);
+        messages[0].Text.Should().Be("See screenshot");
+        messages[0].Images.Should().ContainSingle();
+        messages[0].Images![0].BlockIndex.Should().Be(1);
+        messages[0].Images[0].MediaType.Should().Be("image/jpeg");
+
+        // Image-only message survives with no text.
+        messages[1].Text.Should().BeNull();
+        messages[1].Images.Should().ContainSingle();
+        messages[1].Images![0].BlockIndex.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetUserImage_ReturnsDecodedBytesByBlockIndex()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectDir = Path.Combine(tempDir, "projects", "hash-img");
+        Directory.CreateDirectory(projectDir);
+
+        var imageBytes = new byte[] { 1, 2, 3, 4 };
+        var jsonl = JsonSerializer.Serialize(new
+        {
+            type = "user",
+            timestamp = "2026-05-10T10:00:00Z",
+            uuid = "img-uuid",
+            message = new
+            {
+                role = "user",
+                content = new object[]
+                {
+                    new { type = "text", text = "pic" },
+                    new { type = "image", source = new { type = "base64", media_type = "image/png", data = Convert.ToBase64String(imageBytes) } },
+                },
+            },
+        });
+        await File.WriteAllTextAsync(Path.Combine(projectDir, "session-img.jsonl"), jsonl, cancellationToken);
+
+        var service = new MessageService(tempDir, cache);
+
+        // Act
+        var image = await service.GetUserImageAsync("session-img", "img-uuid", 1, cancellationToken);
+
+        // Assert
+        image.Should().NotBeNull();
+        image!.Value.MediaType.Should().Be("image/png");
+        image.Value.Data.Should().Equal(imageBytes);
+    }
 }

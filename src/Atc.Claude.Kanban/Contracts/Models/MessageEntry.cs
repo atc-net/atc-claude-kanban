@@ -86,4 +86,12 @@ public sealed class MessageEntry
     [JsonPropertyName("answerPayload")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public AnswerPayload? AnswerPayload { get; set; }
+
+    /// <summary>
+    /// Gets or sets the images attached to a user message, if any. Metadata only;
+    /// the image bytes are fetched lazily by block index.
+    /// </summary>
+    [JsonPropertyName("images")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<MessageImage>? Images { get; set; }
 }
