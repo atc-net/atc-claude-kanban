@@ -230,6 +230,7 @@ public sealed class MessageService
         // Parse all valid JSON lines once, collecting tool results and entries together
         var parsed = new List<(JsonDocument Doc, string Line)>();
         var toolResults = new Dictionary<string, string>(StringComparer.Ordinal);
+        var answerPayloads = new Dictionary<string, AnswerPayload>(StringComparer.Ordinal);
 
         for (var i = startIndex; i < lines.Length; i++)
         {
@@ -258,19 +259,20 @@ public sealed class MessageService
             if (root.TryGetProperty("type", out var typeEl) &&
                 string.Equals(typeEl.GetString(), "user", StringComparison.Ordinal))
             {
-                CollectToolResultsFromEntry(root, toolResults);
+                CollectToolResultsFromEntry(root, toolResults, answerPayloads);
             }
 
             parsed.Add((doc, line));
         }
 
-        var messages = BuildMessageEntries(parsed, toolResults);
+        var messages = BuildMessageEntries(parsed, toolResults, answerPayloads);
         return messages;
     }
 
     private static List<MessageEntry> BuildMessageEntries(
         List<(JsonDocument Doc, string Line)> parsed,
-        Dictionary<string, string> toolResults)
+        Dictionary<string, string> toolResults,
+        Dictionary<string, AnswerPayload> answerPayloads)
     {
         var messages = new List<MessageEntry>();
 
@@ -296,7 +298,7 @@ public sealed class MessageService
             }
             else if (string.Equals(entryType, "assistant", StringComparison.Ordinal))
             {
-                ParseAssistantEntry(root, timestamp, uuid, toolResults, messages);
+                ParseAssistantEntry(root, timestamp, uuid, toolResults, answerPayloads, messages);
             }
 
             doc.Dispose();
@@ -317,7 +319,8 @@ public sealed class MessageService
 
     private static void CollectToolResultsFromEntry(
         JsonElement root,
-        Dictionary<string, string> toolResults)
+        Dictionary<string, string> toolResults,
+        Dictionary<string, AnswerPayload> answerPayloads)
     {
         if (!root.TryGetProperty("message", out var msgEl) ||
             !msgEl.TryGetProperty("content", out var contentEl) ||
@@ -325,6 +328,11 @@ public sealed class MessageService
         {
             return;
         }
+
+        // The structured AskUserQuestion answers live at the line-level
+        // toolUseResult rather than inside the tool_result block. Capture once and
+        // key by each block id, then attach only to AskUserQuestion tool_use entries.
+        var answerPayload = ExtractAnswerPayload(root);
 
         foreach (var block in contentEl.EnumerateArray())
         {
@@ -350,7 +358,103 @@ public sealed class MessageService
             {
                 toolResults[toolUseId] = resultText;
             }
+
+            if (answerPayload is not null)
+            {
+                answerPayloads[toolUseId] = answerPayload;
+            }
         }
+    }
+
+    private static AnswerPayload? ExtractAnswerPayload(JsonElement root)
+    {
+        if (!root.TryGetProperty("toolUseResult", out var resultEl) ||
+            resultEl.ValueKind != JsonValueKind.Object ||
+            !resultEl.TryGetProperty("answers", out var answersEl) ||
+            answersEl.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var answers = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var answer in answersEl.EnumerateObject())
+        {
+            var labels = new List<string>();
+            if (answer.Value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in answer.Value.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is { } label)
+                    {
+                        labels.Add(label);
+                    }
+                }
+            }
+            else if (answer.Value.ValueKind == JsonValueKind.String && answer.Value.GetString() is { } single)
+            {
+                labels.Add(single);
+            }
+
+            answers[answer.Name] = labels;
+        }
+
+        if (answers.Count == 0)
+        {
+            return null;
+        }
+
+        return new AnswerPayload
+        {
+            Questions = ExtractAnswerQuestions(resultEl),
+            Answers = answers,
+        };
+    }
+
+    private static List<AnswerQuestion>? ExtractAnswerQuestions(
+        JsonElement resultEl)
+    {
+        if (!resultEl.TryGetProperty("questions", out var questionsEl) ||
+            questionsEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var questions = new List<AnswerQuestion>();
+        foreach (var questionEl in questionsEl.EnumerateArray())
+        {
+            if (questionEl.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            List<AnswerOption>? options = null;
+            if (questionEl.TryGetProperty("options", out var optionsEl) &&
+                optionsEl.ValueKind == JsonValueKind.Array)
+            {
+                options = new List<AnswerOption>();
+                foreach (var optionEl in optionsEl.EnumerateArray())
+                {
+                    if (optionEl.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    options.Add(new AnswerOption
+                    {
+                        Label = optionEl.TryGetProperty("label", out var labelEl) ? labelEl.GetString() : null,
+                        Description = optionEl.TryGetProperty("description", out var descriptionEl) ? descriptionEl.GetString() : null,
+                    });
+                }
+            }
+
+            questions.Add(new AnswerQuestion
+            {
+                Question = questionEl.TryGetProperty("question", out var questionTextEl) ? questionTextEl.GetString() : null,
+                Options = options,
+            });
+        }
+
+        return questions.Count > 0 ? questions : null;
     }
 
     private static string? ExtractToolResultText(JsonElement block)
@@ -665,6 +769,7 @@ public sealed class MessageService
         string? timestamp,
         string? uuid,
         Dictionary<string, string> toolResults,
+        Dictionary<string, AnswerPayload> answerPayloads,
         List<MessageEntry> messages)
     {
         if (!root.TryGetProperty("message", out var msgEl))
@@ -720,7 +825,7 @@ public sealed class MessageService
             }
             else if (string.Equals(blockType, "tool_use", StringComparison.Ordinal))
             {
-                ParseToolUseBlock(block, timestamp, uuid, model, toolResults, messages);
+                ParseToolUseBlock(block, timestamp, uuid, model, toolResults, answerPayloads, messages);
             }
         }
     }
@@ -761,6 +866,7 @@ public sealed class MessageService
         string? uuid,
         string? model,
         Dictionary<string, string> toolResults,
+        Dictionary<string, AnswerPayload> answerPayloads,
         List<MessageEntry> messages)
     {
         var toolName = block.TryGetProperty("name", out var nameEl)
@@ -779,6 +885,13 @@ public sealed class MessageService
             toolResult = Truncate(result, ToolResultTruncateLength);
         }
 
+        AnswerPayload? answerPayload = null;
+        if (toolUseId is not null &&
+            string.Equals(toolName, "AskUserQuestion", StringComparison.Ordinal))
+        {
+            answerPayloads.TryGetValue(toolUseId, out answerPayload);
+        }
+
         var displayText = BuildToolDisplayText(toolName, toolInput);
 
         messages.Add(new MessageEntry
@@ -792,6 +905,7 @@ public sealed class MessageService
             ToolUseId = toolUseId,
             Model = model,
             Uuid = uuid,
+            AnswerPayload = answerPayload,
         });
     }
 

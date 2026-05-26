@@ -3004,6 +3004,15 @@
       max-height: 360px;
       overflow: auto;
     }
+    .answer-list {
+      margin: 2px 0 0 16px;
+      padding: 0;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .answer-list li {
+      margin: 2px 0;
+    }
   </style>
 </head>
 <body>
@@ -5126,9 +5135,9 @@
       }
 
       let detailAttrs = '';
-      if (msg.toolInput) {
+      if (msg.toolInput || msg.answerPayload) {
         const key = msg.uuid || msg.toolUseId || ('tk-' + toolDetailCache.size);
-        toolDetailCache.set(key, { toolName: msg.toolName || 'Tool', toolInput: msg.toolInput });
+        toolDetailCache.set(key, { toolName: msg.toolName || 'Tool', toolInput: msg.toolInput, answerPayload: msg.answerPayload || null });
         detailAttrs = ` data-action="showToolDetail" data-tool-key="${escapeAttr(key)}" style="cursor:pointer"`;
       }
 
@@ -5193,14 +5202,41 @@
       overlay.classList.add('visible');
     }
 
-    function showToolDetailModal(toolName, toolInput) {
+    function showToolDetailModal(toolName, toolInput, answerPayload) {
       const overlay = ensureMsgDetailOverlay();
       overlay.querySelector('.modal-title').textContent = toolName || 'Tool';
       const body = document.getElementById('msg-detail-body');
       body.className = 'msg-detail-full msg-detail-structured';
-      const html = renderToolParamsHtml(toolInput);
+      let html = renderToolParamsHtml(toolInput);
+      const filePath = toolInput && (toolInput.file_path || toolInput.path);
+      if (filePath && ['Read', 'Edit', 'Write', 'Glob'].includes(toolName)) {
+        html += `<div class="tool-detail-block"><a href="#" class="msg-file-link" data-action="openInEditor" data-path="${escapeAttr(String(filePath))}" title="Open in VS Code">Open ${escapeHtml(String(filePath))} in editor</a></div>`;
+      }
+      if (answerPayload) html += renderAnswerPayloadHtml(answerPayload);
       body.innerHTML = html || '<div style="color:var(--text-secondary)">No details</div>';
       overlay.classList.add('visible');
+    }
+
+    // Renders captured AskUserQuestion answers, with each chosen option's description when available.
+    function renderAnswerPayloadHtml(answerPayload) {
+      if (!answerPayload || !answerPayload.answers) return '';
+      const questions = Array.isArray(answerPayload.questions) ? answerPayload.questions : [];
+      const findOptionDesc = (questionText, label) => {
+        const question = questions.find((entry) => entry && entry.question === questionText);
+        if (!question || !Array.isArray(question.options)) return null;
+        const option = question.options.find((opt) => opt && opt.label === label);
+        return option && option.description ? option.description : null;
+      };
+      const rows = Object.entries(answerPayload.answers).map(([question, labels]) => {
+        const list = Array.isArray(labels) ? labels : [labels];
+        const items = list.map((label) => {
+          const desc = findOptionDesc(question, label);
+          const descHtml = desc ? ` <span style="color:var(--text-muted)">— ${escapeHtml(desc)}</span>` : '';
+          return `<li><span style="font-weight:600">${escapeHtml(String(label))}</span>${descHtml}</li>`;
+        }).join('');
+        return `<div class="tool-detail-block"><div class="tool-detail-key">${escapeHtml(question)}</div><ul class="answer-list">${items}</ul></div>`;
+      }).join('');
+      return `<div class="tool-detail-key" style="margin-top:14px">Answers</div>${rows}`;
     }
 
     // Renders a tool's arguments: short scalars as badges, long strings and
@@ -7055,7 +7091,7 @@
         }
         case 'showToolDetail': {
           const entry = toolDetailCache.get(actionEl.dataset.toolKey);
-          if (entry) showToolDetailModal(entry.toolName, entry.toolInput);
+          if (entry) showToolDetailModal(entry.toolName, entry.toolInput, entry.answerPayload);
           break;
         }
         case 'viewAgentLogFromMsg': {

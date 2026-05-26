@@ -653,4 +653,68 @@ public sealed class MessageServiceTests : IDisposable
         messages.Should().HaveCount(1);
         messages[0].Text.Should().Be("Real user message");
     }
+
+    [Fact]
+    public void ParseJsonlMessages_CapturesAskUserQuestionAnswers()
+    {
+        // Arrange — AskUserQuestion answers live at the line-level toolUseResult,
+        // not inside the tool_result block content.
+        var content = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                timestamp = "2026-05-10T10:00:00Z",
+                message = new
+                {
+                    role = "assistant",
+                    content = new object[]
+                    {
+                        new { type = "tool_use", id = "toolu_q1", name = "AskUserQuestion", input = new { questions = new object[] { new { question = "Pick one" } } } },
+                    },
+                },
+            }),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-05-10T10:00:05Z",
+                toolUseResult = new
+                {
+                    questions = new object[]
+                    {
+                        new
+                        {
+                            question = "Pick one",
+                            options = new object[]
+                            {
+                                new { label = "Label A", description = "Desc A" },
+                                new { label = "Label B", description = "Desc B" },
+                            },
+                        },
+                    },
+                    answers = new Dictionary<string, object>(StringComparer.Ordinal) { ["Pick one"] = "Label A" },
+                },
+                message = new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "tool_result", tool_use_id = "toolu_q1", content = "User selected: Label A" },
+                    },
+                },
+            }));
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert
+        messages.Should().HaveCount(1);
+        var entry = messages[0];
+        entry.ToolName.Should().Be("AskUserQuestion");
+        entry.AnswerPayload.Should().NotBeNull();
+        entry.AnswerPayload!.Answers.Should().ContainKey("Pick one");
+        entry.AnswerPayload.Answers!["Pick one"].Should().ContainSingle().Which.Should().Be("Label A");
+        entry.AnswerPayload.Questions.Should().ContainSingle();
+        entry.AnswerPayload.Questions![0].Options.Should().Contain(option => option.Label == "Label A" && option.Description == "Desc A");
+    }
 }
