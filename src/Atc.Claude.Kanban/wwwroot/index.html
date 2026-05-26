@@ -2962,6 +2962,48 @@
     #msg-detail-modal .modal.fullscreen .msg-detail-full {
       max-height: 80vh;
     }
+
+    /* Structured tool-argument detail (overrides pre-wrap from .msg-detail-full) */
+    .msg-detail-structured {
+      white-space: normal;
+    }
+    .tool-detail-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .tool-detail-badges .param-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      word-break: break-all;
+    }
+    .tool-detail-block {
+      margin-top: 12px;
+    }
+    .tool-detail-key {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .tool-detail-pre {
+      margin: 0;
+      padding: 8px 10px;
+      background: var(--bg-deep);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 360px;
+      overflow: auto;
+    }
   </style>
 </head>
 <body>
@@ -4944,7 +4986,11 @@
       if (el) el.classList.toggle('show');
     }
 
+    // Holds full tool args per render so the detail modal can show them without bloating the DOM.
+    const toolDetailCache = new Map();
+
     function renderMessageList(messages) {
+      toolDetailCache.clear();
       if (!messages || messages.length === 0) {
         messageList.innerHTML = '<div style="padding: 24px 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">No messages yet</div>';
         return;
@@ -5079,7 +5125,14 @@
         agentLink = ` <button class="msg-result-toggle" data-action="viewAgentLogFromMsg" data-session-id="${currentSessionId}" data-agent-desc="${agentDesc}" title="View agent log">⇗ log</button>`;
       }
 
-      return `<div class="msg-entry msg-tool${compactClass}">
+      let detailAttrs = '';
+      if (msg.toolInput) {
+        const key = msg.uuid || msg.toolUseId || ('tk-' + toolDetailCache.size);
+        toolDetailCache.set(key, { toolName: msg.toolName || 'Tool', toolInput: msg.toolInput });
+        detailAttrs = ` data-action="showToolDetail" data-tool-key="${escapeAttr(key)}" style="cursor:pointer"`;
+      }
+
+      return `<div class="msg-entry msg-tool${compactClass}"${detailAttrs}>
         <div class="msg-tool-name">${icon}${toolName}${agentLink}</div>
         <div class="msg-text">${displayText}${readRange}</div>
         ${paramsHtml}
@@ -5102,7 +5155,7 @@
       return (text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    function showMsgDetailModal(fullText) {
+    function ensureMsgDetailOverlay() {
       let overlay = document.getElementById('msg-detail-modal');
       if (!overlay) {
         overlay = document.createElement('div');
@@ -5128,8 +5181,69 @@
         </div>`;
         document.body.appendChild(overlay);
       }
-      document.getElementById('msg-detail-body').textContent = fullText;
+      return overlay;
+    }
+
+    function showMsgDetailModal(fullText) {
+      const overlay = ensureMsgDetailOverlay();
+      overlay.querySelector('.modal-title').textContent = 'Message Detail';
+      const body = document.getElementById('msg-detail-body');
+      body.className = 'msg-detail-full';
+      body.textContent = fullText;
       overlay.classList.add('visible');
+    }
+
+    function showToolDetailModal(toolName, toolInput) {
+      const overlay = ensureMsgDetailOverlay();
+      overlay.querySelector('.modal-title').textContent = toolName || 'Tool';
+      const body = document.getElementById('msg-detail-body');
+      body.className = 'msg-detail-full msg-detail-structured';
+      const html = renderToolParamsHtml(toolInput);
+      body.innerHTML = html || '<div style="color:var(--text-secondary)">No details</div>';
+      overlay.classList.add('visible');
+    }
+
+    // Renders a tool's arguments: short scalars as badges, long strings and
+    // objects/arrays (incl. JSON-string args from MCP tools) as labelled blocks.
+    function renderToolParamsHtml(params) {
+      if (!params) return '';
+      const blockKeys = new Set(['content', 'old_string', 'new_string', 'plan']);
+      const inline = [];
+      const blocks = [];
+      for (const [key, value] of Object.entries(params)) {
+        if (value === null || value === undefined) continue;
+        if (blockKeys.has(key)) { blocks.push({ key, text: String(value) }); continue; }
+        if (typeof value === 'object') { blocks.push({ key, text: prettyJson(value) }); continue; }
+        if (typeof value === 'string') {
+          const pretty = maybePrettyJson(value);
+          if (pretty !== null) { blocks.push({ key, text: pretty }); continue; }
+          if (value.length > 80) { blocks.push({ key, text: value }); continue; }
+          inline.push({ key, val: value });
+          continue;
+        }
+        if (typeof value === 'boolean') { inline.push({ key, val: value ? 'yes' : 'no' }); continue; }
+        inline.push({ key, val: String(value) });
+      }
+      let html = '';
+      if (inline.length) {
+        html += '<div class="tool-detail-badges">' + inline.map(({ key, val }) =>
+          `<span class="param-badge">${escapeHtml(key)}=${escapeHtml(String(val))}</span>`).join('') + '</div>';
+      }
+      for (const { key, text } of blocks) {
+        html += `<div class="tool-detail-block"><div class="tool-detail-key">${escapeHtml(key)}</div><pre class="tool-detail-pre">${escapeHtml(text)}</pre></div>`;
+      }
+      return html;
+    }
+
+    function prettyJson(value) {
+      try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+    }
+
+    // Pretty-prints a string that holds JSON (server sends object/array args as raw JSON); null otherwise.
+    function maybePrettyJson(text) {
+      const trimmed = text.trim();
+      if (!(trimmed.startsWith('{') || trimmed.startsWith('['))) return null;
+      try { return JSON.stringify(JSON.parse(trimmed), null, 2); } catch { return null; }
     }
 
     function closeMsgDetailModal() {
@@ -6937,6 +7051,11 @@
         case 'showMsgDetail': {
           const fullText = actionEl.dataset.fullText;
           if (fullText) showMsgDetailModal(fullText);
+          break;
+        }
+        case 'showToolDetail': {
+          const entry = toolDetailCache.get(actionEl.dataset.toolKey);
+          if (entry) showToolDetailModal(entry.toolName, entry.toolInput);
           break;
         }
         case 'viewAgentLogFromMsg': {
