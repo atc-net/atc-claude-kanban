@@ -5749,6 +5749,16 @@
 
       if (document.querySelector('.modal-overlay.visible')) return;
 
+      // Don't hijack browser/OS shortcuts. Single-key bindings below match on
+      // e.key alone, so without this guard Ctrl+F/Ctrl+A/Ctrl+R/Ctrl+P etc. would
+      // fire board actions and preventDefault the native behaviour. Ctrl+D is the
+      // only Ctrl combo this board owns; Shift combos carry no ctrl/meta/alt and
+      // pass through.
+      const isOwnedCtrlCombo = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === 'd' || e.key === 'D');
+      if ((e.ctrlKey || e.metaKey || e.altKey) && !isOwnedCtrlCombo) {
+        return;
+      }
+
       if (e.key === '[') {
         e.preventDefault();
         toggleSidebar();
