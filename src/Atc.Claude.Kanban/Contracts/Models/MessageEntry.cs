@@ -78,4 +78,12 @@ public sealed class MessageEntry
     [JsonPropertyName("systemLabel")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SystemLabel { get; set; }
+
+    /// <summary>
+    /// Gets or sets the captured AskUserQuestion questions and selected answers
+    /// when this tool_use entry is an AskUserQuestion call. Null otherwise.
+    /// </summary>
+    [JsonPropertyName("answerPayload")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AnswerPayload? AnswerPayload { get; set; }
 }
