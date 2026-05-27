@@ -717,6 +717,8 @@ public sealed class SessionService
         string? slug = null;
         string? parentSessionId = null;
         string? customTitle = null;
+        string? aiTitle = null;
+        string? agentName = null;
         long fileLength = 0;
 
         try
@@ -737,7 +739,7 @@ public sealed class SessionService
                     continue;
                 }
 
-                ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref slug, ref parentSessionId, ref customTitle);
+                ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref slug, ref parentSessionId, ref customTitle, ref aiTitle, ref agentName);
             }
         }
         catch (IOException)
@@ -764,7 +766,7 @@ public sealed class SessionService
             GitBranch = gitBranch,
             Slug = slug,
             ParentSessionId = parentSessionId,
-            CustomTitle = customTitle,
+            CustomTitle = customTitle ?? aiTitle ?? agentName,
         };
     }
 
@@ -834,7 +836,9 @@ public sealed class SessionService
         ref string? gitBranch,
         ref string? slug,
         ref string? parentSessionId,
-        ref string? customTitle)
+        ref string? customTitle,
+        ref string? aiTitle,
+        ref string? agentName)
     {
         if (line.Length == 0 || line[0] != '{')
         {
@@ -871,18 +875,53 @@ public sealed class SessionService
                 parentSessionId = sidEl.GetString();
             }
 
-            if (customTitle is null &&
-                root.TryGetProperty("type", out var typeEl) &&
-                typeEl.GetString() == "custom-title" &&
-                root.TryGetProperty("customTitle", out var ctEl))
+            if (root.TryGetProperty("type", out var typeEl))
             {
-                customTitle = ctEl.GetString();
+                ExtractTitleField(root, typeEl.GetString(), ref customTitle, ref aiTitle, ref agentName);
             }
         }
         catch (JsonException)
         {
             // Skip malformed lines
         }
+    }
+
+    // Background "claude agents" sessions emit ai-title/agent-name records instead of
+    // a user-set custom-title; capture all three so the caller can apply priority
+    // custom-title > ai-title > agent-name.
+    private static void ExtractTitleField(
+        JsonElement root,
+        string? entryType,
+        ref string? customTitle,
+        ref string? aiTitle,
+        ref string? agentName)
+    {
+        if (customTitle is null && entryType == "custom-title")
+        {
+            customTitle = ReadTitleValue(root, "customTitle");
+        }
+        else if (aiTitle is null && entryType == "ai-title")
+        {
+            aiTitle = ReadTitleValue(root, "aiTitle");
+        }
+        else if (agentName is null && entryType == "agent-name")
+        {
+            agentName = ReadTitleValue(root, "agentName");
+        }
+    }
+
+    private static string? ReadTitleValue(
+        JsonElement root,
+        string propertyName)
+    {
+        if (root.TryGetProperty(propertyName, out var valueEl) &&
+            valueEl.GetString() is { Length: > 0 } value &&
+            value[0] != '<')
+        {
+            return value;
+        }
+
+        return null;
     }
 
     private async Task<string?> ReadOriginalPathAsync(

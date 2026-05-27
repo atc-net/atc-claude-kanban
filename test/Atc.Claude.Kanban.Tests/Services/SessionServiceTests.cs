@@ -309,4 +309,56 @@ public sealed class SessionServiceTests : IDisposable
         session.Pending.Should().Be(0);
         session.InProgress.Should().Be(0);
     }
+
+    [Fact]
+    public async Task GetSessions_UsesAiTitleWhenNoCustomTitle()
+    {
+        // Arrange — a background-agent session emits ai-title/agent-name but no custom-title.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-bg";
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", cwd = "/repo", message = new { role = "user", content = "Hi" } }),
+            JsonSerializer.Serialize(new { type = "agent-name", agentName = "explorer-bot" }),
+            JsonSerializer.Serialize(new { type = "ai-title", aiTitle = "Investigate flaky test" }));
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert — ai-title wins over agent-name when no custom-title is present.
+        sessions.Should().HaveCount(1);
+        sessions[0].Name.Should().Be("Investigate flaky test");
+    }
+
+    [Fact]
+    public async Task GetSessions_PrefersCustomTitleOverAiTitle()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-renamed";
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", cwd = "/repo", message = new { role = "user", content = "Hi" } }),
+            JsonSerializer.Serialize(new { type = "ai-title", aiTitle = "Auto title" }),
+            JsonSerializer.Serialize(new { type = "custom-title", customTitle = "My Rename" }));
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert — the user's custom-title takes priority over the ai-title.
+        sessions.Should().HaveCount(1);
+        sessions[0].Name.Should().Be("My Rename");
+    }
 }
