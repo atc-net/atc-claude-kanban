@@ -49,6 +49,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithName("GetToolStats")
             .WithDescription("Retrieve aggregated tool usage statistics for a session.")
             .WithSummary("Retrieve tool statistics for a session.");
+
+        group
+            .MapGet("/{sessionId}/usage", GetUsage)
+            .WithName("GetUsage")
+            .WithDescription("Retrieve token/cost usage for a session and its subagents.")
+            .WithSummary("Retrieve usage breakdown for a session.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SessionInfo>>> GetSessions(
@@ -136,5 +142,16 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
         return stats is null
             ? TypedResults.NotFound()
             : TypedResults.Ok(stats);
+    }
+
+    internal static async Task<Results<Ok<UsageResponse>, NotFound>> GetUsage(
+        [FromServices] UsageService usageService,
+        [AsParameters] SessionIdParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var usage = await usageService.GetUsageAsync(parameters.SessionId, cancellationToken);
+        return usage is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(usage);
     }
 }
