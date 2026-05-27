@@ -3,44 +3,53 @@
 Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.com/en/docs/claude-code) agent tasks, sessions, and subagents through a browser-based board.
 
 <p align="center">
-  <img src="docs/cli-started.png" alt="CLI startup" width="500">
-</p>
-
-<p align="center">
   <img src="docs/overview-dark.png" alt="Dashboard overview — dark theme" width="900">
 </p>
 
-<p align="center">
-  <img src="docs/UI-white.png" alt="Dashboard — light theme" width="900">
-</p>
+**Board & tasks**
 
-- 📊 **Real-time Kanban board** — tasks flow through Pending → In Progress → Completed as Claude works
-- 📈 **Timeline view** — horizontal bar chart showing task durations, colored by status, with hover tooltips
-- 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
-- 📦 **Auto-archive** — stale sessions (>7 days, no active tasks) collapse into an "Archived" section
-- 🤖 **Agent team support** — color-coded team members, owner filtering, member badges
-- 🗂️ **Project grouping** — sidebar sessions grouped by project under collapsible headers showing active/total counts
-- 📌 **Session pinning** — pin important sessions to a collapsible group at the top of the sidebar (persisted)
-- 🧩 **Subagent visibility** — see active subagents with agent descriptions, names, and copy-to-clipboard prompts
+- 📊 **Real-time Kanban board** — tasks flow Pending → In Progress → Completed as Claude works
+- 📈 **Timeline view** — horizontal bars of task durations, colored by status, with hover tooltips
+- 🖱️ **Drag-drop** — move tasks between columns by dragging
 - 🔗 **Task dependencies** — visual blockedBy/blocks relationships with smart badge clearing
-- 📡 **Server-Sent Events** — instant updates via file watching, no polling
-- 💬 **Session message log** — conversation transcript with full tool-argument detail (incl. MCP tools), AskUserQuestion answers, and user image attachments
-- 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
-- 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
-- 🧮 **Context-window meter** — per-session bar showing how full the context window is (200K, or 1M inferred for large sessions)
-- 💵 **Usage breakdown** — per-session modal splitting token usage and cost across the lead session and each subagent, by model
-- 🔧 **Tool statistics** — per-session modal of tool-call counts with success / failed / rejected breakdown and output-impact share
-- 🖱️ **Drag-drop** — reorder tasks between kanban columns by dragging
-- 📓 **Scratchpad** — per-session quick notes with localStorage persistence and a sidebar badge for sessions with notes
-- 🔧 **Open in editor** — click file paths in the message log to open in VS Code
-- ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
-- 🌙 **Dark/light themes** — system preference detection
-- 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
-- 📝 **Plan viewer** — view and open Claude Code plans with Mermaid.js diagram rendering
-- 🔌 **Auto-port discovery** — automatically finds an available port when the default is taken
-- 🔄 **Auto-update** — checks NuGet for new versions on startup and updates automatically
+- 📦 **Auto-archive** — stale sessions (>7 days, no active tasks) collapse into an "Archived" section
 - 🚫 **Session dismiss** — temporarily hide sessions from the active list without deleting them
-- ⚡ **Smart polling** — skips polling when the browser tab is hidden, catches up on focus
+
+**Sessions & sidebar**
+
+- 🗂️ **Project grouping** — sessions grouped by project under collapsible headers with active/total counts
+- 📌 **Session pinning** — pin sessions to a collapsible group at the top (persisted)
+- 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
+- 🧮 **Context-window meter** — per-session bar showing how full the context window is (200K, or 1M inferred)
+- 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
+- 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
+- 📓 **Scratchpad** — per-session notes with localStorage persistence and a sidebar badge
+
+**Insight panels**
+
+- 💬 **Session message log** — transcript with full tool-argument detail (incl. MCP), AskUserQuestion answers, and image attachments
+- 💵 **Usage breakdown** — token/cost split across the lead session and each subagent, by model
+- 🔧 **Tool statistics** — tool-call counts with success / failed / rejected breakdown and output-impact share
+- 📝 **Plan viewer** — view and open Claude Code plans with Mermaid.js diagram rendering
+
+**Agents & teams**
+
+- 🤖 **Agent teams** — color-coded team members, owner filtering, member badges
+- 🧩 **Subagent visibility** — active subagents with descriptions, names, and copy-to-clipboard prompts
+
+**Live & real-time**
+
+- 📡 **Server-Sent Events** — instant updates via file watching, no polling
+- ⚡ **Smart polling** — skips polling when the tab is hidden, catches up on focus
+- 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
+- ✏️ **Open in editor** — click file paths in the message log to open in VS Code
+
+**Interface & platform**
+
+- ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
+- 🌙 **Dark / light themes** — system preference detection
+- 🔌 **Auto-port discovery** — finds an available port when the default is taken
+- 🔄 **Auto-update** — checks NuGet for new versions on startup
 
 ## 📋 Requirements
 
@@ -74,6 +83,10 @@ atc-claude-kanban --no-update-check
 ```
 
 Then open your browser to `http://localhost:3456` and watch your Claude Code tasks in real time.
+
+<p align="center">
+  <img src="docs/cli-started.png" alt="CLI startup banner" width="500">
+</p>
 
 > **Auto-port:** When using the default port and it's already in use, the tool automatically tries up to 10 consecutive ports (3456, 3457, ...). When `--port` is specified explicitly, the tool fails fast.
 
@@ -131,11 +144,11 @@ When Claude Code spawns agent teams, the dashboard shows:
 - Task counts per agent
 
 <p align="center">
-  <img src="docs/session-info-dark.png" alt="Team session info modal" width="900">
+  <img src="docs/session-info-dark.png" alt="Team session info modal showing members and per-member task counts" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/team-board-dark.png" alt="Team session board with subagents footer" width="900">
+  <img src="docs/team-board-dark.png" alt="Team session board with owner-coloured tasks and a subagents footer" width="900">
 </p>
 
 ### 🧩 Subagents
@@ -166,7 +179,7 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Click a message to open a detail modal with a fullscreen toggle for wide tool outputs
 
 <p align="center">
-  <img src="docs/msg-detail-fullscreen-dark.png" alt="Message detail modal in fullscreen" width="900">
+  <img src="docs/msg-detail-dark.png" alt="AskUserQuestion answers rendered in the message detail modal" width="900">
 </p>
 
 ### ℹ️ Session Info
@@ -203,13 +216,29 @@ Each session row shows a **context-window bar** — the latest turn's prompt siz
 
 The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant** — the lead session plus each subagent, each with its model. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
 
+<p align="center">
+  <img src="docs/usage-modal-dark.png" alt="Session usage modal with per-subagent model breakdown" width="900">
+</p>
+
 ### 🔧 Tool Statistics
 
 The **Tool Statistics** modal (bar-chart icon in the session info modal) aggregates every tool call in the session into a sortable table — per-tool counts with **success / failed / rejected** outcomes and an output-impact share, plus summary chips. "Rejected" counts user-denied permission prompts (detected from the JSONL `toolUseResult`).
 
+<p align="center">
+  <img src="docs/tool-stats-dark.png" alt="Tool statistics modal" width="900">
+</p>
+
 ### 🗂️ Project Grouping & Pinning
 
 Sidebar sessions are grouped by project under collapsible headers. Each header shows an **active/total** count (e.g. `2/5`, active part in green) and a project-view button. **Pin** any session via its pin icon to lift it into a collapsible "Pinned" group at the top. Collapsed groups and pins persist in `localStorage`.
+
+### 🌗 Themes
+
+Dark and light themes follow your system preference and can be toggled with the header icon (or `T`); the choice persists across reloads.
+
+<p align="center">
+  <img src="docs/UI-white.png" alt="Dashboard overview — light theme" width="900">
+</p>
 
 ### ⌨️ Keyboard Shortcuts
 
