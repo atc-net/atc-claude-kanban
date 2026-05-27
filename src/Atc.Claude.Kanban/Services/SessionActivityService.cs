@@ -76,12 +76,24 @@ public sealed class SessionActivityService
         string sessionId,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"tokens:{sessionId}";
         var jsonlPath = FindSessionJsonlPath(sessionId);
-        if (jsonlPath is null)
-        {
-            return null;
-        }
+        return jsonlPath is null
+            ? null
+            : await GetTokenUsageForPathAsync(jsonlPath, cancellationToken);
+    }
+
+    /// <summary>
+    /// Accumulates token usage from an explicit transcript path (used for subagent
+    /// transcripts), cached by file modification time.
+    /// </summary>
+    /// <param name="jsonlPath">Absolute path to the JSONL transcript.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The accumulated token usage (empty when the file cannot be read).</returns>
+    public async Task<SessionTokenUsage> GetTokenUsageForPathAsync(
+        string jsonlPath,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"tokens-path:{jsonlPath}";
 
         DateTime lastModifiedUtc;
         try
@@ -90,7 +102,7 @@ public sealed class SessionActivityService
         }
         catch (IOException)
         {
-            return null;
+            return new SessionTokenUsage();
         }
 
         if (cache.TryGetValue(cacheKey, out CachedTokenUsage? cached) &&

@@ -3185,6 +3185,40 @@
     .context-bar-label .ctx-low { color: var(--success); }
     .context-bar-label .ctx-medium { color: var(--warning); }
     .context-bar-label .ctx-high { color: var(--accent); }
+    .usage-context {
+      margin-bottom: 14px;
+    }
+    .usage-context-head {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+    }
+    .usage-context-head .ctx-low { color: var(--success); font-weight: 600; }
+    .usage-context-head .ctx-medium { color: var(--warning); font-weight: 600; }
+    .usage-context-head .ctx-high { color: var(--accent); font-weight: 600; }
+    .tool-stats-table tr.usage-total td {
+      border-top: 1px solid var(--border);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .tool-stats-table tr.usage-lead-row td {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .tool-stats-table tr.usage-subheader td {
+      padding-top: 12px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      text-align: left;
+      border-bottom: none;
+    }
+    .usage-agent-label {
+      padding-left: 14px;
+      border-left: 2px solid var(--team);
+      color: var(--text-secondary);
+    }
   </style>
 </head>
 <body>
@@ -5692,6 +5726,104 @@
       if (overlay) overlay.classList.remove('visible');
     }
 
+    // ── Usage / model-stats modal ──────────────────────────────────
+    function formatTokens(n) {
+      const value = n || 0;
+      if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+      if (value >= 1000) return `${Math.round(value / 1000)}k`;
+      return String(value);
+    }
+
+    function formatModelName(model) {
+      if (!model) return '—';
+      const stripped = model.replace(/^claude-/, '');
+      const parts = stripped.split('-');
+      const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      // Drop date-stamp segments (e.g. "20251001") so "haiku-4-5-20251001" → "Haiku 4.5".
+      const version = parts.slice(1).filter(part => part.length < 6).join('.');
+      return version ? `${name} ${version}` : name;
+    }
+
+    function ensureUsageOverlay() {
+      let overlay = document.getElementById('usage-modal');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'usage-modal';
+        overlay.className = 'modal-overlay';
+        overlay.dataset.action = 'closeUsageModal';
+        overlay.innerHTML = `<div class="modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Session Usage</h3>
+            <button class="modal-close" data-action="closeUsageModal">&times;</button>
+          </div>
+          <div id="usage-body" class="tool-stats-body"></div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" data-action="closeUsageModal">Close</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+      }
+      return overlay;
+    }
+
+    async function showUsageModal(sessionId) {
+      const overlay = ensureUsageOverlay();
+      const body = document.getElementById('usage-body');
+      body.innerHTML = '<div style="color:var(--text-secondary)">Loading…</div>';
+      overlay.classList.add('visible');
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/usage`);
+        if (!res.ok) {
+          body.innerHTML = '<div style="color:var(--text-secondary)">No usage data available.</div>';
+          return;
+        }
+        renderUsage(await res.json());
+      } catch (err) {
+        log.error('[usage] failed to load', err);
+        body.innerHTML = '<div style="color:var(--text-secondary)">Failed to load usage.</div>';
+      }
+    }
+
+    function renderUsage(data) {
+      const body = document.getElementById('usage-body');
+      if (!body) return;
+      const ctx = data.contextTokens || 0;
+      let ctxHtml = '';
+      if (ctx > 0) {
+        const limit = contextWindowLimit(ctx);
+        const pct = Math.min(100, Math.round((ctx / limit) * 100));
+        const level = pct >= 80 ? 'ctx-high' : pct >= 50 ? 'ctx-medium' : 'ctx-low';
+        ctxHtml = `<div class="usage-context">
+          <div class="usage-context-head">Context now <span class="${level}">${pct}%</span> · ${formatTokens(ctx)} / ${limit >= 1000000 ? '1M' : '200k'}</div>
+          <div class="context-bar-track"><div class="context-bar-fill ${level}" style="width:${pct}%"></div></div>
+        </div>`;
+      }
+      const allRows = data.rows || [];
+      const lead = allRows.find((row) => row.kind === 'session');
+      const agents = allRows.filter((row) => row.kind === 'agent');
+      const rowHtml = (row, label, cssClass) => `<tr class="${cssClass}">
+        <td>${label}</td>
+        <td>${escapeHtml(formatModelName(row.model))}</td>
+        <td>${formatTokens(row.totalTokens)}</td>
+        <td>$${(row.costUsd || 0).toFixed(2)}</td>
+      </tr>`;
+      let bodyRows = '';
+      if (lead) {
+        bodyRows += rowHtml(lead, 'Lead session', 'usage-lead-row');
+      }
+      if (agents.length) {
+        bodyRows += `<tr class="usage-subheader"><td colspan="4">Subagents (${agents.length})</td></tr>`;
+        bodyRows += agents.map((row) => rowHtml(row, `<span class="usage-agent-label">${escapeHtml(row.label)}</span>`, '')).join('');
+      }
+      bodyRows += `<tr class="usage-total"><td>Total</td><td></td><td>${formatTokens(data.totalTokens)}</td><td>$${(data.totalCostUsd || 0).toFixed(2)}</td></tr>`;
+      body.innerHTML = ctxHtml + `<table class="tool-stats-table"><thead><tr><th>Participant</th><th>Model</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>${bodyRows}</tbody></table>`;
+    }
+
+    function closeUsageModal() {
+      const overlay = document.getElementById('usage-modal');
+      if (overlay) overlay.classList.remove('visible');
+    }
+
     // ── Drag-Drop Task Reordering ──────────────────────────────────
 
     document.addEventListener('dragstart', (e) => {
@@ -7001,6 +7133,7 @@
       // Action icons row (plan, copy, folder) — matching sidebar indicator style
       const actionIcons = [];
       actionIcons.push(`<span class="session-project-btn" data-action="showToolStats" data-session-id="${escapeHtml(session.id)}" title="Tool statistics" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>`);
+      actionIcons.push(`<span class="session-project-btn" data-action="showUsage" data-session-id="${escapeHtml(session.id)}" title="Token usage & cost" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg></span>`);
       if (planContent) {
         _pendingPlanContent = planContent;
         actionIcons.push(`<span class="plan-indicator" data-action="openPlanModal" title="View plan" style="cursor:pointer;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>`);
@@ -7513,6 +7646,8 @@
         case 'showToolStats': e.stopPropagation(); if (sessionId) showToolStatsModal(sessionId); break;
         case 'sortToolStats': sortToolStats(actionEl.dataset.key); break;
         case 'closeToolStatsModal': closeToolStatsModal(); break;
+        case 'showUsage': e.stopPropagation(); if (sessionId) showUsageModal(sessionId); break;
+        case 'closeUsageModal': closeUsageModal(); break;
         case 'toggleProjectGroup': toggleProjectGroup(actionEl.dataset.groupPath); break;
         case 'viewProject': e.stopPropagation(); filterByProject(actionEl.dataset.projectPath); break;
         case 'viewAgentLogFromMsg': {

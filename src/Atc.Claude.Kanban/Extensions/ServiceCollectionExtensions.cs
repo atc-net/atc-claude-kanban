@@ -37,6 +37,10 @@ public static class ServiceCollectionExtensions
             claudeDir,
             sp.GetRequiredService<IMemoryCache>()));
 
+        services.AddSingleton(sp => new UsageService(
+            sp.GetRequiredService<SessionActivityService>(),
+            sp.GetRequiredService<SubagentService>()));
+
         services.AddSingleton(sp => new SessionService(
             claudeDir,
             sp.GetRequiredService<IMemoryCache>(),
