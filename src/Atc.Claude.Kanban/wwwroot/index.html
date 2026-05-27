@@ -3104,6 +3104,62 @@
       color: var(--accent);
       font-weight: 600;
     }
+    .project-group-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px 5px;
+      margin-top: 4px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 11px;
+      color: var(--text-secondary);
+      letter-spacing: 0.03em;
+    }
+    .project-group-header:hover {
+      color: var(--text-primary);
+    }
+    .project-group-header .group-chevron {
+      flex-shrink: 0;
+      transition: transform 0.15s ease;
+    }
+    .project-group-header.collapsed .group-chevron {
+      transform: rotate(-90deg);
+    }
+    .project-group-header .group-name {
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-group-header .group-count {
+      margin-left: auto;
+      flex-shrink: 0;
+      background: var(--bg-hover);
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .project-group-header .group-count-active {
+      color: var(--success);
+      font-weight: 600;
+    }
+    .project-group-header .group-count-sep {
+      margin: 0 1px;
+      opacity: 0.5;
+    }
+    .project-group-header .project-view-btn {
+      display: inline-flex;
+      flex-shrink: 0;
+      color: var(--text-muted);
+    }
+    .project-group-header .project-view-btn:hover {
+      color: var(--accent);
+    }
+    .project-group-sessions.collapsed {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -3382,6 +3438,10 @@
     let previousTaskStatuses = new Map();
     const ARCHIVE_DAYS = 7;
     let archivedExpanded = localStorage.getItem('archivedExpanded') === 'true';
+    const collapsedProjectGroups = new Set();
+    try {
+      JSON.parse(localStorage.getItem('collapsedGroups') || '[]').forEach(path => collapsedProjectGroups.add(path));
+    } catch { /* ignore malformed persisted state */ }
     let currentView = localStorage.getItem('currentView') || 'kanban';
     let bulkDeleteSessionId = null; // Track session for bulk delete
     let ownerFilter = '';
@@ -4180,6 +4240,80 @@
       return `<div class="token-info"><span>${tokenDisplay} tokens</span><span class="${costClass}" title="Estimated cost based on token usage — not an actual charge">${costDisplay}</span></div>`;
     }
 
+    // A session counts as "active" when it has running work or live (thinking/waiting)
+    // activity. Mirrors upstream: an error state is not "active".
+    function isSessionActive(session) {
+      return session.inProgress > 0
+        || session.activeSubagentCount > 0
+        || session.activityStatus === 'thinking'
+        || session.activityStatus === 'waiting';
+    }
+
+    // Renders the non-archived sessions grouped by project, with collapsible headers
+    // showing an active/total count. Falls back to a flat list while searching or
+    // when no session has a project path.
+    function renderGroupedSessionsHtml(sessionsToRender) {
+      if (searchQuery) {
+        return sessionsToRender.map(session => renderSessionItem(session)).join('');
+      }
+
+      const groups = new Map();
+      const ungrouped = [];
+      for (const session of sessionsToRender) {
+        if (session.project) {
+          if (!groups.has(session.project)) groups.set(session.project, []);
+          groups.get(session.project).push(session);
+        } else {
+          ungrouped.push(session);
+        }
+      }
+
+      if (groups.size === 0) {
+        return sessionsToRender.map(session => renderSessionItem(session)).join('');
+      }
+
+      let html = '';
+      for (const [projectPath, projectSessions] of groups) {
+        html += renderProjectGroup(projectPath, projectSessions, projectPath.split(/[/\\]/).pop());
+      }
+      if (ungrouped.length > 0) {
+        html += renderProjectGroup('__ungrouped__', ungrouped, 'Ungrouped');
+      }
+      return html;
+    }
+
+    function renderProjectGroup(groupPath, groupSessions, label) {
+      const isCollapsed = collapsedProjectGroups.has(groupPath);
+      const escapedPath = escapeHtml(groupPath);
+      const activeCount = groupSessions.reduce((total, session) => total + (isSessionActive(session) ? 1 : 0), 0);
+      const countHtml = activeCount > 0
+        ? `<span class="group-count-active">${activeCount}</span><span class="group-count-sep">/</span>${groupSessions.length}`
+        : `${groupSessions.length}`;
+      const projectViewBtn = groupPath !== '__ungrouped__'
+        ? `<span class="project-view-btn" data-action="viewProject" data-project-path="${escapedPath}" title="Open project view — combined tasks from all sessions"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>`
+        : '';
+      return `
+        <div class="project-group-header${isCollapsed ? ' collapsed' : ''}" data-action="toggleProjectGroup" data-group-path="${escapedPath}" title="${escapedPath}">
+          <svg class="group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="group-name">${escapeHtml(label)}</span>
+          <span class="group-count" title="${activeCount} active / ${groupSessions.length} total">${countHtml}</span>
+          ${projectViewBtn}
+        </div>
+        <div class="project-group-sessions${isCollapsed ? ' collapsed' : ''}">
+          ${groupSessions.map(session => renderSessionItem(session)).join('')}
+        </div>`;
+    }
+
+    function toggleProjectGroup(groupPath) {
+      if (!groupPath) return;
+      if (collapsedProjectGroups.has(groupPath)) collapsedProjectGroups.delete(groupPath);
+      else collapsedProjectGroups.add(groupPath);
+      try {
+        localStorage.setItem('collapsedGroups', JSON.stringify([...collapsedProjectGroups]));
+      } catch { /* ignore quota errors */ }
+      renderSessions();
+    }
+
     function renderSessions() {
       // Update project dropdown
       updateProjectDropdown();
@@ -4289,7 +4423,7 @@
         return;
       }
 
-      sessionsList.innerHTML = activeSessions.map(s => renderSessionItem(s)).join('');
+      sessionsList.innerHTML = renderGroupedSessionsHtml(activeSessions);
 
       // Append archived section if there are stale sessions
       if (archivedSessions.length > 0) {
@@ -4543,7 +4677,8 @@
     }
 
     function getSessionItems() {
-      return Array.from(sessionsList.querySelectorAll('.session-item'));
+      return Array.from(sessionsList.querySelectorAll('.session-item'))
+        .filter(el => !el.closest('.project-group-sessions.collapsed'));
     }
 
     function selectSessionByIndex(idx) {
@@ -7332,6 +7467,8 @@
         case 'showToolStats': e.stopPropagation(); if (sessionId) showToolStatsModal(sessionId); break;
         case 'sortToolStats': sortToolStats(actionEl.dataset.key); break;
         case 'closeToolStatsModal': closeToolStatsModal(); break;
+        case 'toggleProjectGroup': toggleProjectGroup(actionEl.dataset.groupPath); break;
+        case 'viewProject': e.stopPropagation(); filterByProject(actionEl.dataset.projectPath); break;
         case 'viewAgentLogFromMsg': {
           const sid = actionEl.dataset.sessionId;
           const agentDesc = actionEl.dataset.agentDesc;
