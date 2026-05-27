@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.15.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.14.0...v1.15.0) (2026-05-27)
+
+
+### Features
+
+* add per-session tool statistics modal ([19837b3](https://github.com/atc-net/atc-claude-kanban/commit/19837b39970c73ca248011fa1f1dbf8e6c0a5e29))
+* add session usage and per-subagent model-stats modal ([ba6659c](https://github.com/atc-net/atc-claude-kanban/commit/ba6659cc0b0ce9b5888c9ba733a82bd531756dc2))
+* capture and show AskUserQuestion answers in message detail ([7b54db3](https://github.com/atc-net/atc-claude-kanban/commit/7b54db31214bd0d9d0ca8a78b5fbee991d1e78d9))
+* fall back to ai-title/agent-name for session titles ([89d1c0e](https://github.com/atc-net/atc-claude-kanban/commit/89d1c0e6b652a46cd9594b2b7ecf1666ca71872b))
+* group sidebar sessions by project with active counts ([ae3b6e6](https://github.com/atc-net/atc-claude-kanban/commit/ae3b6e60047a5ccf32777d533be020ab75dcc8e5))
+* pin sessions to a collapsible group at the top of the sidebar ([17d7add](https://github.com/atc-net/atc-claude-kanban/commit/17d7add8d0748bb4ee4534b3c3e51b0ecb818975))
+* show full tool args in message detail modal ([e8daaad](https://github.com/atc-net/atc-claude-kanban/commit/e8daaad787c3eebd4ecff16446f8d6bbf9a09eb7))
+* show per-session context-window usage bar ([e644d6a](https://github.com/atc-net/atc-claude-kanban/commit/e644d6a1efea20bbcf4651b00994a5da7d47a50c))
+* show user image attachments in message panel ([d9d09a2](https://github.com/atc-net/atc-claude-kanban/commit/d9d09a27160cf75dcd5f8e0d0b5ae1fd07b73a5f))
+
+
+### Bug Fixes
+
+* drop duplicate tool name from session log entries ([8f92133](https://github.com/atc-net/atc-claude-kanban/commit/8f9213342736eaf076d601bc9da3001366aa3dfe))
+* let Ctrl/Cmd/Alt shortcuts fall through to the browser ([40db946](https://github.com/atc-net/atc-claude-kanban/commit/40db946c32eb630a6f1e952e2d1feeb7ec6f4e8c))
+
 ## [1.14.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.13.0...v1.14.0) (2026-05-13)
 
 
