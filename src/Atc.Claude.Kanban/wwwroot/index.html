@@ -3160,6 +3160,28 @@
     .project-group-sessions.collapsed {
       display: none;
     }
+    .project-group-header.pinned-group .group-name {
+      color: var(--accent);
+    }
+    .project-group-header.pinned-group .pinned-icon {
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .session-pin-btn {
+      cursor: pointer;
+      color: var(--text-muted);
+      opacity: 0.45;
+      display: inline-flex;
+      align-items: center;
+    }
+    .session-pin-btn:hover {
+      opacity: 1;
+      color: var(--text-secondary);
+    }
+    .session-pin-btn.pinned {
+      opacity: 1;
+      color: var(--accent);
+    }
     .context-bar {
       margin-top: 6px;
     }
@@ -3500,6 +3522,10 @@
     const collapsedProjectGroups = new Set();
     try {
       JSON.parse(localStorage.getItem('collapsedGroups') || '[]').forEach(path => collapsedProjectGroups.add(path));
+    } catch { /* ignore malformed persisted state */ }
+    const pinnedSessionIds = new Set();
+    try {
+      JSON.parse(localStorage.getItem('pinnedSessions') || '[]').forEach(id => pinnedSessionIds.add(id));
     } catch { /* ignore malformed persisted state */ }
     let currentView = localStorage.getItem('currentView') || 'kanban';
     let bulkDeleteSessionId = null; // Track session for bulk delete
@@ -4253,6 +4279,7 @@
       const archivedClass = isArchived ? ' archived' : '';
       const activity = session.activityStatus || 'idle';
       const statusClass = activity !== 'idle' ? ` status-${activity}` : '';
+      const pinned = pinnedSessionIds.has(session.id);
 
       return `
         <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass}${statusClass} ${isActive ? 'active' : ''}" title="${tooltip}">
@@ -4265,6 +4292,7 @@
             <span class="session-indicators">
               ${isTeam ? `<span class="team-badge" title="${memberCount} team members"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${memberCount}</span>` : ''}
               <span class="team-info-btn" data-action="showSessionInfoModal" data-session-id="${session.id}" title="View session info">ℹ</span>
+              <span class="session-pin-btn${pinned ? ' pinned' : ''}" data-action="togglePin" data-session-id="${session.id}" title="${pinned ? 'Unpin session' : 'Pin session'}"><svg width="11" height="11" viewBox="0 0 24 24" fill="${pinned ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.5-3V8a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v6L5 17z"/></svg></span>
               ${session.isCompleted ? `<span class="completed-badge" title="Completed (${session.peakTaskCount} tasks)">Done ${session.peakTaskCount}</span>` : ''}
               ${session.activeSubagentCount > 0 ? `<span class="subagent-badge" title="${session.activeSubagentCount} active subagent${session.activeSubagentCount !== 1 ? 's' : ''} (${session.subagentCount} total)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>${session.activeSubagentCount}</span>` : ''}
               ${session.hasPlan ? `<span class="plan-indicator" data-action="openPlanForSession" data-session-id="${session.slug || session.id}" title="View plan"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>` : ''}
@@ -4394,6 +4422,32 @@
       renderSessions();
     }
 
+    function togglePin(sessionId) {
+      if (!sessionId) return;
+      if (pinnedSessionIds.has(sessionId)) pinnedSessionIds.delete(sessionId);
+      else pinnedSessionIds.add(sessionId);
+      try {
+        localStorage.setItem('pinnedSessions', JSON.stringify([...pinnedSessionIds]));
+      } catch { /* ignore quota errors */ }
+      renderSessions();
+    }
+
+    // Renders the pinned sessions in a collapsible group at the top of the sidebar.
+    function renderPinnedGroup(pinnedSessions) {
+      if (!pinnedSessions.length) return '';
+      const isCollapsed = collapsedProjectGroups.has('__pinned__');
+      return `
+        <div class="project-group-header pinned-group${isCollapsed ? ' collapsed' : ''}" data-action="toggleProjectGroup" data-group-path="__pinned__">
+          <svg class="group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg class="pinned-icon" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-1.5-3V8a2 2 0 0 0-2-2h-7a2 2 0 0 0-2 2v6L5 17z"/></svg>
+          <span class="group-name">Pinned</span>
+          <span class="group-count">${pinnedSessions.length}</span>
+        </div>
+        <div class="project-group-sessions${isCollapsed ? ' collapsed' : ''}">
+          ${pinnedSessions.map(session => renderSessionItem(session)).join('')}
+        </div>`;
+    }
+
     function renderSessions() {
       // Update project dropdown
       updateProjectDropdown();
@@ -4503,7 +4557,9 @@
         return;
       }
 
-      sessionsList.innerHTML = renderGroupedSessionsHtml(activeSessions);
+      const pinnedSessions = activeSessions.filter(s => pinnedSessionIds.has(s.id));
+      const unpinnedSessions = activeSessions.filter(s => !pinnedSessionIds.has(s.id));
+      sessionsList.innerHTML = renderPinnedGroup(pinnedSessions) + renderGroupedSessionsHtml(unpinnedSessions);
 
       // Append archived section if there are stale sessions
       if (archivedSessions.length > 0) {
@@ -7650,6 +7706,7 @@
         case 'closeUsageModal': closeUsageModal(); break;
         case 'toggleProjectGroup': toggleProjectGroup(actionEl.dataset.groupPath); break;
         case 'viewProject': e.stopPropagation(); filterByProject(actionEl.dataset.projectPath); break;
+        case 'togglePin': e.stopPropagation(); togglePin(sessionId); break;
         case 'viewAgentLogFromMsg': {
           const sid = actionEl.dataset.sessionId;
           const agentDesc = actionEl.dataset.agentDesc;
