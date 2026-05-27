@@ -33,7 +33,9 @@ public sealed record JsonlMetadata
     public string? ParentSessionId { get; init; }
 
     /// <summary>
-    /// Gets the custom title set via Claude Code's /rename command.
+    /// Gets the resolved session title, in priority order: the user's /rename
+    /// custom-title, else an ai-title or agent-name emitted by background
+    /// "claude agents" sessions.
     /// </summary>
     public string? CustomTitle { get; init; }
 }
