@@ -38,6 +38,14 @@ public sealed class SessionTokenUsage
         => InputTokens + OutputTokens + CacheCreationTokens + CacheReadTokens;
 
     /// <summary>
+    /// Gets or sets the context size of the most recent turn (its prompt tokens:
+    /// input + cache read + cache creation), used to gauge how full the context
+    /// window currently is. Distinct from the cumulative totals above.
+    /// </summary>
+    [JsonPropertyName("contextTokens")]
+    public long ContextTokens { get; set; }
+
+    /// <summary>
     /// Gets or sets the estimated cost in USD.
     /// </summary>
     [JsonPropertyName("costUsd")]

@@ -225,5 +225,9 @@ public sealed class SessionActivityServiceTests : IDisposable
         usage.CacheReadTokens.Should().Be(500);
         usage.Model.Should().Be("claude-opus-4-6");
         usage.CostUsd.Should().BeGreaterThan(0);
+
+        // Context size reflects the latest turn only (input + cache read + cache creation),
+        // not the cumulative totals: 150 + 300 + 20 = 470.
+        usage.ContextTokens.Should().Be(470);
     }
 }

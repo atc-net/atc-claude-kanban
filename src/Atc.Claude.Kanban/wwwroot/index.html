@@ -3160,6 +3160,31 @@
     .project-group-sessions.collapsed {
       display: none;
     }
+    .context-bar {
+      margin-top: 6px;
+    }
+    .context-bar-track {
+      height: 3px;
+      background: var(--bg-hover);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .context-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+    .context-bar-fill.ctx-low { background: var(--success); }
+    .context-bar-fill.ctx-medium { background: var(--warning); }
+    .context-bar-fill.ctx-high { background: var(--accent); }
+    .context-bar-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .context-bar-label .ctx-low { color: var(--success); }
+    .context-bar-label .ctx-medium { color: var(--warning); }
+    .context-bar-label .ctx-high { color: var(--accent); }
   </style>
 </head>
 <body>
@@ -4217,6 +4242,7 @@
             <span class="progress-text">${session.isCompleted ? 'Done' : `${session.completed}/${total}`}</span>
           </div>
           ${renderActivityBadge(activity)}
+          ${renderContextBar(session.tokenUsage)}
           ${renderTokenBar(session.tokenUsage)}
           <div class="session-time">${formatDate(session.modifiedAt)}</div>
         </button>
@@ -4227,6 +4253,26 @@
       if (activity === 'idle') return '';
       const labels = { thinking: '⚙ Thinking', waiting: '⏳ Waiting for input', error: '⚠ Error' };
       return `<span class="activity-badge ${activity}">${labels[activity] || activity}</span>`;
+    }
+
+    // The JSONL doesn't record the model's context-window size, so infer it: a
+    // 200K-window session never exceeds 200K, so anything larger is a 1M-window session.
+    function contextWindowLimit(contextTokens) {
+      return contextTokens > 200000 ? 1000000 : 200000;
+    }
+
+    function renderContextBar(tokenUsage) {
+      const ctx = (tokenUsage && tokenUsage.contextTokens) || 0;
+      if (ctx <= 0) return '';
+      const limit = contextWindowLimit(ctx);
+      const pct = Math.min(100, Math.round((ctx / limit) * 100));
+      const level = pct >= 80 ? 'ctx-high' : pct >= 50 ? 'ctx-medium' : 'ctx-low';
+      const k = ctx >= 1000 ? `${Math.round(ctx / 1000)}k` : String(ctx);
+      const limitLabel = limit >= 1000000 ? '1M' : '200k';
+      return `<div class="context-bar" title="Context window: ${ctx.toLocaleString()} of ${limit.toLocaleString()} tokens">
+        <div class="context-bar-track"><div class="context-bar-fill ${level}" style="width:${pct}%"></div></div>
+        <div class="context-bar-label"><span class="${level}">${pct}%</span> · ${k}/${limitLabel}</div>
+      </div>`;
     }
 
     function renderTokenBar(tokenUsage) {
