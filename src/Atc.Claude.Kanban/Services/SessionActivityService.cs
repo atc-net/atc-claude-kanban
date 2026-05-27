@@ -454,28 +454,22 @@ public sealed class SessionActivityService
                 return;
             }
 
-            if (usageEl.TryGetProperty("input_tokens", out var inputEl) &&
-                inputEl.ValueKind == JsonValueKind.Number)
-            {
-                usage.InputTokens = usage.InputTokens + inputEl.GetInt64();
-            }
+            var blockInput = ReadLong(usageEl, "input_tokens");
+            var blockOutput = ReadLong(usageEl, "output_tokens");
+            var blockCacheCreation = ReadLong(usageEl, "cache_creation_input_tokens");
+            var blockCacheRead = ReadLong(usageEl, "cache_read_input_tokens");
 
-            if (usageEl.TryGetProperty("output_tokens", out var outputEl) &&
-                outputEl.ValueKind == JsonValueKind.Number)
-            {
-                usage.OutputTokens = usage.OutputTokens + outputEl.GetInt64();
-            }
+            usage.InputTokens += blockInput;
+            usage.OutputTokens += blockOutput;
+            usage.CacheCreationTokens += blockCacheCreation;
+            usage.CacheReadTokens += blockCacheRead;
 
-            if (usageEl.TryGetProperty("cache_creation_input_tokens", out var cacheCreateEl) &&
-                cacheCreateEl.ValueKind == JsonValueKind.Number)
+            // Context size of a turn = its prompt tokens (input + cache). Overwrite each
+            // turn so the final value reflects the most recent (current) context size.
+            var blockContext = blockInput + blockCacheRead + blockCacheCreation;
+            if (blockContext > 0)
             {
-                usage.CacheCreationTokens = usage.CacheCreationTokens + cacheCreateEl.GetInt64();
-            }
-
-            if (usageEl.TryGetProperty("cache_read_input_tokens", out var cacheReadEl) &&
-                cacheReadEl.ValueKind == JsonValueKind.Number)
-            {
-                usage.CacheReadTokens = usage.CacheReadTokens + cacheReadEl.GetInt64();
+                usage.ContextTokens = blockContext;
             }
         }
         catch (JsonException)
@@ -483,6 +477,13 @@ public sealed class SessionActivityService
             // Skip malformed lines
         }
     }
+
+    private static long ReadLong(
+        JsonElement element,
+        string propertyName)
+        => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetInt64()
+            : 0;
 
     private static string? ExtractModel(string line)
     {
