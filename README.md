@@ -19,12 +19,17 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 - 🔔 **Desktop notifications** — browser notifications + sound chime when tasks complete
 - 📦 **Auto-archive** — stale sessions (>7 days, no active tasks) collapse into an "Archived" section
 - 🤖 **Agent team support** — color-coded team members, owner filtering, member badges
+- 🗂️ **Project grouping** — sidebar sessions grouped by project under collapsible headers showing active/total counts
+- 📌 **Session pinning** — pin important sessions to a collapsible group at the top of the sidebar (persisted)
 - 🧩 **Subagent visibility** — see active subagents with agent descriptions, names, and copy-to-clipboard prompts
 - 🔗 **Task dependencies** — visual blockedBy/blocks relationships with smart badge clearing
 - 📡 **Server-Sent Events** — instant updates via file watching, no polling
-- 💬 **Session message log** — view conversation transcript (user/assistant/tool calls) in a side panel
+- 💬 **Session message log** — conversation transcript with full tool-argument detail (incl. MCP tools), AskUserQuestion answers, and user image attachments
 - 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
 - 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
+- 🧮 **Context-window meter** — per-session bar showing how full the context window is (200K, or 1M inferred for large sessions)
+- 💵 **Usage breakdown** — per-session modal splitting token usage and cost across the lead session and each subagent, by model
+- 🔧 **Tool statistics** — per-session modal of tool-call counts with success / failed / rejected breakdown and output-impact share
 - 🖱️ **Drag-drop** — reorder tasks between kanban columns by dragging
 - 📓 **Scratchpad** — per-session quick notes with localStorage persistence and a sidebar badge for sessions with notes
 - 🔧 **Open in editor** — click file paths in the message log to open in VS Code
@@ -149,9 +154,11 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 Toggle with the chat icon in the toolbar or `Shift+L`:
 
 - View the conversation transcript (user prompts, assistant responses, tool calls)
-- Tool parameter badges and expandable tool results
+- Tool parameter badges; click any tool entry to open its **full arguments** in the detail modal (including `mcp__*` tools, with object/array args shown as formatted JSON)
+- **AskUserQuestion** entries show the question, the chosen answer, and each option's description
+- **User image attachments** appear as chips that open a full-size preview
 - Read tool calls show inline offset/limit annotations (e.g., `L45 +30`)
-- Clickable file paths open in VS Code
+- Clickable file paths open in VS Code (from the message log and the tool detail modal)
 - Subagent log drill-in (click agent tool calls to view subagent conversation)
 - Infinite scroll with pagination for long conversations
 - Resizable panel (drag the left edge)
@@ -168,7 +175,7 @@ Click the info button on any session to view detailed metadata:
 
 - Session ID, project path, git branch, and description
 - Working directory (CWD) shown when it differs from the project root
-- Plan viewer, copy path, and open folder actions
+- Plan viewer, copy path, open folder, **Tool Statistics**, and **Session Usage** actions
 - **Dismiss button** — temporarily hide a session from the active list (in-memory only, restores on reload or in "All" view)
 
 ### 🎯 Activity Status
@@ -178,7 +185,7 @@ Sessions show real-time activity indicators in the sidebar:
 | Status | Indicator | Condition |
 |--------|-----------|-----------|
 | **Thinking** | Green border | Claude is actively working (tool calls, processing) |
-| **Waiting** | Amber border | Claude is waiting for user input (permission prompt) |
+| **Waiting** | Amber border | An unanswered tool call sits at the JSONL tail (e.g. a permission or input prompt) |
 | **Error** | Red border | Recent error in session |
 | **Idle** | No indicator | No activity for 15+ seconds |
 
@@ -189,6 +196,20 @@ Each session shows accumulated token usage and estimated cost:
 - Token count (e.g., "45.9M tokens") and cost (e.g., "$76.19")
 - Color-coded by cost: green (<$0.50), yellow (<$2), orange (<$5), red (>=$5)
 - Model-aware pricing: Opus ($15/$75), Sonnet ($3/$15), Haiku ($0.80/$4) per 1M tokens
+
+### 🧮 Context Window & Usage
+
+Each session row shows a **context-window bar** — the latest turn's prompt size (input + cache) as a percentage of the model's window, color-coded green → amber → orange. The window size isn't recorded in the transcript, so it's inferred: 200K by default, or 1M once a session's context exceeds 200K.
+
+The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant** — the lead session plus each subagent, each with its model. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
+
+### 🔧 Tool Statistics
+
+The **Tool Statistics** modal (bar-chart icon in the session info modal) aggregates every tool call in the session into a sortable table — per-tool counts with **success / failed / rejected** outcomes and an output-impact share, plus summary chips. "Rejected" counts user-denied permission prompts (detected from the JSONL `toolUseResult`).
+
+### 🗂️ Project Grouping & Pinning
+
+Sidebar sessions are grouped by project under collapsible headers. Each header shows an **active/total** count (e.g. `2/5`, active part in green) and a project-view button. **Pin** any session via its pin icon to lift it into a collapsible "Pinned" group at the top. Collapsed groups and pins persist in `localStorage`.
 
 ### ⌨️ Keyboard Shortcuts
 
