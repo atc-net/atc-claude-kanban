@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.15.0...v1.15.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* correct session usage cost accounting and add per-model breakdown ([a127e7a](https://github.com/atc-net/atc-claude-kanban/commit/a127e7a7e6f4050745a20c6da0f63f5c8bd4f67c))
+
 ## [1.15.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.14.0...v1.15.0) (2026-05-27)
 
 
