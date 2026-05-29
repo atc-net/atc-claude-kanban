@@ -9,4 +9,5 @@ public sealed record UsageRow(
     [property: JsonPropertyName("kind")] string Kind,
     [property: JsonPropertyName("model")] string? Model,
     [property: JsonPropertyName("totalTokens")] long TotalTokens,
-    [property: JsonPropertyName("costUsd")] double CostUsd);
+    [property: JsonPropertyName("costUsd")] double CostUsd,
+    [property: JsonPropertyName("models")] IReadOnlyList<ModelUsage> Models);

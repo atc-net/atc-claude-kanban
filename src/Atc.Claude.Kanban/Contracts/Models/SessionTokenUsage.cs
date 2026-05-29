@@ -52,8 +52,17 @@ public sealed class SessionTokenUsage
     public double CostUsd { get; set; }
 
     /// <summary>
-    /// Gets or sets the model name used for cost calculation.
+    /// Gets or sets the dominant model name (the model with the most tokens),
+    /// used as the participant's headline label for cost calculation.
     /// </summary>
     [JsonPropertyName("model")]
     public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the per-model breakdown of tokens and cost. Contains one
+    /// entry when the session used a single model, or several when it switched
+    /// models mid-run. Ordered by descending token count.
+    /// </summary>
+    [JsonPropertyName("models")]
+    public IReadOnlyList<ModelUsage> Models { get; set; } = [];
 }

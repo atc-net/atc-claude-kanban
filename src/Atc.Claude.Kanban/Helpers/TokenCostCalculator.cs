@@ -6,13 +6,13 @@ namespace Atc.Claude.Kanban.Helpers;
 /// </summary>
 public static class TokenCostCalculator
 {
-    private const double OpusInputPrice = 15.0;
-    private const double OpusOutputPrice = 75.0;
+    private const double OpusInputPrice = 5.0;
+    private const double OpusOutputPrice = 25.0;
     private const double SonnetInputPrice = 3.0;
     private const double SonnetOutputPrice = 15.0;
-    private const double HaikuInputPrice = 0.80;
-    private const double HaikuOutputPrice = 4.0;
-    private const double CacheCreationMultiplier = 0.25;
+    private const double HaikuInputPrice = 1.0;
+    private const double HaikuOutputPrice = 5.0;
+    private const double CacheCreationMultiplier = 1.25;
     private const double CacheReadMultiplier = 0.10;
     private const double PerMillionDivisor = 1_000_000.0;
 

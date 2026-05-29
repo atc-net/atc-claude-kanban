@@ -3042,6 +3042,15 @@
       max-width: 640px;
       width: 92vw;
     }
+    #usage-modal .modal {
+      max-width: 720px;
+      width: 94vw;
+    }
+    .usage-table th,
+    .usage-table td {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
     .tool-stats-body {
       padding: 16px;
       overflow-y: auto;
@@ -3223,10 +3232,6 @@
       font-weight: 600;
       color: var(--text-primary);
     }
-    .tool-stats-table tr.usage-lead-row td {
-      font-weight: 600;
-      color: var(--text-primary);
-    }
     .tool-stats-table tr.usage-subheader td {
       padding-top: 12px;
       font-size: 10px;
@@ -3235,6 +3240,18 @@
       color: var(--text-muted);
       text-align: left;
       border-bottom: none;
+    }
+    .usage-table {
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-table th:not(:first-child),
+    .usage-table td:not(:first-child) {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .usage-table th:nth-child(2),
+    .usage-table td:nth-child(2) {
+      text-align: left;
     }
     .usage-agent-label {
       padding-left: 14px;
@@ -5857,22 +5874,51 @@
       const allRows = data.rows || [];
       const lead = allRows.find((row) => row.kind === 'session');
       const agents = allRows.filter((row) => row.kind === 'agent');
-      const rowHtml = (row, label, cssClass) => `<tr class="${cssClass}">
-        <td>${label}</td>
-        <td>${escapeHtml(formatModelName(row.model))}</td>
-        <td>${formatTokens(row.totalTokens)}</td>
-        <td>$${(row.costUsd || 0).toFixed(2)}</td>
-      </tr>`;
+      // Cache read is ~98% of a session's raw token count, so a single total hides the
+      // mix. Break each participant's usage into the four billed components per model,
+      // grouped under a counted subheader (Lead session / Subagents) like /usage.
+      const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+      const modelsOf = (row) => (row.models && row.models.length)
+        ? row.models
+        : [{ model: row.model, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: row.costUsd }];
+      const modelRowHtml = (model, participantLabel) => {
+        totals.input += model.inputTokens || 0;
+        totals.output += model.outputTokens || 0;
+        totals.cacheRead += model.cacheReadTokens || 0;
+        totals.cacheWrite += model.cacheCreationTokens || 0;
+        return `<tr>
+          <td>${participantLabel || ''}</td>
+          <td>${escapeHtml(formatModelName(model.model))}</td>
+          <td>${formatTokens(model.inputTokens || 0)}</td>
+          <td>${formatTokens(model.outputTokens || 0)}</td>
+          <td>${formatTokens(model.cacheReadTokens || 0)}</td>
+          <td>${formatTokens(model.cacheCreationTokens || 0)}</td>
+          <td>$${(model.costUsd || 0).toFixed(2)}</td>
+        </tr>`;
+      };
+      const subheader = (text) => `<tr class="usage-subheader"><td colspan="7">${text}</td></tr>`;
       let bodyRows = '';
       if (lead) {
-        bodyRows += rowHtml(lead, 'Lead session', 'usage-lead-row');
+        const leadModels = modelsOf(lead);
+        bodyRows += subheader(`Lead sessions (${leadModels.length})`);
+        bodyRows += leadModels.map((model) => modelRowHtml(model, '')).join('');
       }
       if (agents.length) {
-        bodyRows += `<tr class="usage-subheader"><td colspan="4">Subagents (${agents.length})</td></tr>`;
-        bodyRows += agents.map((row) => rowHtml(row, `<span class="usage-agent-label">${escapeHtml(row.label)}</span>`, '')).join('');
+        bodyRows += subheader(`Subagents (${agents.length})`);
+        bodyRows += agents.map((row) => modelsOf(row)
+          .map((model, index) => modelRowHtml(model, index === 0 ? `<span class="usage-agent-label">${escapeHtml(row.label)}</span>` : ''))
+          .join('')).join('');
       }
-      bodyRows += `<tr class="usage-total"><td>Total</td><td></td><td>${formatTokens(data.totalTokens)}</td><td>$${(data.totalCostUsd || 0).toFixed(2)}</td></tr>`;
-      body.innerHTML = ctxHtml + `<table class="tool-stats-table"><thead><tr><th>Participant</th><th>Model</th><th>Tokens</th><th>Cost</th></tr></thead><tbody>${bodyRows}</tbody></table>`;
+      bodyRows += `<tr class="usage-total">
+        <td>Total</td><td></td>
+        <td>${formatTokens(totals.input)}</td>
+        <td>${formatTokens(totals.output)}</td>
+        <td>${formatTokens(totals.cacheRead)}</td>
+        <td>${formatTokens(totals.cacheWrite)}</td>
+        <td>$${(data.totalCostUsd || 0).toFixed(2)}</td>
+      </tr>`;
+      const header = '<tr><th>Participant</th><th>Model</th><th>In</th><th>Out</th><th>Cache R</th><th>Cache W</th><th>Cost</th></tr>';
+      body.innerHTML = ctxHtml + `<table class="tool-stats-table usage-table"><thead>${header}</thead><tbody>${bodyRows}</tbody></table>`;
     }
 
     function closeUsageModal() {

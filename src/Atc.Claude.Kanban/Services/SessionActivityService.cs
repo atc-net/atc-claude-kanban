@@ -385,8 +385,9 @@ public sealed class SessionActivityService
         string filePath,
         CancellationToken cancellationToken)
     {
-        var usage = new SessionTokenUsage();
-        string? model = null;
+        var perModel = new Dictionary<string, ModelAccumulator>(StringComparer.Ordinal);
+        var seenMessageIds = new HashSet<string>(StringComparer.Ordinal);
+        long contextTokens = 0;
 
         try
         {
@@ -411,16 +412,10 @@ public sealed class SessionActivityService
                 // Quick check: skip lines without "usage" to avoid parsing every line
                 if (!line.Contains("\"usage\"", StringComparison.Ordinal))
                 {
-                    // Still extract model from assistant entries
-                    if (model is null && line.Contains("\"model\"", StringComparison.Ordinal))
-                    {
-                        model = ExtractModel(line);
-                    }
-
                     continue;
                 }
 
-                AccumulateFromLine(line, usage, ref model);
+                AccumulateFromLine(line, perModel, seenMessageIds, ref contextTokens);
             }
         }
         catch (IOException)
@@ -428,21 +423,66 @@ public sealed class SessionActivityService
             // Return what we have
         }
 
-        usage.Model = model;
-        usage.CostUsd = TokenCostCalculator.Calculate(
-            usage.InputTokens,
-            usage.OutputTokens,
-            usage.CacheCreationTokens,
-            usage.CacheReadTokens,
-            model);
+        return BuildUsage(perModel, contextTokens);
+    }
+
+    private static SessionTokenUsage BuildUsage(
+        Dictionary<string, ModelAccumulator> perModel,
+        long contextTokens)
+    {
+        var usage = new SessionTokenUsage { ContextTokens = contextTokens };
+
+        var models = new List<ModelUsage>();
+        string? dominantModel = null;
+        long dominantTokens = -1;
+
+        foreach (var (model, accumulator) in perModel)
+        {
+            usage.InputTokens += accumulator.InputTokens;
+            usage.OutputTokens += accumulator.OutputTokens;
+            usage.CacheCreationTokens += accumulator.CacheCreationTokens;
+            usage.CacheReadTokens += accumulator.CacheReadTokens;
+
+            var modelName = model.Length == 0 ? null : model;
+            var modelTokens = accumulator.TotalTokens;
+            var modelCost = TokenCostCalculator.Calculate(
+                accumulator.InputTokens,
+                accumulator.OutputTokens,
+                accumulator.CacheCreationTokens,
+                accumulator.CacheReadTokens,
+                modelName);
+
+            usage.CostUsd += modelCost;
+            models.Add(new ModelUsage(
+                modelName,
+                accumulator.InputTokens,
+                accumulator.OutputTokens,
+                accumulator.CacheCreationTokens,
+                accumulator.CacheReadTokens,
+                modelTokens,
+                modelCost));
+
+            if (modelTokens > dominantTokens)
+            {
+                dominantTokens = modelTokens;
+                dominantModel = modelName;
+            }
+        }
+
+        usage.Model = dominantModel;
+        usage.Models = models
+            .Where(static model => model.TotalTokens > 0)
+            .OrderByDescending(static model => model.TotalTokens)
+            .ToList();
 
         return usage;
     }
 
     private static void AccumulateFromLine(
         string line,
-        SessionTokenUsage usage,
-        ref string? model)
+        Dictionary<string, ModelAccumulator> perModel,
+        HashSet<string> seenMessageIds,
+        ref long contextTokens)
     {
         try
         {
@@ -454,34 +494,47 @@ public sealed class SessionActivityService
                 return;
             }
 
-            if (model is null &&
-                msgEl.TryGetProperty("model", out var modelEl) &&
-                modelEl.ValueKind == JsonValueKind.String)
-            {
-                model = modelEl.GetString();
-            }
-
-            if (!msgEl.TryGetProperty("usage", out var usageEl))
+            if (IsDuplicateMessage(msgEl, seenMessageIds) ||
+                !msgEl.TryGetProperty("usage", out var usageEl))
             {
                 return;
             }
+
+            var model = msgEl.TryGetProperty("model", out var modelEl) &&
+                        modelEl.ValueKind == JsonValueKind.String
+                ? modelEl.GetString() ?? string.Empty
+                : string.Empty;
 
             var blockInput = ReadLong(usageEl, "input_tokens");
             var blockOutput = ReadLong(usageEl, "output_tokens");
             var blockCacheCreation = ReadLong(usageEl, "cache_creation_input_tokens");
             var blockCacheRead = ReadLong(usageEl, "cache_read_input_tokens");
 
-            usage.InputTokens += blockInput;
-            usage.OutputTokens += blockOutput;
-            usage.CacheCreationTokens += blockCacheCreation;
-            usage.CacheReadTokens += blockCacheRead;
+            // One assistant message can span several internal API requests, listed in
+            // a nested "iterations" array. The top-level input/output only reflect the
+            // last request, so sum input/output across iterations to recover the billed
+            // amount. Cache read/creation are per-message (identical across iterations),
+            // so they are kept from the top-level and not summed.
+            var (countedInput, countedOutput) = SumIterationsOrDefault(usageEl, blockInput, blockOutput);
 
-            // Context size of a turn = its prompt tokens (input + cache). Overwrite each
-            // turn so the final value reflects the most recent (current) context size.
+            if (!perModel.TryGetValue(model, out var accumulator))
+            {
+                accumulator = new ModelAccumulator();
+                perModel[model] = accumulator;
+            }
+
+            accumulator.InputTokens += countedInput;
+            accumulator.OutputTokens += countedOutput;
+            accumulator.CacheCreationTokens += blockCacheCreation;
+            accumulator.CacheReadTokens += blockCacheRead;
+
+            // Context size of a turn = its prompt tokens (input + cache) for a single
+            // request — use the top-level values (not the iteration sum) so the bar
+            // reflects the current window, not the cumulative billed input.
             var blockContext = blockInput + blockCacheRead + blockCacheCreation;
             if (blockContext > 0)
             {
-                usage.ContextTokens = blockContext;
+                contextTokens = blockContext;
             }
         }
         catch (JsonException)
@@ -490,34 +543,67 @@ public sealed class SessionActivityService
         }
     }
 
+    /// <summary>
+    /// Returns true when the message has already been counted. A multi-block assistant
+    /// turn is written as several JSONL lines that all repeat the same message.id and
+    /// usage object; each unique id must be counted once to avoid inflating totals.
+    /// </summary>
+    private static bool IsDuplicateMessage(
+        JsonElement msgEl,
+        HashSet<string> seenMessageIds)
+        => msgEl.TryGetProperty("id", out var idEl) &&
+           idEl.ValueKind == JsonValueKind.String &&
+           idEl.GetString() is { Length: > 0 } messageId &&
+           !seenMessageIds.Add(messageId);
+
+    /// <summary>
+    /// Sums input/output tokens across a usage block's nested "iterations" array
+    /// (each iteration is one internal API request). Falls back to the supplied
+    /// top-level values when there is no multi-iteration array.
+    /// </summary>
+    private static (long Input, long Output) SumIterationsOrDefault(
+        JsonElement usageEl,
+        long topLevelInput,
+        long topLevelOutput)
+    {
+        if (!usageEl.TryGetProperty("iterations", out var iterationsEl) ||
+            iterationsEl.ValueKind != JsonValueKind.Array ||
+            iterationsEl.GetArrayLength() <= 1)
+        {
+            return (topLevelInput, topLevelOutput);
+        }
+
+        long input = 0;
+        long output = 0;
+        foreach (var iteration in iterationsEl.EnumerateArray())
+        {
+            input += ReadLong(iteration, "input_tokens");
+            output += ReadLong(iteration, "output_tokens");
+        }
+
+        return (input, output);
+    }
+
+    private sealed class ModelAccumulator
+    {
+        public long InputTokens { get; set; }
+
+        public long OutputTokens { get; set; }
+
+        public long CacheCreationTokens { get; set; }
+
+        public long CacheReadTokens { get; set; }
+
+        public long TotalTokens
+            => InputTokens + OutputTokens + CacheCreationTokens + CacheReadTokens;
+    }
+
     private static long ReadLong(
         JsonElement element,
         string propertyName)
         => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Number
             ? value.GetInt64()
             : 0;
-
-    private static string? ExtractModel(string line)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(line);
-            var root = doc.RootElement;
-
-            if (root.TryGetProperty("message", out var msgEl) &&
-                msgEl.TryGetProperty("model", out var modelEl) &&
-                modelEl.ValueKind == JsonValueKind.String)
-            {
-                return modelEl.GetString();
-            }
-        }
-        catch (JsonException)
-        {
-            // Skip
-        }
-
-        return null;
-    }
 
     private string? FindSessionJsonlPath(string sessionId)
     {

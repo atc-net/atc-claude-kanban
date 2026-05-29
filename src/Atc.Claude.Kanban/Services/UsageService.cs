@@ -70,5 +70,5 @@ public sealed class UsageService
         string kind,
         SessionTokenUsage usage,
         string? fallbackModel)
-        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd);
+        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd, usage.Models);
 }
