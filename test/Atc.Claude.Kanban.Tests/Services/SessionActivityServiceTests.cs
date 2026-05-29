@@ -230,4 +230,105 @@ public sealed class SessionActivityServiceTests : IDisposable
         // not the cumulative totals: 150 + 300 + 20 = 470.
         usage.ContextTokens.Should().Be(470);
     }
+
+    [Fact]
+    public async Task GetTokenUsage_CountsRepeatedMessageIdOnce()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectDir = Path.Combine(tempDir, "projects", "hash-dedup");
+        Directory.CreateDirectory(projectDir);
+
+        // A multi-block assistant turn is written as several JSONL lines that all repeat
+        // the same message.id and the same usage object. Only one must be counted.
+        var duplicatedLine = JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new
+            {
+                id = "msg_dup_1",
+                model = "claude-opus-4-6",
+                content = new[] { new { type = "text", text = "x" } },
+                usage = new
+                {
+                    input_tokens = 100,
+                    output_tokens = 50,
+                    cache_creation_input_tokens = 10,
+                    cache_read_input_tokens = 200,
+                },
+            },
+        });
+
+        var jsonl = string.Join("\n", duplicatedLine, duplicatedLine, duplicatedLine);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, "session-dedup.jsonl"),
+            jsonl,
+            cancellationToken);
+
+        var service = new SessionActivityService(tempDir, cache);
+
+        var usage = await service.GetTokenUsageAsync("session-dedup", cancellationToken);
+
+        usage.Should().NotBeNull();
+        usage!.InputTokens.Should().Be(100);
+        usage.OutputTokens.Should().Be(50);
+        usage.CacheCreationTokens.Should().Be(10);
+        usage.CacheReadTokens.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task GetTokenUsage_SplitsUsageAndCostByModel()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectDir = Path.Combine(tempDir, "projects", "hash-multi");
+        Directory.CreateDirectory(projectDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                message = new
+                {
+                    id = "msg_opus",
+                    model = "claude-opus-4-8",
+                    content = new[] { new { type = "text", text = "lead" } },
+                    usage = new { input_tokens = 1000, output_tokens = 500, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 },
+                },
+            }),
+            JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                message = new
+                {
+                    id = "msg_haiku",
+                    model = "claude-haiku-4-5",
+                    content = new[] { new { type = "text", text = "bg" } },
+                    usage = new { input_tokens = 10, output_tokens = 5, cache_creation_input_tokens = 0, cache_read_input_tokens = 0 },
+                },
+            }));
+
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, "session-multi.jsonl"),
+            jsonl,
+            cancellationToken);
+
+        var service = new SessionActivityService(tempDir, cache);
+
+        var usage = await service.GetTokenUsageAsync("session-multi", cancellationToken);
+
+        usage.Should().NotBeNull();
+        usage!.Models.Should().HaveCount(2);
+
+        // Dominant model (most tokens) drives the headline label.
+        usage.Model.Should().Be("claude-opus-4-8");
+        usage.Models[0].Model.Should().Be("claude-opus-4-8");
+
+        var haiku = usage.Models.Single(model => model.Model == "claude-haiku-4-5");
+        haiku.TotalTokens.Should().Be(15);
+
+        // Each model is priced with its own rate, so the total equals the sum of the parts.
+        var opus = usage.Models.Single(model => model.Model == "claude-opus-4-8");
+        (opus.CostUsd + haiku.CostUsd).Should().BeApproximately(usage.CostUsd, 1e-9);
+    }
 }

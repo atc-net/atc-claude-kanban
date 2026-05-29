@@ -12,7 +12,7 @@ A .NET 10 dotnet tool that serves a real-time Kanban dashboard for monitoring Cl
 # Build (Release mode enforces all analyzer rules as errors)
 dotnet build -c Release
 
-# Run tests (113 tests across 11 test classes)
+# Run tests (115 tests across 11 test classes)
 dotnet test
 
 # Run the dashboard locally
@@ -91,9 +91,9 @@ scripts/
 - **Embedded static files** via `ManifestEmbeddedFileProvider`
 - **JSONL tail-reading** — 64KB adaptive buffer for messages, 32KB for activity status; seeks from end to avoid loading entire files
 - **Activity status derivation** — uses conversation entry timestamps (not file mtime) to detect thinking/waiting/idle/error states; hooks writing progress entries don't reset the timer
-- **Token cost calculation** — model-aware pricing (Opus $15/$75, Sonnet $3/$15, Haiku $0.80/$4 per 1M tokens) with cache creation/read multipliers
+- **Token cost calculation** — model-aware pricing (Opus 4.5+ $5/$25, Sonnet $3/$15, Haiku 4.5 $1/$5 per 1M tokens) with cache creation (1.25×) and cache read (0.10×) multipliers
 - **Context-window size** — the latest turn's prompt tokens (`SessionTokenUsage.ContextTokens` = input + cache_read + cache_creation of the last `usage` block, overwritten per turn). The model's window size isn't in the transcript, so the frontend infers it: 200K, or 1M once context exceeds 200K
-- **Per-participant usage** — `UsageService` composes the lead session's usage with each subagent's transcript usage (`SessionActivityService.GetTokenUsageForPathAsync`) for the Session Usage modal
+- **Per-participant usage** — `UsageService` composes the lead session's usage with each subagent's transcript usage (`SessionActivityService.GetTokenUsageForPathAsync`) for the Session Usage modal. Usage is bucketed per model so a session that switches models mid-run (e.g. Opus 4.7→4.8) is priced per model and shows a `models[]` breakdown under the participant row
 - **Tool statistics** — `ToolStatsService` scans the session JSONL once, correlating `tool_use` with `tool_result`; "rejected" is detected from the line-level `toolUseResult` string (not the block content)
 
 ## Known Pitfalls
@@ -116,6 +116,9 @@ scripts/
 - **Context tokens are latest-turn, not cumulative** — `ContextTokens` is overwritten per `usage` block so it ends on the most recent turn; the cumulative `InputTokens`/`CacheReadTokens` totals are much larger (cache read repeats the context every turn) and must NOT be used for the context-window bar
 - **Context-window size is inferred, not recorded** — the JSONL has no window-size field, so the frontend assumes 200K and treats anything over 200K as a 1M session. A 1M session below 200K is mislabeled until it crosses the threshold; the real value would require the plugin's context-status data, which we do not ship
 - **No rate-limit data** — upstream's rate-limit footer reads `rate_limits` from a plugin-written context-status source we don't have; there is no rate-limit info in the JSONL transcripts, so that feature is not portable as-is
+- **Usage blocks must be deduped by `message.id`** — a multi-block assistant turn is written as several JSONL lines that all repeat the same `message.id` and the same `usage` object; counting every line double-counts (often 2×+). `AccumulateTokenUsageAsync` skips a line once its `message.id` is seen. Lines without a `message.id` (e.g. synthetic test fixtures) are always counted
+- **Input/output come from `usage.iterations[]`** — one assistant message can span several internal API requests; the top-level `usage.input_tokens`/`output_tokens` only reflect the last one, so they undercount input massively (160×+ in practice). When `usage.iterations[]` has >1 entry, input/output are summed across it. Cache read/creation are per-message (identical across iterations) and are taken from the top-level, NOT summed. `ContextTokens` also uses the top-level input (one turn's prompt), not the iteration sum
+- **Cost is a list-price estimate, ~20–30% under Claude's `/usage`** — the dedup + per-model + iterations fixes bring the estimate from ~4× over to within ~30% (erring low). The residual is mostly cache-creation tiering: `/usage` bills far more expensive cache-*write* than the transcript's `cache_creation_input_tokens` (flat == nested 5m/1h) exposes, and cache-write costs 12.5× cache-read. That billing-pipeline detail is not in the JSONL, and `/usage` is itself an estimate captured at a different moment, so an exact match is not achievable from the transcript alone
 - **Session title fallback** — `SessionService.ExtractJsonlFields` resolves the title in priority order custom-title → ai-title → agent-name (the latter two are emitted by background "claude agents" sessions); values starting with `<` are skipped
 - **Keyboard shortcuts must not hijack modifier combos** — the global keydown handler matches single keys (`f`, `a`, `r`, `c`, `i`, `p`…); it returns early for Ctrl/Cmd/Alt combos (except the owned Ctrl+D) so browser shortcuts like Ctrl+F still work
 - **User image attachments are fetched lazily** — `MessageEntry.Images` carries only `{blockIndex, mediaType}`; bytes are served on demand by `GET /api/sessions/{id}/messages/{uuid}/image/{blockIndex}` so base64 data never bloats the message-list payload

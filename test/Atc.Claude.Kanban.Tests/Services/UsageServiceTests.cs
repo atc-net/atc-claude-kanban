@@ -79,6 +79,7 @@ public sealed class UsageServiceTests : IDisposable
         usage.Rows[0].Kind.Should().Be("session");
         usage.Rows[0].Label.Should().Be("Session");
         usage.Rows[0].Model.Should().Be("claude-opus-4-6");
+        usage.Rows[0].Models.Should().ContainSingle(model => model.Model == "claude-opus-4-6");
 
         var agentRow = usage.Rows[1];
         agentRow.Kind.Should().Be("agent");
