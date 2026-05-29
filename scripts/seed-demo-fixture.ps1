@@ -51,6 +51,7 @@ $s3 = '1a2b3c4d-0003-4003-8003-000000000003' # demo-api — Sonnet
 $s4 = '1a2b3c4d-0004-4004-8004-000000000004' # widget-dashboard — small
 
 $opus = 'claude-opus-4-7'
+$opus48 = 'claude-opus-4-8'
 $sonnet = 'claude-sonnet-4-6'
 $haiku = 'claude-haiku-4-5-20251001'
 
@@ -82,6 +83,8 @@ Write-Jsonl (Join-Path $projectsRoot "acme\$s1.jsonl") @(
     [ordered]@{ type = 'user'; timestamp = (Stamp 34); toolUseResult = [ordered]@{ questions = @([ordered]@{ question = 'How should expired coupons be handled at checkout?'; header = 'Expiry policy'; options = @([ordered]@{ label = 'Reject with message'; description = 'Block the order and tell the shopper the coupon expired.' }, [ordered]@{ label = 'Silently ignore'; description = 'Drop the coupon and proceed at full price.' }) }); answers = [ordered]@{ 'How should expired coupons be handled at checkout?' = 'Reject with message' } }; message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_ask'; content = 'User selected: Reject with message' }) } },
     # A user turn with an image attachment (chip + preview).
     [ordered]@{ type = 'user'; uuid = 'u-img-001'; timestamp = (Stamp 33); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'text'; text = 'Here is the failing checkout screen:' }, [ordered]@{ type = 'image'; source = [ordered]@{ type = 'base64'; media_type = 'image/png'; data = $pngB64 } }) } },
+    # Mid-run model switch to Opus 4.8 — surfaces as a second row under "Lead sessions" in the Session Usage modal.
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 33); message = [ordered]@{ role = 'assistant'; model = $opus48; content = @([ordered]@{ type = 'text'; text = 'Switched to Opus 4.8 to finalize the review.' }); usage = (Usage 1800 350 2200 60000) } },
     # Final turn sets the current context size (~165k of 200k).
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 32); message = [ordered]@{ role = 'assistant'; model = $opus; content = @([ordered]@{ type = 'text'; text = 'Coupons now validate against Stripe with expiry handling.' }); usage = (Usage 5000 800 5000 155000) } }
 )

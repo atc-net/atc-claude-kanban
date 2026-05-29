@@ -208,13 +208,15 @@ Each session shows accumulated token usage and estimated cost:
 
 - Token count (e.g., "45.9M tokens") and cost (e.g., "$76.19")
 - Color-coded by cost: green (<$0.50), yellow (<$2), orange (<$5), red (>=$5)
-- Model-aware pricing: Opus ($15/$75), Sonnet ($3/$15), Haiku ($0.80/$4) per 1M tokens
+- Model-aware pricing: Opus 4.5+ ($5/$25), Sonnet ($3/$15), Haiku 4.5 ($1/$5) per 1M tokens, with cache-creation (1.25×) and cache-read (0.10×) multipliers
 
 ### 🧮 Context Window & Usage
 
 Each session row shows a **context-window bar** — the latest turn's prompt size (input + cache) as a percentage of the model's window, color-coded green → amber → orange. The window size isn't recorded in the transcript, so it's inferred: 200K by default, or 1M once a session's context exceeds 200K.
 
-The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant** — the lead session plus each subagent, each with its model. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
+The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant and model** — the lead session plus each subagent, grouped under counted "Lead sessions" / "Subagents" subheaders, with **input / output / cache-read / cache-write** columns per model. A session that switches models mid-run (e.g. Opus 4.7 → 4.8) is priced per model and shown as separate rows. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
+
+> Cost is a list-price estimate from the per-message `usage` blocks in the transcript; it typically lands ~20–30% under Claude Code's own `/usage` (cache-creation tiering isn't recorded in the JSONL).
 
 <p align="center">
   <img src="docs/usage-modal-dark.png" alt="Session usage modal with per-subagent model breakdown" width="900">
