@@ -2822,6 +2822,11 @@
       font-size: 11px;
     }
 
+    .msg-entry.msg-cmd .msg-text code {
+      font-size: 11px;
+      color: var(--accent);
+    }
+
     .msg-entry.msg-assistant {
       border-left: 3px solid var(--text-secondary);
     }
@@ -5539,15 +5544,29 @@
       if (!msgUserScrolledUp) messageList.scrollTop = messageList.scrollHeight;
     }
 
+    // Collapse a slash-command wrapper (<command-name>/foo</command-name> …) to a short
+    // readable preview. Only this well-defined Claude Code pattern is touched — arbitrary
+    // user text containing angle brackets (code, HTML) is left as-is.
+    function cleanMsgPreview(text) {
+      const raw = text || '';
+      const cmd = raw.match(/<command-name>([\s\S]*?)<\/command-name>/);
+      if (!cmd) return raw;
+      const args = raw.match(/<command-args>([\s\S]*?)<\/command-args>/);
+      const argText = args && args[1].trim() ? ` ${args[1].trim()}` : '';
+      return `${cmd[1].trim()}${argText}`.trim();
+    }
+
     function renderUserEntry(msg) {
-      const text = escapeHtml(msg.text || '');
+      const isCmd = /<command-name>/.test(msg.text || msg.fullText || '');
+      const text = escapeHtml(cleanMsgPreview(msg.text || ''));
       const ts = formatMsgTimestamp(msg.timestamp);
       const hasText = !!(msg.text || msg.fullText);
       const detailAttrs = hasText ? ` data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}"` : '';
       const queuedTag = msg.queued ? '<span class="msg-queued-tag">queued</span>' : '';
-      return `<div class="msg-entry msg-user${msg.queued ? ' msg-queued' : ''}"${detailAttrs}>
+      const textHtml = text ? (isCmd ? `<div class="msg-text"><code>${text}</code></div>` : `<div class="msg-text">${text}</div>`) : '';
+      return `<div class="msg-entry msg-user${msg.queued ? ' msg-queued' : ''}${isCmd ? ' msg-cmd' : ''}"${detailAttrs}>
         <div class="msg-role">You${queuedTag}</div>
-        ${text ? `<div class="msg-text">${text}</div>` : ''}
+        ${textHtml}
         ${renderUserAttachments(msg)}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;
@@ -5712,12 +5731,67 @@
       return overlay;
     }
 
+    // Friendly labels for the XML wrappers Claude Code uses around slash commands,
+    // command output, and notifications.
+    const MSG_TAG_LABELS = {
+      'command-name': 'Command', 'command-message': 'Command', 'command-args': 'Arguments',
+      'command-contents': 'Command input', 'local-command-stdout': 'Output',
+      'local-command-stderr': 'Error output', 'local-command-caveat': 'Note',
+      'task-notification': 'Task notification', 'task-id': 'Task', 'tool-use-id': 'Tool use',
+      'output-file': 'Output file', 'status': 'Status', 'summary': 'Summary',
+      'system-reminder': 'System reminder',
+    };
+
+    // Renders a message body that wraps content in simple <tag>…</tag> XML (slash
+    // commands, command output, notifications) as labelled blocks, recursing into
+    // nested tags. Returns null when the text contains no tags so the caller can
+    // fall back to plain text.
+    function renderMessageDetailHtml(text) {
+      const raw = text || '';
+      const tagRe = /<([a-zA-Z][\w-]*)>([\s\S]*?)<\/\1>/g;
+      const blocks = [];
+      let lastIndex = 0;
+      let matchedAny = false;
+      let m;
+      while ((m = tagRe.exec(raw)) !== null) {
+        matchedAny = true;
+        const between = raw.slice(lastIndex, m.index).trim();
+        if (between) blocks.push({ key: null, text: between });
+        blocks.push({ key: m[1], text: m[2].trim() });
+        lastIndex = tagRe.lastIndex;
+      }
+      if (!matchedAny) return null;
+      const trailing = raw.slice(lastIndex).trim();
+      if (trailing) blocks.push({ key: null, text: trailing });
+
+      return blocks.map((block) => {
+        if (!block.key) {
+          return block.text ? `<div class="tool-detail-block"><pre class="tool-detail-pre">${escapeHtml(block.text)}</pre></div>` : '';
+        }
+        const label = MSG_TAG_LABELS[block.key] || block.key;
+        let content;
+        if (!block.text) {
+          content = '<span style="color:var(--text-muted)">(empty)</span>';
+        } else {
+          const nested = renderMessageDetailHtml(block.text);
+          content = nested !== null ? nested : `<pre class="tool-detail-pre">${escapeHtml(block.text)}</pre>`;
+        }
+        return `<div class="tool-detail-block"><div class="tool-detail-key">${escapeHtml(label)}</div>${content}</div>`;
+      }).join('');
+    }
+
     function showMsgDetailModal(fullText) {
       const overlay = ensureMsgDetailOverlay();
       overlay.querySelector('.modal-title').textContent = 'Message Detail';
       const body = document.getElementById('msg-detail-body');
-      body.className = 'msg-detail-full';
-      body.textContent = fullText;
+      const structured = renderMessageDetailHtml(fullText);
+      if (structured) {
+        body.className = 'msg-detail-full msg-detail-structured';
+        body.innerHTML = structured;
+      } else {
+        body.className = 'msg-detail-full';
+        body.textContent = fullText;
+      }
       overlay.classList.add('visible');
     }
 
