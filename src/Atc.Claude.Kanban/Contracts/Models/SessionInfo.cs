@@ -150,4 +150,13 @@ public sealed class SessionInfo
     /// </summary>
     [JsonPropertyName("tokenUsage")]
     public SessionTokenUsage? TokenUsage { get; set; }
+
+    /// <summary>
+    /// Gets or sets the active session /goal condition, or null when there is no
+    /// unmet goal. Surfaced as a card subtitle and in the session-info modal; never
+    /// used as the display name (a user rename always takes precedence).
+    /// </summary>
+    [JsonPropertyName("goal")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Goal { get; set; }
 }
