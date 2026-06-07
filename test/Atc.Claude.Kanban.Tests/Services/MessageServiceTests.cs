@@ -630,6 +630,30 @@ public sealed class MessageServiceTests : IDisposable
     }
 
     [Fact]
+    public void ParseJsonlMessages_DoesNotSurfaceQueuedSystemNotificationAsUser()
+    {
+        // Arrange — a turn can enqueue more than typed prompts. A queued system
+        // notification (<task-notification>) must NOT render as a "You"/queued user
+        // message; it goes through the same filter and surfaces as a system entry.
+        var content = JsonSerializer.Serialize(new
+        {
+            type = "queue-operation",
+            operation = "enqueue",
+            timestamp = "2026-06-07T10:50:11Z",
+            sessionId = "abc",
+            content = "<task-notification>\n<status>failed</status>\n<summary>Background command failed</summary>\n</task-notification>",
+        });
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — surfaced as a system entry, never a queued user message
+        messages.Should().ContainSingle();
+        messages[0].Queued.Should().BeFalse();
+        messages[0].SystemLabel.Should().NotBeNull();
+    }
+
+    [Fact]
     public void ParseJsonlMessages_IgnoresNonEnqueueQueueOperation()
     {
         // Arrange — only "enqueue" operations carry a user prompt; other operations (e.g. dequeue) carry none.
