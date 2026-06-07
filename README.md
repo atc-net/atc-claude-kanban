@@ -17,9 +17,10 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 
 **Sessions & sidebar**
 
-- 🗂️ **Project grouping** — sessions grouped by project under collapsible headers with active/total counts
+- 🗂️ **Project grouping** — sessions grouped by project under collapsible headers with active/total counts; sections auto-expand when active work lands in them
 - 📌 **Session pinning** — pin sessions to a collapsible group at the top (persisted)
 - 🎯 **Activity status** — thinking/waiting/idle/error indicators per session, derived from JSONL
+- 🏁 **Session goals** — an active `/goal` condition surfaces as a card subtitle and in the session info modal
 - 🧮 **Context-window meter** — per-session bar showing how full the context window is (200K, or 1M inferred)
 - 💰 **Token & cost tracking** — accumulated token usage and model-aware cost per session
 - 🔍 **Fuzzy search** — across sessions, tasks, descriptions, and project paths
@@ -168,6 +169,9 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 
 - View the conversation transcript (user prompts, assistant responses, tool calls)
 - Tool parameter badges; click any tool entry to open its **full arguments** in the detail modal (including `mcp__*` tools, with object/array args shown as formatted JSON)
+- **Queued messages** — prompts queued mid-turn appear in the log with a `queued` badge (they aren't re-emitted as normal user lines, so they'd otherwise be invisible)
+- **Structured command & notification detail** — slash commands, command output, and task notifications render as labelled blocks in the detail modal instead of raw `<command-name>`/`<task-notification>` XML; the list collapses a slash command to its name
+- **Compaction collapse** — each `/compact` shows as a single expandable "Compacted" entry carrying the continuation summary, not several stacked markers
 - **AskUserQuestion** entries show the question, the chosen answer, and each option's description
 - **User image attachments** appear as chips that open a full-size preview
 - Read tool calls show inline offset/limit annotations (e.g., `L45 +30`)
@@ -179,6 +183,10 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Click a message to open a detail modal with a fullscreen toggle for wide tool outputs
 
 <p align="center">
+  <img src="docs/msg-log-dark.png" alt="Session log panel with tool icons, a queued prompt badge, and per-model assistant labels" width="900">
+</p>
+
+<p align="center">
   <img src="docs/msg-detail-dark.png" alt="AskUserQuestion answers rendered in the message detail modal" width="900">
 </p>
 
@@ -188,6 +196,7 @@ Click the info button on any session to view detailed metadata:
 
 - Session ID, project path, git branch, and description
 - Working directory (CWD) shown when it differs from the project root
+- **Active goal** — the session's current `/goal` condition, shown in full (a met or cleared goal disappears)
 - Plan viewer, copy path, open folder, **Tool Statistics**, and **Session Usage** actions
 - **Dismiss button** — temporarily hide a session from the active list (in-memory only, restores on reload or in "All" view)
 
@@ -232,7 +241,7 @@ The **Tool Statistics** modal (bar-chart icon in the session info modal) aggrega
 
 ### 🗂️ Project Grouping & Pinning
 
-Sidebar sessions are grouped by project under collapsible headers. Each header shows an **active/total** count (e.g. `2/5`, active part in green) and a project-view button. **Pin** any session via its pin icon to lift it into a collapsible "Pinned" group at the top. Collapsed groups and pins persist in `localStorage`.
+Sidebar sessions are grouped by project under collapsible headers. Each header shows an **active/total** count (e.g. `2/5`, active part in green) and a project-view button. A collapsed section **auto-expands** when newly-active work lands in it (and when you switch to the "Active Only" filter), so running sessions stay visible; idle sections stay collapsed. **Pin** any session via its pin icon to lift it into a collapsible "Pinned" group at the top. Collapsed groups and pins persist in `localStorage`.
 
 ### 🌗 Themes
 
