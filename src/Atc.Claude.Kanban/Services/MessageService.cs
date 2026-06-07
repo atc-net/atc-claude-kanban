@@ -566,11 +566,20 @@ public sealed class MessageService
             return;
         }
 
+        // Run queued text through the same skip/label pipeline a regular user message
+        // gets. A turn can enqueue more than typed prompts — slash commands, interrupt
+        // markers, and system notifications (e.g. <task-notification>) also land here,
+        // and must not be surfaced verbatim as "You" messages.
+        if (!ShouldEmitRegularUserEntry(root, text!, isMeta: false, timestamp, uuid, messages))
+        {
+            return;
+        }
+
         messages.Add(new MessageEntry
         {
             Type = "user",
             Timestamp = timestamp,
-            Text = Truncate(text, TextTruncateLength),
+            Text = Truncate(text!, TextTruncateLength),
             FullText = text,
             Uuid = uuid,
             Queued = true,
