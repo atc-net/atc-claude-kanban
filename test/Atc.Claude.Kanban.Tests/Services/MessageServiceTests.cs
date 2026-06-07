@@ -508,7 +508,8 @@ public sealed class MessageServiceTests : IDisposable
     [Fact]
     public void ParseJsonlMessages_FiltersSystemMessages()
     {
-        // Arrange — /clear should be skipped, /compact should become "Compacted" label
+        // Arrange — both the /clear and the /compact trigger are skipped (the latter is
+        // redundant with the inline compact-summary chip), leaving only the real messages.
         var content = string.Join(
             "\n",
             """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"Hello"}}""",
@@ -519,40 +520,61 @@ public sealed class MessageServiceTests : IDisposable
         // Act
         var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
 
-        // Assert — /clear is skipped, /compact becomes system label
-        messages.Should().HaveCount(3);
+        // Assert — /clear and /compact are both skipped
+        messages.Should().HaveCount(2);
         messages[0].Type.Should().Be("user");
         messages[0].Text.Should().Be("Hello");
         messages[0].SystemLabel.Should().BeNull();
 
         messages[1].Type.Should().Be("user");
-        messages[1].SystemLabel.Should().Be("Compacted");
-
-        messages[2].Type.Should().Be("user");
-        messages[2].Text.Should().Be("World");
-        messages[2].SystemLabel.Should().BeNull();
+        messages[1].Text.Should().Be("World");
+        messages[1].SystemLabel.Should().BeNull();
     }
 
     [Fact]
-    public void ParseJsonlMessages_DeduplicatesConsecutiveCompactedMessages()
+    public void ParseJsonlMessages_SkipsRedundantCompactStdoutEchoes()
     {
-        // Arrange — three consecutive compacted messages should be collapsed to one
+        // Arrange — the "Compacted …" stdout echoes are redundant with the inline
+        // isCompactSummary chip, so they are skipped entirely; only the real message remains.
         var content = string.Join(
             "\n",
             """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 5 messages</local-command-stdout>"}}""",
             """{"type":"user","timestamp":"2026-01-01T00:01:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 3 messages</local-command-stdout>"}}""",
-            """{"type":"user","timestamp":"2026-01-01T00:02:00Z","message":{"role":"user","content":"<local-command-stdout>Compacted 2 messages</local-command-stdout>"}}""",
             """{"type":"user","timestamp":"2026-01-01T00:03:00Z","message":{"role":"user","content":"Hello after compaction"}}""");
 
         // Act
         var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
 
-        // Assert — only one "Compacted" message should remain
-        var compactedCount = messages.Count(m => m.SystemLabel == "Compacted");
-        compactedCount.Should().Be(1);
-        messages.Should().HaveCount(2);
+        // Assert — the stdout echoes are gone; the follow-up survives
+        messages.Should().ContainSingle();
+        messages[0].Text.Should().Be("Hello after compaction");
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_CollapsesCompactionToSingleSummaryEntry()
+    {
+        // Arrange — a /compact trigger, its stdout echo, and the inline summary chip
+        // must collapse to one "Compacted" entry that still carries the summary body.
+        const string summary = "## Summary\n\nImplemented feature X.";
+        var content = string.Join(
+            "\n",
+            """{"type":"user","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"<command-name>/compact</command-name>"}}""",
+            """{"type":"user","timestamp":"2026-01-01T00:00:01Z","message":{"role":"user","content":"<local-command-stdout>Compacted (ctrl+o to expand)</local-command-stdout>"}}""",
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                timestamp = "2026-01-01T00:00:02Z",
+                isCompactSummary = true,
+                message = new { role = "user", content = $"This session is being continued from a previous conversation that ran out of context.\n\n{summary}" },
+            }));
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert — exactly one Compacted entry, carrying the stripped summary
+        messages.Should().ContainSingle();
         messages[0].SystemLabel.Should().Be("Compacted");
-        messages[1].Text.Should().Be("Hello after compaction");
+        messages[0].FullText.Should().Be(summary);
     }
 
     [Fact]
