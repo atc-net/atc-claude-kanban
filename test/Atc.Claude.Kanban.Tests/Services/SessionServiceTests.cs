@@ -253,6 +253,89 @@ public sealed class SessionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSessions_SurfacesActiveGoal()
+    {
+        // Arrange — a goal_status attachment with met:false carries an active /goal condition.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-goal";
+        var projectDir = Path.Combine(tempDir, "projects", "p");
+        Directory.CreateDirectory(projectDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, $"{sessionId}.jsonl"),
+            string.Join(
+                '\n',
+                JsonSerializer.Serialize(new { type = "user", cwd = "/repo", slug = "s", message = new { role = "user", content = "Hi" } }),
+                JsonSerializer.Serialize(new { type = "attachment", attachment = new { type = "goal_status", met = false, condition = "port all relevant upstream functionality" } })),
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].Goal.Should().Be("port all relevant upstream functionality");
+    }
+
+    [Fact]
+    public async Task GetSessions_TreatsMetGoalAsCleared()
+    {
+        // Arrange — a goal set, then later met (auto-cleared by Claude Code). Last-write-wins → no active goal.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-goal-met";
+        var projectDir = Path.Combine(tempDir, "projects", "p");
+        Directory.CreateDirectory(projectDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, $"{sessionId}.jsonl"),
+            string.Join(
+                '\n',
+                JsonSerializer.Serialize(new { type = "user", cwd = "/repo", slug = "s", message = new { role = "user", content = "Hi" } }),
+                JsonSerializer.Serialize(new { type = "attachment", attachment = new { type = "goal_status", met = false, condition = "do the thing" } }),
+                JsonSerializer.Serialize(new { type = "attachment", attachment = new { type = "goal_status", met = true, condition = "do the thing" } })),
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].Goal.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSessions_ExtractsGoalSetBeyondHeadWindowFromTail()
+    {
+        // Arrange — a /goal set deep in a long session (past the 250-line head window and far
+        // enough in that only the tail scan reaches it). The tail value must still be surfaced.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-goal-tail";
+        var projectDir = Path.Combine(tempDir, "projects", "p");
+        Directory.CreateDirectory(projectDir);
+
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < 400; i++)
+        {
+            builder.AppendLine(JsonSerializer.Serialize(new { type = "user", cwd = "/repo", slug = "s", message = new { role = "user", content = $"filler line {i} with padding to grow the file well beyond the tail-read window" } }));
+        }
+
+        builder.Append(JsonSerializer.Serialize(new { type = "attachment", attachment = new { type = "goal_status", met = false, condition = "late goal from tail" } }));
+
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), builder.ToString(), cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].Goal.Should().Be("late goal from tail");
+    }
+
+    [Fact]
     public async Task GetSessions_PreservesProgressAfterTaskFilesRemoved()
     {
         // Arrange — create a session with 3 tasks, then remove the task files

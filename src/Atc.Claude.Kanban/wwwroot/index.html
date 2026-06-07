@@ -488,6 +488,59 @@
       text-overflow: ellipsis;
     }
 
+    .session-goal {
+      font-size: 10px;
+      color: var(--warning);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+    }
+
+    .session-goal .session-goal-icon {
+      margin-right: 3px;
+      font-weight: 700;
+    }
+
+    .session-goal:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .info-goal-card {
+      margin: 0 0 16px;
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--warning);
+      border-radius: 8px;
+    }
+
+    .info-goal-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+    }
+
+    .info-goal-icon {
+      color: var(--warning);
+    }
+
+    .info-goal-text {
+      margin-top: 6px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     .session-progress {
       display: flex;
       align-items: center;
@@ -4316,6 +4369,7 @@
           ${gitBranch ? `<div class="session-branch">${gitBranch}</div>` : ''}
           ${session.project ? `<div class="session-project" title="${escapeHtml(session.project)}">${escapeHtml(session.project)}</div>` : ''}
           ${session.planTitle ? `<div class="session-plan">${escapeHtml(session.planTitle)}</div>` : ''}
+          ${renderGoalSubtitle(session)}
           <div class="session-progress">
             <span class="session-indicators">
               ${isTeam ? `<span class="team-badge" title="${memberCount} team members"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>${memberCount}</span>` : ''}
@@ -4337,6 +4391,15 @@
           <div class="session-time">${formatDate(session.modifiedAt)}</div>
         </button>
       `;
+    }
+
+    // Only active (unmet) goals reach the client — a met goal auto-clears server-side.
+    // Clicking opens the session-info modal (full text); the row carries its own
+    // data-action so the delegated handler routes it there, not to fetchTasks.
+    function renderGoalSubtitle(session) {
+      if (!session.goal) return '';
+      const short = session.goal.length > 70 ? `${session.goal.slice(0, 70)}…` : session.goal;
+      return `<div class="session-goal" data-action="showSessionInfoModal" data-session-id="${session.id}" title="${escapeHtml(session.goal)}"><span class="session-goal-icon">◎</span>${escapeHtml(short)}</div>`;
     }
 
     function renderActivityBadge(activity) {
@@ -7245,6 +7308,14 @@
         html += `<span style="font-weight: 500; color: var(--text-secondary); font-size: 12px; white-space: nowrap;">${label}</span><span>${value}</span>`;
       });
       html += `</div>`;
+
+      // Active session /goal — shown in full (the card subtitle is truncated).
+      if (session.goal) {
+        html += `<div class="info-goal-card">
+          <div class="info-goal-head"><span class="info-goal-icon">◎</span>Goal</div>
+          <div class="info-goal-text">${escapeHtml(session.goal)}</div>
+        </div>`;
+      }
 
       // Action icons row (plan, copy, folder) — matching sidebar indicator style
       const actionIcons = [];

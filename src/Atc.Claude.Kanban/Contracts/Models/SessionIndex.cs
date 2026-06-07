@@ -65,4 +65,11 @@ public sealed class SessionIndex
     /// </summary>
     [JsonIgnore]
     public string? CustomTitle { get; set; }
+
+    /// <summary>
+    /// Gets or sets the active session /goal condition, or null when there is no
+    /// unmet goal. Extracted from the JSONL transcript, not the sessions-index.
+    /// </summary>
+    [JsonIgnore]
+    public string? Goal { get; set; }
 }

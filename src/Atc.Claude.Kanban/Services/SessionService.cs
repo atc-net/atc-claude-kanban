@@ -257,6 +257,7 @@ public sealed class SessionService
                     ModifiedAt = GetDirectoryLastWriteUtc(sessionDir),
                     CreatedAt = index?.CreatedAt,
                     Slug = index?.Slug ?? sessionId,
+                    Goal = index?.Goal,
                     SubagentCount = subagentTotal,
                     ActiveSubagentCount = subagentActive,
                 });
@@ -323,6 +324,7 @@ public sealed class SessionService
                     ModifiedAt = lastWriteUtc,
                     CreatedAt = index?.CreatedAt,
                     Slug = index?.Slug ?? sessionId,
+                    Goal = index?.Goal,
                 });
 
                 discoveredIds.Add(sessionId);
@@ -444,6 +446,7 @@ public sealed class SessionService
                 ModifiedAt = GetDirectoryLastWriteUtc(sessionDir),
                 CreatedAt = index?.CreatedAt,
                 Slug = slug,
+                Goal = index?.Goal ?? leadIndex?.Goal,
             };
         }
         else
@@ -505,6 +508,7 @@ public sealed class SessionService
             ModifiedAt = latestModified == DateTime.MinValue ? DateTime.UtcNow : latestModified,
             CreatedAt = index?.CreatedAt,
             Slug = slug,
+            Goal = index?.Goal ?? leadIndex?.Goal,
         };
 
         session.Progress = session.TaskCount > 0
@@ -681,6 +685,7 @@ public sealed class SessionService
                 GitBranch = metadata.GitBranch,
                 Slug = metadata.Slug,
                 CustomTitle = metadata.CustomTitle,
+                Goal = metadata.Goal,
             };
             return;
         }
@@ -699,6 +704,10 @@ public sealed class SessionService
         // Strong entry — let its project/cwd take precedence over earlier siblings.
         existing.ProjectPath = candidateProject ?? existing.ProjectPath;
         existing.Cwd = metadata.LatestCwd ?? existing.Cwd;
+
+        // Goal is direct-assigned (not guarded) so a met/cleared goal propagates as
+        // null rather than sticking to a stale value from an earlier scan.
+        existing.Goal = metadata.Goal;
     }
 
     /// <summary>
@@ -714,6 +723,7 @@ public sealed class SessionService
         string? firstCwd = null;
         string? latestCwd = null;
         string? gitBranch = null;
+        string? goal = null;
         string? slug = null;
         string? parentSessionId = null;
         string? customTitle = null;
@@ -739,7 +749,7 @@ public sealed class SessionService
                     continue;
                 }
 
-                ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref slug, ref parentSessionId, ref customTitle, ref aiTitle, ref agentName);
+                ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref goal, ref slug, ref parentSessionId, ref customTitle, ref aiTitle, ref agentName);
             }
         }
         catch (IOException)
@@ -747,15 +757,15 @@ public sealed class SessionService
             // Skip on error — metadata is best-effort
         }
 
-        // Tail scan: always capture the most recent cwd when the file is large enough
-        // that a late cwd switch could sit past the head window. projectPath stays
-        // anchored to firstCwd so it represents the original project.
+        // A /goal is often set deep in a session (past the 250-line head window), so the
+        // tail value supersedes the head; latestCwd likewise tracks a late cwd switch.
         if (fileLength > MetadataTailReadSize)
         {
-            var tailCwd = await TryReadLatestCwdFromTailAsync(jsonlFile, fileLength, cancellationToken);
-            if (tailCwd is not null)
+            var (tailCwd, tailGoal, sawGoal) = await TryReadLatestCwdAndGoalFromTailAsync(jsonlFile, fileLength, cancellationToken);
+            latestCwd = tailCwd ?? latestCwd;
+            if (sawGoal)
             {
-                latestCwd = tailCwd;
+                goal = tailGoal;
             }
         }
 
@@ -767,17 +777,26 @@ public sealed class SessionService
             Slug = slug,
             ParentSessionId = parentSessionId,
             CustomTitle = customTitle ?? aiTitle ?? agentName,
+            Goal = goal,
         };
     }
 
     /// <summary>
-    /// Reads the tail of a session JSONL file and returns the most recent cwd value found.
+    /// Reads the tail of a session JSONL file and returns the most recent cwd value
+    /// and the most recent /goal event found. <c>SawGoal</c> is true when any goal
+    /// event (set, met, or clear) appears in the tail, in which case <c>Goal</c> is
+    /// the value to apply (null for a met/cleared goal); false means the tail carries
+    /// no goal event and the head value should be kept.
     /// </summary>
-    private static async Task<string?> TryReadLatestCwdFromTailAsync(
+    private static async Task<(string? Cwd, string? Goal, bool SawGoal)> TryReadLatestCwdAndGoalFromTailAsync(
         string jsonlFile,
         long fileLength,
         CancellationToken cancellationToken)
     {
+        string? cwd = null;
+        string? goal = null;
+        var sawGoal = false;
+
         try
         {
             await using var stream = new FileStream(jsonlFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -789,6 +808,7 @@ public sealed class SessionService
             var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
             // First (partial) line is discarded — the seek likely lands mid-line.
+            // Iterate newest-first so the first cwd/goal event found is the most recent.
             var lines = tail.Split('\n');
             for (var i = lines.Length - 1; i >= 1; i--)
             {
@@ -801,13 +821,22 @@ public sealed class SessionService
                 try
                 {
                     using var doc = JsonDocument.Parse(line);
-                    if (doc.RootElement.TryGetProperty("cwd", out var cwdEl))
+                    var root = doc.RootElement;
+
+                    if (cwd is null && root.TryGetProperty("cwd", out var cwdEl) && !string.IsNullOrEmpty(cwdEl.GetString()))
                     {
-                        var value = cwdEl.GetString();
-                        if (!string.IsNullOrEmpty(value))
-                        {
-                            return value;
-                        }
+                        cwd = cwdEl.GetString();
+                    }
+
+                    if (!sawGoal && TryExtractGoalFromLine(root, out var goalValue))
+                    {
+                        goal = goalValue;
+                        sawGoal = true;
+                    }
+
+                    if (cwd is not null && sawGoal)
+                    {
+                        break;
                     }
                 }
                 catch (JsonException)
@@ -821,7 +850,7 @@ public sealed class SessionService
             // Skip on error — tail scan is best-effort
         }
 
-        return null;
+        return (cwd, goal, sawGoal);
     }
 
     /// <summary>
@@ -834,6 +863,7 @@ public sealed class SessionService
         ref string? firstCwd,
         ref string? latestCwd,
         ref string? gitBranch,
+        ref string? goal,
         ref string? slug,
         ref string? parentSessionId,
         ref string? customTitle,
@@ -865,6 +895,12 @@ public sealed class SessionService
                 gitBranch = branchEl.GetString();
             }
 
+            // Forward scan, last-write-wins: a later goal event supersedes an earlier one.
+            if (TryExtractGoalFromLine(root, out var goalValue))
+            {
+                goal = goalValue;
+            }
+
             if (slug is null && root.TryGetProperty("slug", out var slugEl))
             {
                 slug = slugEl.GetString();
@@ -884,6 +920,77 @@ public sealed class SessionService
         {
             // Skip malformed lines
         }
+    }
+
+    /// <summary>
+    /// Detects a session /goal event on a JSONL line. A goal_status attachment carries
+    /// the active condition (an unmet goal); a met goal auto-clears in Claude Code and
+    /// is treated as removal, the same as a <c>/goal clear</c> command line. Returns
+    /// true when the line is a goal event, with <paramref name="goal"/> set to the
+    /// condition to apply (null for a met/cleared goal); false leaves the caller's
+    /// current value unchanged.
+    /// </summary>
+    private static bool TryExtractGoalFromLine(
+        JsonElement root,
+        out string? goal)
+    {
+        goal = null;
+
+        if (root.TryGetProperty("type", out var typeEl))
+        {
+            var type = typeEl.GetString();
+
+            if (string.Equals(type, "attachment", StringComparison.Ordinal) &&
+                root.TryGetProperty("attachment", out var attachmentEl) &&
+                attachmentEl.TryGetProperty("type", out var attachmentTypeEl) &&
+                string.Equals(attachmentTypeEl.GetString(), "goal_status", StringComparison.Ordinal))
+            {
+                var met = attachmentEl.TryGetProperty("met", out var metEl) &&
+                          metEl.ValueKind == JsonValueKind.True;
+                if (!met && attachmentEl.TryGetProperty("condition", out var conditionEl))
+                {
+                    goal = conditionEl.GetString();
+                }
+
+                return true;
+            }
+
+            if (string.Equals(type, "user", StringComparison.Ordinal) &&
+                root.TryGetProperty("message", out var messageEl) &&
+                messageEl.TryGetProperty("content", out var contentEl) &&
+                contentEl.ValueKind == JsonValueKind.String)
+            {
+                var content = contentEl.GetString();
+                if (content is not null &&
+                    content.Contains("<command-name>/goal</command-name>", StringComparison.Ordinal) &&
+                    IsGoalClearArgs(content))
+                {
+                    // /goal clear — explicit removal.
+                    goal = null;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true when the command arguments of a /goal command line begin with
+    /// "clear" (ignoring leading whitespace), i.e. a <c>/goal clear</c> invocation.
+    /// Mirrors the upstream <c>&lt;command-args&gt;\s*clear</c> match without a regex.
+    /// </summary>
+    private static bool IsGoalClearArgs(string content)
+    {
+        const string openTag = "<command-args>";
+        var start = content.IndexOf(openTag, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return false;
+        }
+
+        var args = content.AsSpan(start + openTag.Length).TrimStart();
+        return args.StartsWith("clear", StringComparison.Ordinal);
     }
 
     // Background "claude agents" sessions emit ai-title/agent-name records instead of

@@ -38,4 +38,10 @@ public sealed record JsonlMetadata
     /// "claude agents" sessions.
     /// </summary>
     public string? CustomTitle { get; init; }
+
+    /// <summary>
+    /// Gets the active session /goal condition, or null when there is no unmet
+    /// goal. A met goal auto-clears in Claude Code and is treated as removal.
+    /// </summary>
+    public string? Goal { get; init; }
 }
