@@ -94,4 +94,12 @@ public sealed class MessageEntry
     [JsonPropertyName("images")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<MessageImage>? Images { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this user message was queued
+    /// (written as a "queue-operation"/"enqueue" line) rather than sent directly.
+    /// </summary>
+    [JsonPropertyName("queued")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Queued { get; set; }
 }

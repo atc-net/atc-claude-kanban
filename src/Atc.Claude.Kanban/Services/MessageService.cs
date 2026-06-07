@@ -300,6 +300,10 @@ public sealed class MessageService
             {
                 ParseAssistantEntry(root, timestamp, uuid, toolResults, answerPayloads, messages);
             }
+            else if (string.Equals(entryType, "queue-operation", StringComparison.Ordinal))
+            {
+                ParseQueueOperationEntry(root, timestamp, uuid, messages);
+            }
 
             doc.Dispose();
         }
@@ -526,6 +530,44 @@ public sealed class MessageService
             FullText = hasText ? text : null,
             Uuid = uuid,
             Images = images.Count > 0 ? images : null,
+        });
+    }
+
+    /// <summary>
+    /// Surfaces a queued user prompt. Queued messages are written as a
+    /// "queue-operation"/"enqueue" line with the text at the top-level "content"
+    /// (not "message.content") and are never re-emitted as a "user" line, so they
+    /// would otherwise be dropped from the Session Log.
+    /// </summary>
+    private static void ParseQueueOperationEntry(
+        JsonElement root,
+        string? timestamp,
+        string? uuid,
+        List<MessageEntry> messages)
+    {
+        if (!root.TryGetProperty("operation", out var operationEl) ||
+            !string.Equals(operationEl.GetString(), "enqueue", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var text = root.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.String
+            ? contentEl.GetString()
+            : null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        messages.Add(new MessageEntry
+        {
+            Type = "user",
+            Timestamp = timestamp,
+            Text = Truncate(text, TextTruncateLength),
+            FullText = text,
+            Uuid = uuid,
+            Queued = true,
         });
     }
 
