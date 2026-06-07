@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.16.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.15.1...v1.16.0) (2026-06-07)
+
+
+### Features
+
+* auto-expand active project sections ([b0f42af](https://github.com/atc-net/atc-claude-kanban/commit/b0f42af6850cb11a483d11272cce050c1f7d29bc))
+* distinct CPU-chip icon for Agent tool entries ([fd03798](https://github.com/atc-net/atc-claude-kanban/commit/fd03798ad3388940c76944aee3466bc77615c904))
+* render command/notification XML as structured message detail ([763a1f6](https://github.com/atc-net/atc-claude-kanban/commit/763a1f6635d3e5229885e2b359eea645c8cfab50))
+* render queued messages in session log ([b249429](https://github.com/atc-net/atc-claude-kanban/commit/b2494297a8a5b681184eea72212b462631c9bb1c))
+* surface session /goal in dashboard ([7824320](https://github.com/atc-net/atc-claude-kanban/commit/782432085c659e14f4d287a04f87e88901b78ac6))
+
+
+### Bug Fixes
+
+* preserve compaction summary when collapsing duplicate entries ([102e4dc](https://github.com/atc-net/atc-claude-kanban/commit/102e4dceca24500afc74e5b46aac528df4eefaa0))
+* route queued messages through the user-message filter ([c533bdc](https://github.com/atc-net/atc-claude-kanban/commit/c533bdc07afad82a667e3e28c6aeada0ba53b25b))
+
 ## [1.15.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.15.0...v1.15.1) (2026-05-29)
 
 
