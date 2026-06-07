@@ -4507,10 +4507,37 @@
       if (!groupPath) return;
       if (collapsedProjectGroups.has(groupPath)) collapsedProjectGroups.delete(groupPath);
       else collapsedProjectGroups.add(groupPath);
+      persistCollapsedGroups();
+      renderSessions();
+    }
+
+    function persistCollapsedGroups() {
       try {
         localStorage.setItem('collapsedGroups', JSON.stringify([...collapsedProjectGroups]));
       } catch { /* ignore quota errors */ }
-      renderSessions();
+    }
+
+    // null until the first onlyNew pass primes it, so saved collapse state is respected on load.
+    let prevActiveSessionIds = null;
+
+    // Expand collapsed project sections that contain active sessions so running work stays
+    // visible; sections without active work are left collapsed.
+    // onlyNew (live refresh): only expand for sessions that became active since the last call,
+    //   so a section the user manually collapsed stays collapsed until NEW active work lands.
+    //   The first pass only primes the tracking set.
+    // onlyNew=false (explicit chip click): force-expand every section that has active work.
+    function expandActiveGroups({ onlyNew = false } = {}) {
+      const primed = prevActiveSessionIds !== null;
+      const activeIds = new Set();
+      let changed = false;
+      for (const session of sessions) {
+        if (!isSessionActive(session)) continue;
+        activeIds.add(session.id);
+        if (onlyNew && (!primed || prevActiveSessionIds.has(session.id))) continue;
+        if (collapsedProjectGroups.delete(session.project || '__ungrouped__')) changed = true;
+      }
+      prevActiveSessionIds = activeIds;
+      if (changed) persistCollapsedGroups();
     }
 
     function togglePin(sessionId) {
@@ -4542,6 +4569,9 @@
     function renderSessions() {
       // Update project dropdown
       updateProjectDropdown();
+
+      // Auto-expand a collapsed section when newly-active work lands in it (live refresh).
+      expandActiveGroups({ onlyNew: true });
 
       let filteredSessions = sessions;
       if (sessionFilter === 'active') {
@@ -7048,6 +7078,8 @@
 
     function filterBySessions(value) {
       sessionFilter = value;
+      // Switching to "active only" force-expands every section with active work.
+      if (value === 'active') expandActiveGroups();
       updateUrl();
       renderSessions();
     }
