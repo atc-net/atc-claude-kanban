@@ -2847,6 +2847,17 @@
       margin-bottom: 2px;
     }
 
+    .msg-queued-tag {
+      margin-left: 6px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      color: var(--warning, #d97706);
+      background: color-mix(in srgb, var(--warning, #d97706) 16%, transparent);
+    }
+
     .msg-text {
       font-size: 13px;
       color: var(--text-primary);
@@ -5438,8 +5449,9 @@
       const ts = formatMsgTimestamp(msg.timestamp);
       const hasText = !!(msg.text || msg.fullText);
       const detailAttrs = hasText ? ` data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}"` : '';
-      return `<div class="msg-entry msg-user"${detailAttrs}>
-        <div class="msg-role">You</div>
+      const queuedTag = msg.queued ? '<span class="msg-queued-tag">queued</span>' : '';
+      return `<div class="msg-entry msg-user${msg.queued ? ' msg-queued' : ''}"${detailAttrs}>
+        <div class="msg-role">You${queuedTag}</div>
         ${text ? `<div class="msg-text">${text}</div>` : ''}
         ${renderUserAttachments(msg)}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}

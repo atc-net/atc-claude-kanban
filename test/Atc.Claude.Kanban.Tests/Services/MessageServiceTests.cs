@@ -583,6 +583,51 @@ public sealed class MessageServiceTests : IDisposable
     }
 
     [Fact]
+    public void ParseJsonlMessages_SurfacesQueuedMessage()
+    {
+        // Arrange — queued prompts are written as a queue-operation/enqueue line with the
+        // text at the top-level "content" (not "message.content") and are never re-emitted
+        // as a "user" line, so they must be surfaced from the queue-operation entry itself.
+        var content = JsonSerializer.Serialize(new
+        {
+            type = "queue-operation",
+            operation = "enqueue",
+            timestamp = "2026-06-07T10:50:11Z",
+            sessionId = "abc",
+            content = "can we use gold for user message",
+        });
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert
+        messages.Should().HaveCount(1);
+        messages[0].Type.Should().Be("user");
+        messages[0].Queued.Should().BeTrue();
+        messages[0].FullText.Should().Be("can we use gold for user message");
+    }
+
+    [Fact]
+    public void ParseJsonlMessages_IgnoresNonEnqueueQueueOperation()
+    {
+        // Arrange — only "enqueue" operations carry a user prompt; other operations (e.g. dequeue) carry none.
+        var content = JsonSerializer.Serialize(new
+        {
+            type = "queue-operation",
+            operation = "dequeue",
+            timestamp = "2026-06-07T10:50:11Z",
+            sessionId = "abc",
+            content = "should not surface",
+        });
+
+        // Act
+        var messages = MessageService.ParseJsonlMessages(content, skipFirstLine: false);
+
+        // Assert
+        messages.Should().BeEmpty();
+    }
+
+    [Fact]
     public void ParseJsonlMessages_DropsInterruptMarkerOnlyMessage()
     {
         // Arrange — a user message that's nothing but the interrupt marker carries no information.
