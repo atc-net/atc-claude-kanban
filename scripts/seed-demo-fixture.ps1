@@ -67,6 +67,8 @@ Write-Task $s1 4 'Wire coupon field into checkout form' 'completed' $null
 Write-Jsonl (Join-Path $projectsRoot "acme\$s1.jsonl") @(
     [ordered]@{ type = 'user'; sessionId = $s1; cwd = $acmeCwd; gitBranch = 'feature/checkout-coupons'; slug = 'checkout-coupons'; timestamp = (Stamp 40); message = [ordered]@{ role = 'user'; content = 'Add coupon validation to the checkout flow.' } },
     [ordered]@{ type = 'ai-title'; sessionId = $s1; aiTitle = 'Add checkout coupon validation' },
+    # Active /goal — surfaces as the card subtitle and in the session info modal.
+    [ordered]@{ type = 'attachment'; sessionId = $s1; timestamp = (Stamp 40); attachment = [ordered]@{ type = 'goal_status'; met = $false; condition = 'All coupon tests pass before merging' } },
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 39); message = [ordered]@{ role = 'assistant'; model = $opus; content = @([ordered]@{ type = 'tool_use'; id = 'tu_read'; name = 'Read'; input = [ordered]@{ file_path = "$acmeCwd\src\Checkout.cs" } }); usage = (Usage 1200 300 8000 40000) } },
     [ordered]@{ type = 'user'; timestamp = (Stamp 39); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_read'; content = 'public class Checkout { /* ... */ }' }) } },
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 38); message = [ordered]@{ role = 'assistant'; model = $opus; content = @([ordered]@{ type = 'tool_use'; id = 'tu_mcp'; name = 'mcp__stripe__create_coupon'; input = [ordered]@{ percent_off = 15; duration = 'once'; metadata = [ordered]@{ campaign = 'spring-sale'; source = 'checkout' } } }); usage = (Usage 900 400 2000 90000) } },
@@ -83,6 +85,8 @@ Write-Jsonl (Join-Path $projectsRoot "acme\$s1.jsonl") @(
     [ordered]@{ type = 'user'; timestamp = (Stamp 34); toolUseResult = [ordered]@{ questions = @([ordered]@{ question = 'How should expired coupons be handled at checkout?'; header = 'Expiry policy'; options = @([ordered]@{ label = 'Reject with message'; description = 'Block the order and tell the shopper the coupon expired.' }, [ordered]@{ label = 'Silently ignore'; description = 'Drop the coupon and proceed at full price.' }) }); answers = [ordered]@{ 'How should expired coupons be handled at checkout?' = 'Reject with message' } }; message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_ask'; content = 'User selected: Reject with message' }) } },
     # A user turn with an image attachment (chip + preview).
     [ordered]@{ type = 'user'; uuid = 'u-img-001'; timestamp = (Stamp 33); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'text'; text = 'Here is the failing checkout screen:' }, [ordered]@{ type = 'image'; source = [ordered]@{ type = 'base64'; media_type = 'image/png'; data = $pngB64 } }) } },
+    # A prompt queued mid-turn — renders in the message log with a "queued" badge.
+    [ordered]@{ type = 'queue-operation'; operation = 'enqueue'; sessionId = $s1; timestamp = (Stamp 33); content = 'also confirm the coupon stacks with free shipping' },
     # Mid-run model switch to Opus 4.8 — surfaces as a second row under "Lead sessions" in the Session Usage modal.
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 33); message = [ordered]@{ role = 'assistant'; model = $opus48; content = @([ordered]@{ type = 'text'; text = 'Switched to Opus 4.8 to finalize the review.' }); usage = (Usage 1800 350 2200 60000) } },
     # Final turn sets the current context size (~165k of 200k).
