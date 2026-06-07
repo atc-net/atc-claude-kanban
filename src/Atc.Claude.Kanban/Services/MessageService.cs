@@ -308,12 +308,18 @@ public sealed class MessageService
             doc.Dispose();
         }
 
-        // Deduplicate consecutive "Compacted" messages
+        // Deduplicate consecutive "Compacted" messages, carrying the summary body onto
+        // the surviving chip so collapsing never drops the expandable summary.
         for (var i = messages.Count - 1; i > 0; i--)
         {
             if (string.Equals(messages[i].SystemLabel, "Compacted", StringComparison.Ordinal) &&
                 string.Equals(messages[i - 1].SystemLabel, "Compacted", StringComparison.Ordinal))
             {
+                if (string.IsNullOrEmpty(messages[i - 1].FullText) && !string.IsNullOrEmpty(messages[i].FullText))
+                {
+                    messages[i - 1].FullText = messages[i].FullText;
+                }
+
                 messages.RemoveAt(i);
             }
         }
@@ -772,6 +778,17 @@ public sealed class MessageService
     /// </summary>
     private static string? GetSystemMessageLabel(string text)
     {
+        // Compaction is rendered as a single expandable "Compacted" chip from the inline
+        // compact-summary record. The /compact trigger and the "Compacted (ctrl+o…)" stdout
+        // echo are redundant with it, so skip both — otherwise they leave bare markers that
+        // stop the summary-bearing chip from collapsing cleanly.
+        if (text.Contains("<command-name>/compact</command-name>", StringComparison.Ordinal) ||
+            (text.Contains("<local-command-stdout>", StringComparison.Ordinal) &&
+             text.Contains("Compacted", StringComparison.Ordinal)))
+        {
+            return null;
+        }
+
         // XML-structured system messages
         var xmlLabel = GetXmlSystemLabel(text);
         if (xmlLabel is not null)
@@ -789,12 +806,6 @@ public sealed class MessageService
         if (text.Contains("<command-name>/clear</command-name>", StringComparison.Ordinal))
         {
             return null;
-        }
-
-        // /compact command
-        if (text.Contains("<command-name>/compact</command-name>", StringComparison.Ordinal))
-        {
-            return "Compacted";
         }
 
         return NotASystemMessage;
