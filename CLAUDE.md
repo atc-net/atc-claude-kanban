@@ -91,7 +91,7 @@ scripts/
 - **Embedded static files** via `ManifestEmbeddedFileProvider`
 - **JSONL tail-reading** — 64KB adaptive buffer for messages, 32KB for activity status; seeks from end to avoid loading entire files
 - **Activity status derivation** — uses conversation entry timestamps (not file mtime) to detect thinking/waiting/idle/error states; hooks writing progress entries don't reset the timer
-- **Token cost calculation** — model-aware pricing (Opus 4.5+ $5/$25, Sonnet $3/$15, Haiku 4.5 $1/$5 per 1M tokens) with cache creation (1.25×) and cache read (0.10×) multipliers
+- **Token cost calculation** — model-aware pricing (Fable 5 $10/$50, Opus 4.5+ $5/$25, Sonnet $3/$15, Haiku 4.5 $1/$5 per 1M tokens) with cache creation (1.25×) and cache read (0.10×) multipliers
 - **Context-window size** — the latest turn's prompt tokens (`SessionTokenUsage.ContextTokens` = input + cache_read + cache_creation of the last `usage` block, overwritten per turn). The model's window size isn't in the transcript, so the frontend infers it: 200K, or 1M once context exceeds 200K
 - **Per-participant usage** — `UsageService` composes the lead session's usage with each subagent's transcript usage (`SessionActivityService.GetTokenUsageForPathAsync`) for the Session Usage modal. Usage is bucketed per model so a session that switches models mid-run (e.g. Opus 4.7→4.8) is priced per model and shows a `models[]` breakdown under the participant row
 - **Tool statistics** — `ToolStatsService` scans the session JSONL once, correlating `tool_use` with `tool_result`; "rejected" is detected from the line-level `toolUseResult` string (not the block content)
