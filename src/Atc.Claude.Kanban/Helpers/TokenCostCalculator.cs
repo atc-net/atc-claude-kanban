@@ -6,6 +6,8 @@ namespace Atc.Claude.Kanban.Helpers;
 /// </summary>
 public static class TokenCostCalculator
 {
+    private const double FableInputPrice = 10.0;
+    private const double FableOutputPrice = 50.0;
     private const double OpusInputPrice = 5.0;
     private const double OpusOutputPrice = 25.0;
     private const double SonnetInputPrice = 3.0;
@@ -47,6 +49,11 @@ public static class TokenCostCalculator
         if (string.IsNullOrEmpty(model))
         {
             return (SonnetInputPrice, SonnetOutputPrice);
+        }
+
+        if (model.Contains("fable", StringComparison.OrdinalIgnoreCase))
+        {
+            return (FableInputPrice, FableOutputPrice);
         }
 
         if (model.Contains("opus", StringComparison.OrdinalIgnoreCase))
