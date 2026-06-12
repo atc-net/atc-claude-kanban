@@ -2,6 +2,7 @@ global using System.Net;
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
 global using Atc.Claude.Kanban.Contracts.Events;
+global using Atc.Claude.Kanban.Helpers;
 global using Atc.Claude.Kanban.Services;
 global using Atc.Claude.Kanban.Tests.Helpers;
 global using Atc.Claude.Kanban.UpdateCheck.Models;

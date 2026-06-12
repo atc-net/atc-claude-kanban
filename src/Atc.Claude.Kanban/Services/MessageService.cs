@@ -599,10 +599,12 @@ public sealed class MessageService
         string? uuid,
         List<MessageEntry> messages)
     {
-        // Drop messages whose entire body is the interrupt marker, and route
-        // inline /compact summaries to a dedicated "Compacted" entry.
+        // Drop messages whose entire body is the interrupt marker, route inline
+        // /compact summaries to a dedicated "Compacted" entry, and render background
+        // task-notification envelopes as a rich summary+usage chip with the result body.
         if (ShouldSkipUserText(text) ||
-            TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages))
+            TryAppendInlineCompactSummary(root, text, timestamp, uuid, messages) ||
+            TryAppendTaskNotification(text, timestamp, uuid, messages))
         {
             return false;
         }
@@ -704,6 +706,44 @@ public sealed class MessageService
                 Uuid = uuid,
             });
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Detects a background-task &lt;task-notification&gt; envelope and appends a system
+    /// entry whose label is the summary plus a compact usage suffix
+    /// (e.g. <c>Agent "Foo" completed · 22.3k tok · 6 tools · 119s</c>) and whose body
+    /// (<see cref="MessageEntry.FullText"/>) is the agent's result. Returns true when handled.
+    /// </summary>
+    private static bool TryAppendTaskNotification(
+        string text,
+        string? timestamp,
+        string? uuid,
+        List<MessageEntry> messages)
+    {
+        var notification = TaskNotificationParser.Parse(text);
+        if (notification is null)
+        {
+            return false;
+        }
+
+        var baseLabel = !string.IsNullOrWhiteSpace(notification.Summary)
+            ? notification.Summary!
+            : notification.Status is not null
+                ? $"Background task {notification.Status}"
+                : "Background task notification";
+        var label = baseLabel + TaskNotificationParser.FormatUsage(notification);
+
+        messages.Add(new MessageEntry
+        {
+            Type = "user",
+            Timestamp = timestamp,
+            Text = label,
+            SystemLabel = label,
+            FullText = string.IsNullOrWhiteSpace(notification.Result) ? null : notification.Result,
+            Uuid = uuid,
+        });
 
         return true;
     }

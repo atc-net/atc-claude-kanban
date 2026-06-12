@@ -6577,15 +6577,17 @@
     function renderSystemEntry(msg) {
       const label = escapeHtml(msg.systemLabel || 'System');
       const ts = formatMsgTimestamp(msg.timestamp);
-      // A "Compacted" entry carries the continuation summary in fullText; surface it
-      // as a clickable chip that opens the detail modal with the summary as markdown.
-      const summary = msg.fullText && msg.fullText !== msg.systemLabel ? msg.fullText : '';
-      const hasSummary = msg.systemLabel === 'Compacted' && summary;
-      const clickAttrs = hasSummary
-        ? ` data-action="showCompactSummary" data-full-text="${escapeAttr(summary)}"`
+      // A system entry that carries a distinct body — a compaction summary, or a
+      // background task's result — is clickable to view that body as markdown in the
+      // detail modal.
+      const body = msg.fullText && msg.fullText !== msg.systemLabel ? msg.fullText : '';
+      const isCompacted = msg.systemLabel === 'Compacted';
+      const title = isCompacted ? 'Compaction Summary' : 'Task Result';
+      const clickAttrs = body
+        ? ` data-action="showSystemBody" data-full-text="${escapeAttr(body)}" data-modal-title="${escapeAttr(title)}"`
         : '';
-      const hint = hasSummary ? '<span class="msg-compact-hint">view summary</span>' : '';
-      return `<div class="msg-entry msg-system${hasSummary ? ' msg-system-clickable' : ''}"${clickAttrs}>
+      const hint = body ? `<span class="msg-compact-hint">${isCompacted ? 'view summary' : 'view result'}</span>` : '';
+      return `<div class="msg-entry msg-system${body ? ' msg-system-clickable' : ''}"${clickAttrs}>
         <div class="msg-role">System</div>
         <div class="msg-text"><code>${label}</code>${hint}</div>
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
@@ -6915,12 +6917,12 @@
       overlay.classList.add('visible');
     }
 
-    function showCompactSummaryModal(summary) {
+    function showSystemBodyModal(text, title) {
       const overlay = ensureMsgDetailOverlay();
-      overlay.querySelector('.modal-title').textContent = 'Compaction Summary';
+      overlay.querySelector('.modal-title').textContent = title || 'Details';
       const body = document.getElementById('msg-detail-body');
       body.className = 'msg-detail-full msg-detail-structured detail-desc';
-      body.innerHTML = DOMPurify.sanitize(marked.parse(summary || ''));
+      body.innerHTML = DOMPurify.sanitize(marked.parse(text || ''));
       overlay.classList.add('visible');
     }
 
@@ -9125,9 +9127,9 @@
           if (fullText) showMsgDetailModal(fullText);
           break;
         }
-        case 'showCompactSummary': {
-          const summary = actionEl.dataset.fullText;
-          if (summary) showCompactSummaryModal(summary);
+        case 'showSystemBody': {
+          const body = actionEl.dataset.fullText;
+          if (body) showSystemBodyModal(body, actionEl.dataset.modalTitle);
           break;
         }
         case 'showToolDetail': {
