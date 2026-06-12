@@ -10,4 +10,6 @@ public sealed record UsageRow(
     [property: JsonPropertyName("model")] string? Model,
     [property: JsonPropertyName("totalTokens")] long TotalTokens,
     [property: JsonPropertyName("costUsd")] double CostUsd,
-    [property: JsonPropertyName("models")] IReadOnlyList<ModelUsage> Models);
+    [property: JsonPropertyName("models")] IReadOnlyList<ModelUsage> Models,
+    [property: JsonPropertyName("toolUses")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ToolUses = null,
+    [property: JsonPropertyName("durationMs")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs = null);

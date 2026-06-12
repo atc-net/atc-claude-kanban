@@ -39,7 +39,7 @@ public sealed class UsageService
             return null;
         }
 
-        var rows = new List<UsageRow> { ToRow("Session", "session", lead, null) };
+        var rows = new List<UsageRow> { ToRow("Session", "session", lead, null, null, null) };
 
         var subagents = await subagentService.GetSubagentsForSessionAsync(sessionId, cancellationToken);
         foreach (var agent in subagents)
@@ -51,7 +51,7 @@ public sealed class UsageService
 
             var usage = await activityService.GetTokenUsageForPathAsync(agent.TranscriptPath, cancellationToken);
             var label = agent.AgentName ?? agent.Slug ?? agent.AgentId;
-            rows.Add(ToRow(label, "agent", usage, agent.Model));
+            rows.Add(ToRow(label, "agent", usage, agent.Model, agent.ToolUses, agent.DurationMs));
         }
 
         long totalTokens = 0;
@@ -69,6 +69,8 @@ public sealed class UsageService
         string label,
         string kind,
         SessionTokenUsage usage,
-        string? fallbackModel)
-        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd, usage.Models);
+        string? fallbackModel,
+        int? toolUses,
+        long? durationMs)
+        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd, usage.Models, toolUses, durationMs);
 }

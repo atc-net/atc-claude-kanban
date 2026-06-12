@@ -93,4 +93,20 @@ public sealed class SubagentInfo
     [JsonPropertyName("agentDescription")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AgentDescription { get; set; }
+
+    /// <summary>
+    /// Gets or sets the total number of tool uses reported on the agent's completion
+    /// toolUseResult (<c>totalToolUseCount</c>), or null when the agent has not completed.
+    /// </summary>
+    [JsonPropertyName("toolUses")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ToolUses { get; set; }
+
+    /// <summary>
+    /// Gets or sets the agent's active duration in milliseconds, reported on the
+    /// completion toolUseResult (<c>totalDurationMs</c>), or null when not completed.
+    /// </summary>
+    [JsonPropertyName("durationMs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? DurationMs { get; set; }
 }

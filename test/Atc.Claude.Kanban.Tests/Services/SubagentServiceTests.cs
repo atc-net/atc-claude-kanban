@@ -393,6 +393,56 @@ public sealed class SubagentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSubagents_PopulatesToolUsesAndDuration_FromToolUseResult()
+    {
+        // Arrange — a parent toolUseResult completion line reports the agent's tool
+        // count and active duration; these must surface on the SubagentInfo.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-usage";
+        const string agentId = "usage789";
+        const string toolUseId = "toolu_usage";
+
+        var hashDir = Path.Combine(tempDir, "projects", "hash-usage");
+        var subagentsDir = Path.Combine(hashDir, sessionId, "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, $"agent-{agentId}.jsonl"),
+            JsonSerializer.Serialize(new { type = "user", timestamp = "2026-05-10T10:00:00Z", message = new { content = "spawn me" } }),
+            cancellationToken);
+
+        var sessionJsonl = JsonSerializer.Serialize(new
+        {
+            type = "user",
+            toolUseResult = new { agentId, totalTokens = 93913, totalToolUseCount = 42, totalDurationMs = 150505 },
+            message = new
+            {
+                role = "user",
+                content = new object[]
+                {
+                    new { type = "tool_result", tool_use_id = toolUseId, content = "done" },
+                },
+            },
+        });
+
+        await File.WriteAllTextAsync(
+            Path.Combine(hashDir, $"{sessionId}.jsonl"),
+            sessionJsonl,
+            cancellationToken);
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync(sessionId, cancellationToken);
+
+        // Assert
+        subagents.Should().HaveCount(1);
+        subagents[0].AgentId.Should().Be(agentId);
+        subagents[0].ToolUses.Should().Be(42);
+        subagents[0].DurationMs.Should().Be(150505);
+    }
+
+    [Fact]
     public async Task GetSubagents_MarksKilledAgentAsStopped()
     {
         // Arrange — fresh subagent file but the parent JSONL has a task-notification
