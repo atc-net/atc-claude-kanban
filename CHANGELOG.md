@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.17.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.16.0...v1.17.0) (2026-06-12)
+
+
+### Features
+
+* add color theme picker with 17 themes ([8f4e25f](https://github.com/atc-net/atc-claude-kanban/commit/8f4e25faca2dd4a068cc690b589efb492412b727))
+* add Fable 5 model pricing to cost calculator ([8582add](https://github.com/atc-net/atc-claude-kanban/commit/8582add0485d7e3e50bf9981f23d02bdd465d9b5))
+* make compaction entries open the summary as markdown ([8e6da2d](https://github.com/atc-net/atc-claude-kanban/commit/8e6da2db54eab8deaab4fbf70a23b6545051adc0))
+* render markdown in assistant message previews with boundary-aware truncation ([6078d3e](https://github.com/atc-net/atc-claude-kanban/commit/6078d3e7121d0126b151d32241aa48e3cd9b5d3a))
+* show subagent tool-count and duration in the session usage modal ([194aaf7](https://github.com/atc-net/atc-claude-kanban/commit/194aaf7d84b9c1d48dd7928fbd84b695975b12d7))
+* surface task-notification result and usage in the session log ([69ac9a1](https://github.com/atc-net/atc-claude-kanban/commit/69ac9a15c4bb44cceaea648c341093ddd95c4c82))
+
+
+### Bug Fixes
+
+* align session pin button and subagent badge with sidebar icon row ([ffd6cec](https://github.com/atc-net/atc-claude-kanban/commit/ffd6cec48c6fba0fe1636f29a1d3be7868a8953a))
+* move default port to 3541 ([ff1695d](https://github.com/atc-net/atc-claude-kanban/commit/ff1695dd6b7332160731ac51bdf471032af3760f))
+
 ## [1.16.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.15.1...v1.16.0) (2026-06-07)
 
 
