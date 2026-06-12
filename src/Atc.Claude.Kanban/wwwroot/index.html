@@ -3420,6 +3420,11 @@
       color: var(--text-secondary);
     }
 
+    .usage-agent-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
     /* #region COLOR THEMES ---------------------------------------------------- */
     /* theme picker: palette icon button + custom popover with per-theme swatches.
        Palettes below override the same design tokens as :root / body.light, so
@@ -7208,6 +7213,13 @@
           <td>$${(model.costUsd || 0).toFixed(2)}</td>
         </tr>`;
       };
+      // Per-agent completion stats (tool count + active duration) from the toolUseResult.
+      const usageMeta = (row) => {
+        const parts = [];
+        if (row.toolUses != null) parts.push(`${row.toolUses} ${row.toolUses === 1 ? 'tool' : 'tools'}`);
+        if (row.durationMs != null) parts.push(`${Math.round(row.durationMs / 1000)}s`);
+        return parts.length ? ` <span class="usage-agent-meta">· ${parts.join(' · ')}</span>` : '';
+      };
       const subheader = (text) => `<tr class="usage-subheader"><td colspan="7">${text}</td></tr>`;
       let bodyRows = '';
       if (lead) {
@@ -7218,7 +7230,7 @@
       if (agents.length) {
         bodyRows += subheader(`Subagents (${agents.length})`);
         bodyRows += agents.map((row) => modelsOf(row)
-          .map((model, index) => modelRowHtml(model, index === 0 ? `<span class="usage-agent-label">${escapeHtml(row.label)}</span>` : ''))
+          .map((model, index) => modelRowHtml(model, index === 0 ? `<span class="usage-agent-label">${escapeHtml(row.label)}</span>${usageMeta(row)}` : ''))
           .join('')).join('');
       }
       bodyRows += `<tr class="usage-total">

@@ -454,6 +454,12 @@ public sealed class SubagentService
                 {
                     agent.Status = "stopped";
                 }
+
+                if (digest.Usage.TryGetValue(agent.AgentId, out var usage))
+                {
+                    agent.ToolUses = usage.ToolUses;
+                    agent.DurationMs = usage.DurationMs;
+                }
             }
         }
         catch (IOException)
@@ -464,12 +470,14 @@ public sealed class SubagentService
 
     /// <summary>
     /// Aggregated agent metadata derived from a single parent-JSONL scan: names and
-    /// descriptions per agent, plus the set of agents that were rejected or killed.
+    /// descriptions per agent, the set of agents that were rejected or killed, and
+    /// per-agent completion usage (tool count + duration) from the toolUseResult line.
     /// </summary>
     private sealed record SessionAgentDigest(
         Dictionary<string, string> Names,
         Dictionary<string, string> Descriptions,
-        HashSet<string> StoppedAgentIds);
+        HashSet<string> StoppedAgentIds,
+        Dictionary<string, (int? ToolUses, long? DurationMs)> Usage);
 
     /// <summary>
     /// Builds mappings of agentId to agent name and description by scanning the parent session JSONL
@@ -484,8 +492,9 @@ public sealed class SubagentService
         var agentIdByToolUseId = new Dictionary<string, string>(StringComparer.Ordinal);
         var rejectedToolUseIds = new HashSet<string>(StringComparer.Ordinal);
         var killedAgentIds = new HashSet<string>(StringComparer.Ordinal);
+        var usageByAgentId = new Dictionary<string, (int? ToolUses, long? DurationMs)>(StringComparer.Ordinal);
 
-        ScanSessionJsonl(jsonlPath, nameByToolUseId, descByToolUseId, agentIdByToolUseId, rejectedToolUseIds, killedAgentIds);
+        ScanSessionJsonl(jsonlPath, nameByToolUseId, descByToolUseId, agentIdByToolUseId, rejectedToolUseIds, killedAgentIds, usageByAgentId);
 
         var names = new Dictionary<string, string>(StringComparer.Ordinal);
         var descriptions = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -511,7 +520,7 @@ public sealed class SubagentService
             }
         }
 
-        return new SessionAgentDigest(names, descriptions, stoppedAgentIds);
+        return new SessionAgentDigest(names, descriptions, stoppedAgentIds, usageByAgentId);
     }
 
     private static void ScanSessionJsonl(
@@ -520,7 +529,8 @@ public sealed class SubagentService
         Dictionary<string, string> descByToolUseId,
         Dictionary<string, string> agentIdByToolUseId,
         HashSet<string> rejectedToolUseIds,
-        HashSet<string> killedAgentIds)
+        HashSet<string> killedAgentIds,
+        Dictionary<string, (int? ToolUses, long? DurationMs)> usageByAgentId)
     {
         using var reader = new StreamReader(jsonlPath);
         string? line;
@@ -539,7 +549,7 @@ public sealed class SubagentService
                      line.Contains("\"agentId\"", StringComparison.Ordinal) &&
                      line.Contains("\"tool_result\"", StringComparison.Ordinal))
             {
-                ExtractToolUseResultMapping(line, agentIdByToolUseId);
+                ExtractToolUseResultMapping(line, agentIdByToolUseId, usageByAgentId);
             }
             else if (line.Contains("\"Agent\"", StringComparison.Ordinal) &&
                      line.Contains("\"tool_use\"", StringComparison.Ordinal))
@@ -604,11 +614,13 @@ public sealed class SubagentService
 
     /// <summary>
     /// Extracts foreground agent correlation from toolUseResult entries.
-    /// These map tool_result.tool_use_id → toolUseResult.agentId for agents spawned in the foreground.
+    /// These map tool_result.tool_use_id → toolUseResult.agentId for agents spawned in the foreground,
+    /// and capture the completion usage (totalToolUseCount/totalDurationMs) per agent.
     /// </summary>
     private static void ExtractToolUseResultMapping(
         string line,
-        Dictionary<string, string> agentIdByToolUseId)
+        Dictionary<string, string> agentIdByToolUseId,
+        Dictionary<string, (int? ToolUses, long? DurationMs)> usageByAgentId)
     {
         var agentId = ExtractJsonStringValue(line, "agentId");
         if (agentId is null)
@@ -622,6 +634,52 @@ public sealed class SubagentService
         {
             agentIdByToolUseId.TryAdd(toolUseId, agentId);
         }
+
+        // Capture the completion usage reported on this line (tokens are derived from the
+        // transcript elsewhere; here we only keep the tool count and active duration).
+        var toolUses = ExtractJsonNumberValue(line, "totalToolUseCount");
+        var durationMs = ExtractJsonNumberValue(line, "totalDurationMs");
+        if ((toolUses is not null || durationMs is not null) && !usageByAgentId.ContainsKey(agentId))
+        {
+            usageByAgentId[agentId] = ((int?)toolUses, durationMs);
+        }
+    }
+
+    /// <summary>
+    /// Extracts the first occurrence of a JSON integer value by key name from raw text.
+    /// Returns null when the key is absent or the value is not an integer.
+    /// </summary>
+    private static long? ExtractJsonNumberValue(
+        string line,
+        string key)
+    {
+        var marker = $"\"{key}\":";
+        var idx = line.IndexOf(marker, StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            return null;
+        }
+
+        var start = idx + marker.Length;
+        while (start < line.Length && line[start] == ' ')
+        {
+            start++;
+        }
+
+        var end = start;
+        if (end < line.Length && line[end] == '-')
+        {
+            end++;
+        }
+
+        while (end < line.Length && char.IsDigit(line[end]))
+        {
+            end++;
+        }
+
+        return long.TryParse(line.AsSpan(start, end - start), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
     }
 
     /// <summary>
