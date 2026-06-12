@@ -48,7 +48,7 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 **Interface & platform**
 
 - ⌨️ **Keyboard navigation** — vim-style (hjkl) + arrow keys, sidebar/board focus toggling
-- 🌙 **Dark / light themes** — system preference detection
+- 🌙 **Dark / light themes** — system preference detection, plus a 17-theme colour picker (Gruvbox, Catppuccin, Tokyo Night, Dracula, Nord, …)
 - 🔌 **Auto-port discovery** — finds an available port when the default is taken
 - 🔄 **Auto-update** — checks NuGet for new versions on startup
 
@@ -67,7 +67,7 @@ dotnet tool install -g atc-claude-kanban
 ### Run
 
 ```powershell
-# Start the dashboard (default: http://localhost:3456)
+# Start the dashboard (default: http://localhost:3541)
 atc-claude-kanban
 
 # Start and open browser automatically
@@ -83,13 +83,15 @@ atc-claude-kanban --dir ~/.claude-work
 atc-claude-kanban --no-update-check
 ```
 
-Then open your browser to `http://localhost:3456` and watch your Claude Code tasks in real time.
+Then open your browser to `http://localhost:3541` and watch your Claude Code tasks in real time.
 
 <p align="center">
   <img src="docs/cli-started.png" alt="CLI startup banner" width="500">
 </p>
 
-> **Auto-port:** When using the default port and it's already in use, the tool automatically tries up to 10 consecutive ports (3456, 3457, ...). When `--port` is specified explicitly, the tool fails fast.
+> **Auto-port:** When using the default port and it's already in use, the tool automatically tries up to 10 consecutive ports (3541, 3542, ...). When `--port` is specified explicitly, the tool fails fast.
+>
+> The default `3541` sits outside the Windows excluded TCP range (3422–3521) to avoid collisions with dynamically reserved ports.
 
 ## ✨ Features
 
@@ -168,10 +170,12 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 Toggle with the chat icon in the toolbar or `Shift+L`:
 
 - View the conversation transcript (user prompts, assistant responses, tool calls)
+- **Markdown previews** — assistant messages render real markdown (lists, code blocks, tables) in the feed, truncated on clean boundaries with a fade and a "+N lines/rows" chip
 - Tool parameter badges; click any tool entry to open its **full arguments** in the detail modal (including `mcp__*` tools, with object/array args shown as formatted JSON)
 - **Queued messages** — prompts queued mid-turn appear in the log with a `queued` badge (they aren't re-emitted as normal user lines, so they'd otherwise be invisible)
 - **Structured command & notification detail** — slash commands, command output, and task notifications render as labelled blocks in the detail modal instead of raw `<command-name>`/`<task-notification>` XML; the list collapses a slash command to its name
-- **Compaction collapse** — each `/compact` shows as a single expandable "Compacted" entry carrying the continuation summary, not several stacked markers
+- **Background task results** — a completed background agent shows its summary plus a usage chip (`· 22.3k tok · 6 tools · 119s`); click it to read the agent's full result as markdown
+- **Compaction collapse** — each `/compact` shows as a single "Compacted" entry; click it to read the continuation summary as markdown in the detail modal
 - **AskUserQuestion** entries show the question, the chosen answer, and each option's description
 - **User image attachments** appear as chips that open a full-size preview
 - Read tool calls show inline offset/limit annotations (e.g., `L45 +30`)
@@ -223,7 +227,7 @@ Each session shows accumulated token usage and estimated cost:
 
 Each session row shows a **context-window bar** — the latest turn's prompt size (input + cache) as a percentage of the model's window, color-coded green → amber → orange. The window size isn't recorded in the transcript, so it's inferred: 200K by default, or 1M once a session's context exceeds 200K.
 
-The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant and model** — the lead session plus each subagent, grouped under counted "Lead sessions" / "Subagents" subheaders, with **input / output / cache-read / cache-write** columns per model. A session that switches models mid-run (e.g. Opus 4.7 → 4.8) is priced per model and shown as separate rows. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
+The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant and model** — the lead session plus each subagent, grouped under counted "Lead sessions" / "Subagents" subheaders, with **input / output / cache-read / cache-write** columns per model. Each subagent also shows its **tool-count and active duration** (`· 42 tools · 151s`) from the completion record. A session that switches models mid-run (e.g. Opus 4.7 → 4.8) is priced per model and shown as separate rows. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
 
 > Cost is a list-price estimate from the per-message `usage` blocks in the transcript; it typically lands ~20–30% under Claude Code's own `/usage` (cache-creation tiering isn't recorded in the JSONL).
 
@@ -246,6 +250,12 @@ Sidebar sessions are grouped by project under collapsible headers. Each header s
 ### 🌗 Themes
 
 Dark and light themes follow your system preference and can be toggled with the header icon (or `T`); the choice persists across reloads.
+
+A separate **colour theme picker** (palette icon) offers 17 popular editor palettes — Gruvbox, Catppuccin, Tokyo Night, Solarized, Dracula, Nord, Rosé Pine, Everforest, Kanagawa, One Dark, Night Owl, Monokai Pro, GitHub, Ayu, Vitesse, Synthwave '84, plus the default Ember. The colour theme is independent of light/dark (each palette has both variants) and persists across reloads.
+
+<p align="center">
+  <img src="docs/theme-picker-dark.png" alt="Colour theme picker with 17 palette swatches" width="900">
+</p>
 
 <p align="center">
   <img src="docs/UI-white.png" alt="Dashboard overview — light theme" width="900">
