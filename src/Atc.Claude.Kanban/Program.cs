@@ -5,7 +5,7 @@ namespace Atc.Claude.Kanban;
 /// </summary>
 public static class Program
 {
-    private const int DefaultPort = 3456;
+    private const int DefaultPort = 3541;
     private const int MaxPortAttempts = 10;
 
     public static void Main(string[] args)
