@@ -2824,6 +2824,21 @@
       font-size: 11px;
     }
 
+    .msg-entry.msg-system-clickable {
+      opacity: 1;
+    }
+
+    .msg-compact-hint {
+      margin-left: 8px;
+      font-size: 10px;
+      color: var(--accent);
+      opacity: 0.85;
+    }
+
+    .msg-entry.msg-system-clickable:hover .msg-compact-hint {
+      text-decoration: underline;
+    }
+
     .msg-entry.msg-cmd .msg-text code {
       font-size: 11px;
       color: var(--accent);
@@ -5606,9 +5621,17 @@
     function renderSystemEntry(msg) {
       const label = escapeHtml(msg.systemLabel || 'System');
       const ts = formatMsgTimestamp(msg.timestamp);
-      return `<div class="msg-entry msg-system">
+      // A "Compacted" entry carries the continuation summary in fullText; surface it
+      // as a clickable chip that opens the detail modal with the summary as markdown.
+      const summary = msg.fullText && msg.fullText !== msg.systemLabel ? msg.fullText : '';
+      const hasSummary = msg.systemLabel === 'Compacted' && summary;
+      const clickAttrs = hasSummary
+        ? ` data-action="showCompactSummary" data-full-text="${escapeAttr(summary)}"`
+        : '';
+      const hint = hasSummary ? '<span class="msg-compact-hint">view summary</span>' : '';
+      return `<div class="msg-entry msg-system${hasSummary ? ' msg-system-clickable' : ''}"${clickAttrs}>
         <div class="msg-role">System</div>
-        <div class="msg-text"><code>${label}</code></div>
+        <div class="msg-text"><code>${label}</code>${hint}</div>
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;
     }
@@ -5804,6 +5827,15 @@
         body.className = 'msg-detail-full';
         body.textContent = fullText;
       }
+      overlay.classList.add('visible');
+    }
+
+    function showCompactSummaryModal(summary) {
+      const overlay = ensureMsgDetailOverlay();
+      overlay.querySelector('.modal-title').textContent = 'Compaction Summary';
+      const body = document.getElementById('msg-detail-body');
+      body.className = 'msg-detail-full msg-detail-structured detail-desc';
+      body.innerHTML = DOMPurify.sanitize(marked.parse(summary || ''));
       overlay.classList.add('visible');
     }
 
@@ -7936,6 +7968,11 @@
         case 'showMsgDetail': {
           const fullText = actionEl.dataset.fullText;
           if (fullText) showMsgDetailModal(fullText);
+          break;
+        }
+        case 'showCompactSummary': {
+          const summary = actionEl.dataset.fullText;
+          if (summary) showCompactSummaryModal(summary);
           break;
         }
         case 'showToolDetail': {
