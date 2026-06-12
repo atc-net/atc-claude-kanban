@@ -1477,16 +1477,18 @@
     }
 
     .subagent-badge {
+      height: 24px;
       display: inline-flex;
       align-items: center;
       gap: 3px;
-      padding: 1px 6px;
-      border-radius: 3px;
+      padding: 0 7px;
+      border-radius: 4px;
       font-size: 10px;
       font-weight: 500;
       background: var(--accent-dim);
       color: var(--accent);
       white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .subagent-badge svg {
@@ -3246,19 +3248,29 @@
       flex-shrink: 0;
     }
     .session-pin-btn {
-      cursor: pointer;
-      color: var(--text-muted);
-      opacity: 0.45;
+      width: 24px;
+      height: 24px;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
+      background: var(--bg-deep);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s ease;
     }
     .session-pin-btn:hover {
-      opacity: 1;
       color: var(--text-secondary);
+      border-color: var(--border);
     }
     .session-pin-btn.pinned {
-      opacity: 1;
+      background: var(--accent-dim);
       color: var(--accent);
+    }
+    .session-pin-btn.pinned:hover {
+      border-color: var(--accent);
     }
     .context-bar {
       margin-top: 6px;
