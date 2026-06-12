@@ -58,6 +58,51 @@ $haiku = 'claude-haiku-4-5-20251001'
 # Tiny valid 1x1 PNG (data presence for the image-attachment chip).
 $pngB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
+# ── Message-log feature content (single-quoted here-strings keep markdown / XML literal) ──
+# A markdown-rich assistant reply — renders as a truncated markdown preview in the feed.
+$mdReply = @'
+## Coupon validation plan
+
+- Validate codes against **Stripe** before applying
+- Reject **expired** coupons at checkout with a clear message
+- Cover the edge cases with unit tests
+
+```csharp
+if (!coupon.IsValid(code, DateTime.UtcNow))
+    return Reject("This coupon has expired");
+```
+
+Next: wire the coupon field into the checkout form.
+'@
+
+# A /compact continuation summary (isCompactSummary) — the preamble is stripped and the
+# rest renders as an expandable "Compacted" entry.
+$compactSummary = @'
+This session is being continued from a previous conversation that ran out of context.
+
+## Summary so far
+- Implemented coupon validation against Stripe
+- Fixed expiry handling and the failing CouponExpiryTests
+- Pending: wire the coupon field into the checkout form
+'@
+
+# A background task-notification envelope — renders as a summary + usage chip whose result
+# opens as markdown.
+$taskNotif = @'
+<task-notification>
+<task-id>demo-task-coupon-audit</task-id>
+<status>completed</status>
+<summary>Agent "Audit coupon edge cases" completed</summary>
+<result>## Audit findings
+
+- Coupon **stacks** correctly with free shipping
+- Expired coupons are rejected with a clear message
+- No double-discount path found
+</result>
+<usage><subagent_tokens>22316</subagent_tokens><tool_uses>6</tool_uses><duration_ms>118942</duration_ms></usage>
+</task-notification>
+'@
+
 # ── Session 1: acme-storefront — checkout coupons (rich showcase) ─────────────
 Write-Task $s1 1 'Validate coupon codes against Stripe' 'in_progress' 'Validating coupon codes against Stripe'
 Write-Task $s1 2 'Add expiry handling for coupons' 'pending' $null
@@ -87,6 +132,15 @@ Write-Jsonl (Join-Path $projectsRoot "acme\$s1.jsonl") @(
     [ordered]@{ type = 'user'; uuid = 'u-img-001'; timestamp = (Stamp 33); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'text'; text = 'Here is the failing checkout screen:' }, [ordered]@{ type = 'image'; source = [ordered]@{ type = 'base64'; media_type = 'image/png'; data = $pngB64 } }) } },
     # A prompt queued mid-turn — renders in the message log with a "queued" badge.
     [ordered]@{ type = 'queue-operation'; operation = 'enqueue'; sessionId = $s1; timestamp = (Stamp 33); content = 'also confirm the coupon stacks with free shipping' },
+    # Subagent completion records — surface tool-count + duration per subagent in the Session Usage modal.
+    [ordered]@{ type = 'user'; timestamp = (Stamp 38); toolUseResult = [ordered]@{ agentId = 'aexplore1'; totalTokens = 30600; totalToolUseCount = 8; totalDurationMs = 42000 }; message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_explore'; content = 'Pricing is applied in CartTotals.Apply().' }) } },
+    [ordered]@{ type = 'user'; timestamp = (Stamp 36); toolUseResult = [ordered]@{ agentId = 'areview1'; totalTokens = 23500; totalToolUseCount = 5; totalDurationMs = 31000 }; message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_review'; content = 'Looks correct; suggest a null check.' }) } },
+    # Markdown-rich assistant reply — renders as a truncated markdown preview in the feed.
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 34); message = [ordered]@{ role = 'assistant'; model = $opus; content = @([ordered]@{ type = 'text'; text = $mdReply }); usage = (Usage 1600 420 2000 90000) } },
+    # A /compact continuation summary — renders as a single expandable "Compacted" entry.
+    [ordered]@{ type = 'user'; isCompactSummary = $true; timestamp = (Stamp 33); message = [ordered]@{ role = 'user'; content = $compactSummary } },
+    # A background task-notification — summary + usage chip, result opens as markdown.
+    [ordered]@{ type = 'user'; timestamp = (Stamp 33); message = [ordered]@{ role = 'user'; content = $taskNotif } },
     # Mid-run model switch to Opus 4.8 — surfaces as a second row under "Lead sessions" in the Session Usage modal.
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 33); message = [ordered]@{ role = 'assistant'; model = $opus48; content = @([ordered]@{ type = 'text'; text = 'Switched to Opus 4.8 to finalize the review.' }); usage = (Usage 1800 350 2200 60000) } },
     # Final turn sets the current context size (~165k of 200k).
