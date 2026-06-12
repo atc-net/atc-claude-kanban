@@ -2945,6 +2945,71 @@
       word-break: break-word;
     }
 
+    /* Markdown-rendered assistant preview: undo the .msg-text line clamp so the
+       boundary-aware preview controls length; element styling comes from .detail-desc. */
+    .msg-text-md {
+      display: block;
+      -webkit-line-clamp: none;
+      white-space: normal;
+      font-size: 12px;
+    }
+
+    .msg-text-md table,
+    .msg-text-md pre,
+    .msg-text-md code {
+      font-size: 11px;
+    }
+
+    .msg-text-md h1,
+    .msg-text-md h2,
+    .msg-text-md h3,
+    .msg-text-md h4,
+    .msg-text-md h5,
+    .msg-text-md h6 {
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .msg-text-md pre {
+      padding: 6px 8px;
+      background: var(--bg-hover);
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+
+    .msg-text-md blockquote {
+      padding-left: 8px;
+      border-left: 2px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .msg-md-content > :first-child {
+      margin-top: 0;
+    }
+
+    .msg-md-content > :last-child {
+      margin-bottom: 0;
+    }
+
+    /* Soften just the bottom edge of a truncated preview so it reads as "continues"
+       without obscuring the last line of text. */
+    .msg-md-content.is-truncated {
+      -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 0.85em), transparent);
+      mask-image: linear-gradient(to bottom, #000 calc(100% - 0.85em), transparent);
+    }
+
+    .msg-md-more {
+      display: block;
+      width: fit-content;
+      margin: 3px auto 0 0;
+      padding: 1px 8px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: var(--bg-hover);
+      border-radius: 9px;
+    }
+
     .msg-tool-name {
       font-size: 12px;
       font-weight: 600;
@@ -5636,13 +5701,142 @@
       </div>`;
     }
 
+    // A GFM table delimiter row (|---|:--:|): only pipes/dashes/colons/spaces, with
+    // at least one dash. Pairs with a preceding line that has cells to mark a table.
+    function isTableDelimiter(line) {
+      const l = (line || '').trim();
+      return l.includes('-') && /^\|?[ :|-]+\|?$/.test(l);
+    }
+
+    // Cut a string to at most `max` chars at a word boundary (no mid-word chops).
+    function truncateAtWord(string, max) {
+      if (string.length <= max) return string;
+      const cut = string.slice(0, max);
+      const space = cut.lastIndexOf(' ');
+      return (space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd();
+    }
+
+    // Build a markdown preview for an assistant message: render real markdown but
+    // truncate on clean structural boundaries so the feed stays compact and the
+    // output is always valid markdown (never cut mid code-fence or mid table-row).
+    // Prose is bounded by a line count AND a char budget (long single paragraphs are
+    // cut at a word boundary). Returns { md, remainder } where remainder is a short
+    // label describing what was cut (e.g. "+12 lines"), or '' when nothing was cut.
+    function buildAssistantPreview(text) {
+      const lines = (text || '').replace(/\r/g, '').split('\n');
+      const maxLines = 5; // non-blank content lines kept before truncating
+      const maxChars = 280; // total prose/code/table chars kept
+      const maxRows = 3; // table body rows
+      const maxCodeLines = 8; // lines kept inside a fenced code block
+      const countRest = (idx) => {
+        let count = 0;
+        for (let j = idx; j < lines.length; j++) if (lines[j].trim()) count++;
+        return count;
+      };
+      const pluralize = (count, word) => `+${count} ${word}${count > 1 ? 's' : ''}`;
+      const out = [];
+      let remainder = '';
+      let content = 0;
+      let chars = 0;
+      let i = 0;
+
+      for (; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        if (content >= maxLines || chars >= maxChars) {
+          const rest = countRest(i);
+          if (rest) remainder = pluralize(rest, 'line');
+          break;
+        }
+
+        // Fenced code block — copy verbatim (capped), never break the fence open.
+        const fence = trimmed.match(/^(```|~~~)/);
+        if (fence) {
+          const marker = fence[1];
+          out.push(line);
+          let codeLines = 0;
+          let dropped = 0;
+          // Advance to the real closing fence, keeping at most maxCodeLines lines,
+          // so leftover code isn't re-parsed as top-level markdown after the cap.
+          for (i++; i < lines.length && !lines[i].trim().startsWith(marker); i++) {
+            if (codeLines < maxCodeLines) {
+              out.push(lines[i]);
+              codeLines++;
+              chars += lines[i].length;
+            } else {
+              dropped++;
+            }
+          }
+          out.push(marker); // close the fence (covers capped / unterminated blocks)
+          content++;
+          if (dropped) {
+            // Stop at the truncated code block rather than resuming after the gap.
+            remainder = pluralize(dropped, 'code line');
+            break;
+          }
+          continue;
+        }
+
+        // Table — keep header + separator + up to maxRows body rows.
+        if (line.includes('|') && isTableDelimiter(lines[i + 1])) {
+          out.push(line, lines[i + 1]);
+          content++;
+          chars += line.length;
+          i++;
+          let rows = 0;
+          let droppedRows = 0;
+          while (lines[i + 1]?.includes('|')) {
+            if (rows >= maxRows) {
+              // Skip remaining rows so they aren't re-rendered as prose lines.
+              droppedRows++;
+              i++;
+              continue;
+            }
+            out.push(lines[++i]);
+            rows++;
+          }
+          if (droppedRows) {
+            // Stop at the truncated table — don't resume with later content across
+            // the gap; the "+N rows" chip signals the table continues.
+            remainder = pluralize(droppedRows, 'row');
+            break;
+          }
+          continue;
+        }
+
+        // Prose / list / heading — bound by the remaining char budget, cutting a
+        // long line at a word boundary rather than rendering a giant paragraph.
+        const remaining = maxChars - chars;
+        if (trimmed && line.length > remaining) {
+          out.push(truncateAtWord(line, remaining));
+          // Mid-line word cut — line counts would be misleading; count only the
+          // additional full lines that follow, else just signal "more".
+          const rest = countRest(i + 1);
+          remainder = rest ? pluralize(rest, 'line') : 'more';
+          break;
+        }
+        out.push(line);
+        chars += line.length;
+        if (trimmed) content++;
+      }
+
+      return { md: out.join('\n').trim(), remainder };
+    }
+
     function renderAssistantEntry(msg) {
-      const text = escapeHtml(msg.text || '');
       const ts = formatMsgTimestamp(msg.timestamp);
       const model = msg.model ? `<span style="font-size: 10px; color: var(--text-secondary); opacity: 0.6; margin-left: 8px;">${escapeHtml(msg.model)}</span>` : '';
-      return `<div class="msg-entry msg-assistant" data-action="showMsgDetail" data-full-text="${escapeAttr(msg.fullText || msg.text || '')}">
+      const source = msg.fullText || msg.text || '';
+      const preview = buildAssistantPreview(source);
+      const moreChip = preview.remainder ? `<div class="msg-md-more">${escapeHtml(preview.remainder)}</div>` : '';
+      const bodyHtml = preview.md
+        ? `<div class="msg-text msg-text-md">
+            <div class="msg-md-content detail-desc${preview.remainder ? ' is-truncated' : ''}">${DOMPurify.sanitize(marked.parse(preview.md))}</div>${moreChip}
+          </div>`
+        : `<div class="msg-text">${escapeHtml(msg.text || '')}</div>`;
+      return `<div class="msg-entry msg-assistant" data-action="showMsgDetail" data-full-text="${escapeAttr(source)}">
         <div class="msg-role">Assistant${model}</div>
-        <div class="msg-text">${text}</div>
+        ${bodyHtml}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;
     }
