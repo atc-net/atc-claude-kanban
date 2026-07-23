@@ -444,4 +444,131 @@ public sealed class SessionServiceTests : IDisposable
         sessions.Should().HaveCount(1);
         sessions[0].Name.Should().Be("My Rename");
     }
+
+    [Fact]
+    public async Task GetSessions_MarksAutoSelfTeamAsPlainSession()
+    {
+        // Arrange — recent Claude Code writes a single-member self-team (sole team-lead)
+        // for every session; it must not surface as a team.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-selfteam";
+
+        await WriteTaskAsync(sessionId, "1", "pending", cancellationToken);
+
+        await WriteTeamConfigAsync(
+            sessionId,
+            new
+            {
+                name = sessionId,
+                leadSessionId = sessionId,
+                members = new[] { new { agentId = "team-lead@" + sessionId, name = "team-lead", agentType = "team-lead" } },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().HaveCount(1);
+        sessions[0].IsTeam.Should().BeFalse();
+        sessions[0].MemberCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetSessions_MarksMultiMemberTeamAsTeam()
+    {
+        // Arrange — a genuinely-named multi-member team must still be a team.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string teamName = "research-team";
+
+        await WriteTaskAsync(teamName, "1", "pending", cancellationToken);
+
+        await WriteTeamConfigAsync(
+            teamName,
+            new
+            {
+                name = teamName,
+                members = new[]
+                {
+                    new { agentId = "team-lead@" + teamName, name = "team-lead", agentType = "team-lead" },
+                    new { agentId = "researcher@" + teamName, name = "researcher", agentType = "researcher" },
+                },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().HaveCount(1);
+        sessions[0].IsTeam.Should().BeTrue();
+        sessions[0].MemberCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSessions_TreatsSelfTeamWithRealTeammateAsTeam()
+    {
+        // Arrange — a session-named team that gained a real teammate is a team again.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-grew";
+
+        await WriteTaskAsync(sessionId, "1", "pending", cancellationToken);
+
+        await WriteTeamConfigAsync(
+            sessionId,
+            new
+            {
+                name = sessionId,
+                leadSessionId = sessionId,
+                members = new[]
+                {
+                    new { agentId = "team-lead@" + sessionId, name = "team-lead", agentType = "team-lead" },
+                    new { agentId = "helper@" + sessionId, name = "helper", agentType = "general-purpose" },
+                },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().HaveCount(1);
+        sessions[0].IsTeam.Should().BeTrue();
+        sessions[0].MemberCount.Should().Be(2);
+    }
+
+    private Task WriteTaskAsync(
+        string sessionId,
+        string taskId,
+        string status,
+        CancellationToken cancellationToken)
+    {
+        var sessionDir = Path.Combine(tempDir, "tasks", sessionId);
+        Directory.CreateDirectory(sessionDir);
+
+        return File.WriteAllTextAsync(
+            Path.Combine(sessionDir, $"{taskId}.json"),
+            JsonSerializer.Serialize(new { id = taskId, subject = "Task " + taskId, status }),
+            cancellationToken);
+    }
+
+    private Task WriteTeamConfigAsync(
+        string teamName,
+        object config,
+        CancellationToken cancellationToken)
+    {
+        var teamDir = Path.Combine(tempDir, "teams", teamName);
+        Directory.CreateDirectory(teamDir);
+
+        return File.WriteAllTextAsync(
+            Path.Combine(teamDir, "config.json"),
+            JsonSerializer.Serialize(config),
+            cancellationToken);
+    }
 }
