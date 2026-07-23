@@ -441,8 +441,8 @@ public sealed class SessionService
                 Description = index?.Description ?? leadIndex?.Description,
                 GitBranch = index?.GitBranch ?? leadIndex?.GitBranch,
                 HasPlan = PlanExistsForSession(slug),
-                IsTeam = teamConfig is not null,
-                MemberCount = teamConfig?.Members?.Count ?? 0,
+                IsTeam = teamConfig is not null && !IsAutoSelfTeam(teamConfig),
+                MemberCount = IsAutoSelfTeam(teamConfig) ? 0 : teamConfig?.Members?.Count ?? 0,
                 ModifiedAt = GetDirectoryLastWriteUtc(sessionDir),
                 CreatedAt = index?.CreatedAt,
                 Slug = slug,
@@ -503,8 +503,8 @@ public sealed class SessionService
             InProgress = tasks.Count(t => t.Status == "in_progress"),
             Completed = tasks.Count(t => t.Status == "completed"),
             HasPlan = PlanExistsForSession(slug),
-            IsTeam = teamConfig is not null,
-            MemberCount = teamConfig?.Members?.Count ?? 0,
+            IsTeam = teamConfig is not null && !IsAutoSelfTeam(teamConfig),
+            MemberCount = IsAutoSelfTeam(teamConfig) ? 0 : teamConfig?.Members?.Count ?? 0,
             ModifiedAt = latestModified == DateTime.MinValue ? DateTime.UtcNow : latestModified,
             CreatedAt = index?.CreatedAt,
             Slug = slug,
@@ -528,6 +528,30 @@ public sealed class SessionService
            ProjectDisplayName(index?.ProjectPath) ??
            ProjectDisplayName(index?.Cwd) ??
            sessionId;
+
+    /// <summary>
+    /// Determines whether a loaded team config is an auto-created single-member "self-team"
+    /// rather than a real multi-agent team. Recent Claude Code releases write a
+    /// teams/session-{id}/config.json (sole member = the team-lead) for every session; treating
+    /// these as teams makes every solo session render a phantom team badge and member panel.
+    /// Such a config is treated as a plain session until a real teammate joins (members &gt; 1).
+    /// </summary>
+    /// <param name="teamConfig">The loaded team configuration, or null.</param>
+    /// <returns><c>true</c> when the config is an auto-created self-team; otherwise <c>false</c>.</returns>
+    private static bool IsAutoSelfTeam(TeamConfig? teamConfig)
+    {
+        if (teamConfig?.Members is null)
+        {
+            return false;
+        }
+
+        var namedSession = teamConfig.Name is { } name
+                           && name.StartsWith("session-", StringComparison.Ordinal);
+        var soleLead = teamConfig.Members.Count == 0
+                       || (teamConfig.Members.Count == 1
+                           && string.Equals(teamConfig.Members[0]?.AgentType, "team-lead", StringComparison.Ordinal));
+        return namedSession && soleLead;
+    }
 
     private async Task<(List<ClaudeTask> Tasks, DateTime LatestModified)> ReadTaskFilesAsync(
         string[] taskFiles,
