@@ -56,7 +56,7 @@ public sealed class TaskService
         string sessionId,
         CancellationToken cancellationToken = default)
     {
-        var sessionDir = GetValidatedSessionDir(sessionId);
+        var sessionDir = await ResolveSessionDirAsync(sessionId, cancellationToken);
         if (sessionDir is null || !Directory.Exists(sessionDir))
         {
             // Task files deleted — return snapshot if available
@@ -123,7 +123,7 @@ public sealed class TaskService
         string sessionId,
         CancellationToken cancellationToken = default)
     {
-        var sessionDir = GetValidatedSessionDir(sessionId);
+        var sessionDir = await ResolveSessionDirAsync(sessionId, cancellationToken);
         if (sessionDir is null || !Directory.Exists(sessionDir))
         {
             return [];
@@ -176,19 +176,19 @@ public sealed class TaskService
 
         var allTasks = new List<ClaudeTask>();
         var sessions = await sessionService.GetSessionsAsync(int.MaxValue, cancellationToken);
-        var sessionLookup = sessions.ToDictionary(s => s.Id, StringComparer.Ordinal);
 
-        foreach (var dir in Directory.GetDirectories(tasksDir))
+        // Iterate discovered sessions rather than raw tasks/ dirs so each task is attributed
+        // to its merged session identity: a self-team task dir (tasks/session-{id}/) is
+        // resolved to the owning session, not shown under the raw session-{id} label.
+        foreach (var session in sessions)
         {
-            var sessionId = Path.GetFileName(dir);
-            sessionLookup.TryGetValue(sessionId, out var sessionInfo);
-            var tasks = await GetTasksForSessionAsync(sessionId, cancellationToken);
+            var tasks = await GetTasksForSessionAsync(session.Id, cancellationToken);
 
             foreach (var task in tasks)
             {
-                task.SessionId = sessionId;
-                task.SessionName = sessionInfo?.Name ?? sessionId;
-                task.Project = sessionInfo?.Project;
+                task.SessionId = session.Id;
+                task.SessionName = session.Name ?? session.Id;
+                task.Project = session.Project;
             }
 
             allTasks.AddRange(tasks);
@@ -364,7 +364,7 @@ public sealed class TaskService
         string taskId,
         CancellationToken cancellationToken = default)
     {
-        var sessionDir = GetValidatedSessionDir(sessionId);
+        var sessionDir = await ResolveSessionDirAsync(sessionId, cancellationToken);
         if (sessionDir is null || !Directory.Exists(sessionDir))
         {
             return null;
@@ -408,6 +408,26 @@ public sealed class TaskService
         var sessionDir = Path.GetFullPath(Path.Combine(tasksDir, sessionId));
 
         return PathHelper.IsUnderDirectory(sessionDir, tasksDir) ? sessionDir : null;
+    }
+
+    /// <summary>
+    /// Resolves the directory a session's tasks live in. Prefers the session's own
+    /// tasks/{id}/ dir when it holds tasks; otherwise redirects to the owning self-team
+    /// task dir (Claude Code routes a session's tasks through tasks/session-{id}/), so a
+    /// live session shows the tasks it owns even though its own dir is empty.
+    /// </summary>
+    private async Task<string?> ResolveSessionDirAsync(
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var direct = GetValidatedSessionDir(sessionId);
+        if (direct is not null && Directory.Exists(direct) && Directory.GetFiles(direct, "*.json").Length > 0)
+        {
+            return direct;
+        }
+
+        var custom = await sessionService.GetCustomTaskDirAsync(sessionId, cancellationToken);
+        return custom ?? direct;
     }
 
     private async Task<bool> MatchesTaskIdAsync(

@@ -543,6 +543,157 @@ public sealed class SessionServiceTests : IDisposable
         sessions[0].MemberCount.Should().Be(2);
     }
 
+    [Fact]
+    public async Task GetSessions_MergesSelfTeamTasksIntoOwnerByLeadSessionId()
+    {
+        // Arrange — a self-team whose leadSessionId is a discovered UUID session.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "11111111-1111-4111-8111-111111111111";
+
+        await WriteSessionJsonlAsync(ownerId, "Owner Work", cancellationToken);
+        await WriteTaskAsync("session-11111111", "1", "pending", cancellationToken);
+        await WriteTaskAsync("session-11111111", "2", "completed", cancellationToken);
+        await WriteTeamConfigAsync(
+            "session-11111111",
+            new
+            {
+                name = "session-11111111",
+                leadSessionId = ownerId,
+                members = new[] { new { agentId = "team-lead@x", name = "team-lead", agentType = "team-lead" } },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert — one merged card, tasks attached, no session-<prefix> duplicate.
+        sessions.Should().NotContain(s => s.Id == "session-11111111");
+        var owner = sessions.Should().ContainSingle(s => s.Id == ownerId).Subject;
+        owner.TaskCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSessions_MergesSelfTeamTasksIntoOwnerByPrefix_WhenNoTeamConfig()
+    {
+        // Arrange — a session-<prefix> task dir with no team config; prefix matches the UUID.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "22222222-2222-4222-8222-222222222222";
+
+        await WriteSessionJsonlAsync(ownerId, "Prefix Owner", cancellationToken);
+        await WriteTaskAsync("session-22222222", "1", "pending", cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().NotContain(s => s.Id == "session-22222222");
+        var owner = sessions.Should().ContainSingle(s => s.Id == ownerId).Subject;
+        owner.TaskCount.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetSessions_MergesResumedSelfTeamTasksIntoOwnerViaRegistry()
+    {
+        // Arrange — a resumed session: the team's leadSessionId is a ghost and the dir prefix
+        // matches no discovered session, so only the live-session registry (cwd + boot time)
+        // links the self-team to the live owner.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "33333333-3333-4333-8333-333333333333";
+        const string cwd = "/repo/live";
+
+        await WriteSessionJsonlAsync(ownerId, "Resumed Owner", cancellationToken);
+        await WriteLiveSessionAsync("4242", ownerId, cwd, startedAt: 1_000_000, cancellationToken);
+        await WriteTaskAsync("session-aaaaaaaa", "1", "pending", cancellationToken);
+        await WriteTaskAsync("session-aaaaaaaa", "2", "in_progress", cancellationToken);
+        await WriteTaskAsync("session-aaaaaaaa", "3", "completed", cancellationToken);
+        await WriteTeamConfigAsync(
+            "session-aaaaaaaa",
+            new
+            {
+                name = "session-aaaaaaaa",
+                leadSessionId = "99999999-9999-4999-8999-999999999999",
+                createdAt = 1_000_500L,
+                members = new[] { new { agentId = "team-lead@x", name = "team-lead", agentType = "team-lead", cwd } },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().NotContain(s => s.Id == "session-aaaaaaaa");
+        var owner = sessions.Should().ContainSingle(s => s.Id == ownerId).Subject;
+        owner.TaskCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetSessions_KeepsSelfTeamCard_WhenNoOwnerResolves()
+    {
+        // Arrange — a self-team whose owner is gone (ghost lead, no matching registry session,
+        // no discovered prefix UUID). The card must stay so its tasks remain visible.
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        await WriteTaskAsync("session-bbbbbbbb", "1", "pending", cancellationToken);
+        await WriteTeamConfigAsync(
+            "session-bbbbbbbb",
+            new
+            {
+                name = "session-bbbbbbbb",
+                leadSessionId = "88888888-8888-4888-8888-888888888888",
+                createdAt = 2_000_000L,
+                members = new[] { new { agentId = "team-lead@x", name = "team-lead", agentType = "team-lead", cwd = "/repo/orphan" } },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        var card = sessions.Should().ContainSingle(s => s.Id == "session-bbbbbbbb").Subject;
+        card.TaskCount.Should().Be(1);
+    }
+
+    private Task WriteSessionJsonlAsync(
+        string sessionId,
+        string aiTitle,
+        CancellationToken cancellationToken)
+    {
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", cwd = "/repo", message = new { role = "user", content = "Hi" } }),
+            JsonSerializer.Serialize(new { type = "ai-title", aiTitle }));
+
+        return File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+    }
+
+    private Task WriteLiveSessionAsync(
+        string pid,
+        string sessionId,
+        string cwd,
+        long startedAt,
+        CancellationToken cancellationToken)
+    {
+        var sessionsDir = Path.Combine(tempDir, "sessions");
+        Directory.CreateDirectory(sessionsDir);
+
+        // kind "bg" (a background session) deliberately — the owner is matched on cwd + boot
+        // time regardless of kind; a stricter interactive-only filter would wrongly skip it.
+        return File.WriteAllTextAsync(
+            Path.Combine(sessionsDir, $"{pid}.json"),
+            JsonSerializer.Serialize(new { sessionId, kind = "bg", cwd, startedAt, status = "busy" }),
+            cancellationToken);
+    }
+
     private Task WriteTaskAsync(
         string sessionId,
         string taskId,

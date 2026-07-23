@@ -28,4 +28,11 @@ public sealed class TeamMember
     /// </summary>
     [JsonPropertyName("model")]
     public string? Model { get; set; }
+
+    /// <summary>
+    /// Gets or sets the working directory this member runs in. Used to match an
+    /// auto-created self-team back to the live session that owns it.
+    /// </summary>
+    [JsonPropertyName("cwd")]
+    public string? Cwd { get; set; }
 }

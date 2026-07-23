@@ -45,6 +45,110 @@ public sealed class TaskServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetTasksForSession_ResolvesOwnedSelfTeamDir_ViaRegistry()
+    {
+        // Arrange — the live session's own tasks dir is empty; its tasks live under a
+        // self-team dir it owns, linked only via the live-session registry (cwd + boot time).
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "44444444-4444-4444-8444-444444444444";
+        const string cwd = "/repo/t";
+
+        var sessionsDir = Path.Combine(tempDir, "sessions");
+        Directory.CreateDirectory(sessionsDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionsDir, "5555.json"),
+            JsonSerializer.Serialize(new { sessionId = ownerId, kind = "bg", cwd, startedAt = 1_000_000L, status = "busy" }),
+            cancellationToken);
+
+        var teamDir = Path.Combine(tempDir, "teams", "session-cccccccc");
+        Directory.CreateDirectory(teamDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(teamDir, "config.json"),
+            JsonSerializer.Serialize(new
+            {
+                name = "session-cccccccc",
+                leadSessionId = "99999999-9999-4999-8999-999999999999",
+                createdAt = 1_000_200L,
+                members = new[] { new { agentId = "team-lead@x", name = "team-lead", agentType = "team-lead", cwd } },
+            }),
+            cancellationToken);
+
+        var selfTeamTasks = Path.Combine(tempDir, "tasks", "session-cccccccc");
+        Directory.CreateDirectory(selfTeamTasks);
+        await File.WriteAllTextAsync(
+            Path.Combine(selfTeamTasks, "1.json"),
+            JsonSerializer.Serialize(new { id = "1", subject = "Owned task 1", status = "pending" }),
+            cancellationToken);
+        await File.WriteAllTextAsync(
+            Path.Combine(selfTeamTasks, "2.json"),
+            JsonSerializer.Serialize(new { id = "2", subject = "Owned task 2", status = "completed" }),
+            cancellationToken);
+
+        var service = new TaskService(tempDir, sessionService, jsonSerializerOptions);
+
+        // Act — request tasks for the live owner id, whose own dir is empty.
+        var tasks = await service.GetTasksForSessionAsync(ownerId, cancellationToken);
+
+        // Assert
+        tasks.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task GetAllTasks_AttributesMergedSelfTeamTasksToOwner()
+    {
+        // Arrange — a self-team task dir owned (via registry) by a discovered session; the
+        // aggregate board must label the task with the owner, not the raw session-<id> dir.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "66666666-6666-4666-8666-666666666666";
+        const string cwd = "/repo/all";
+
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", cwd, message = new { role = "user", content = "Hi" } }),
+            JsonSerializer.Serialize(new { type = "ai-title", aiTitle = "Owner Session" }));
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{ownerId}.jsonl"), jsonl, cancellationToken);
+
+        var sessionsDir = Path.Combine(tempDir, "sessions");
+        Directory.CreateDirectory(sessionsDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionsDir, "6666.json"),
+            JsonSerializer.Serialize(new { sessionId = ownerId, kind = "bg", cwd, startedAt = 1_000_000L, status = "busy" }),
+            cancellationToken);
+
+        var teamDir = Path.Combine(tempDir, "teams", "session-dddddddd");
+        Directory.CreateDirectory(teamDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(teamDir, "config.json"),
+            JsonSerializer.Serialize(new
+            {
+                name = "session-dddddddd",
+                leadSessionId = "99999999-9999-4999-8999-999999999999",
+                createdAt = 1_000_300L,
+                members = new[] { new { agentId = "team-lead@x", name = "team-lead", agentType = "team-lead", cwd } },
+            }),
+            cancellationToken);
+
+        var selfTeamTasks = Path.Combine(tempDir, "tasks", "session-dddddddd");
+        Directory.CreateDirectory(selfTeamTasks);
+        await File.WriteAllTextAsync(
+            Path.Combine(selfTeamTasks, "1.json"),
+            JsonSerializer.Serialize(new { id = "1", subject = "Merged task", status = "pending" }),
+            cancellationToken);
+
+        var service = new TaskService(tempDir, sessionService, jsonSerializerOptions);
+
+        // Act
+        var tasks = await service.GetAllTasksAsync(cancellationToken);
+
+        // Assert
+        var task = tasks.Should().ContainSingle(t => t.Id == "1").Subject;
+        task.SessionId.Should().Be(ownerId);
+        task.SessionName.Should().NotBe("session-dddddddd");
+    }
+
+    [Fact]
     public async Task GetTasksForSession_ReturnsTasks()
     {
         // Arrange

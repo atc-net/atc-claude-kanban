@@ -9,6 +9,10 @@ public sealed class SessionService
 {
     private const int MetadataTailReadSize = 16384;
 
+    // A resumed session keeps writing to its original self-team's task list; the team's
+    // createdAt is written at the owning session's boot, so match within this window.
+    private const long SelfTeamBootWindowMs = 60_000;
+
     private readonly ConcurrentDictionary<string, SessionInfo> sessionSnapshots = new(StringComparer.Ordinal);
 
     private readonly string claudeDir;
@@ -156,6 +160,11 @@ public sealed class SessionService
         // Merge lead sessions into their team sessions so subagents and metadata
         // appear on the team row instead of a separate subagent-only row
         await MergeLeadSessionsAsync(sessions, cancellationToken);
+
+        // Collapse per-session self-team task dirs (tasks/session-<id>/) into the
+        // owning session so a session doesn't appear twice (real card + task-holding
+        // session-<id> card) and its tasks land on the named card.
+        await MergeSelfTeamCardsAsync(sessions, cancellationToken);
 
         // Snapshot active sessions and restore progress for sessions whose
         // task files were removed (either files only or entire directory).
@@ -1104,6 +1113,317 @@ public sealed class SessionService
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Resolves the task directory a session's tasks actually live in. Claude Code stores
+    /// a session's tasks under a per-session self-team list (tasks/session-{id}/), so a live
+    /// session's own tasks/{id}/ dir is often empty while the real tasks sit under a team dir
+    /// it owns. Returns the owning team task directory (the one with the most tasks when a
+    /// session owns several), or null when there is nothing to redirect to.
+    /// </summary>
+    /// <param name="sessionId">The session identifier to resolve tasks for.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The absolute path of the owning task directory, or null.</returns>
+    public async Task<string?> GetCustomTaskDirAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sessionId);
+
+        var teamsDir = Path.Combine(claudeDir, "teams");
+        if (!Directory.Exists(teamsDir))
+        {
+            return null;
+        }
+
+        var tasksRoot = Path.GetFullPath(Path.Combine(claudeDir, "tasks"));
+        IReadOnlyList<LiveSession>? liveSessions = null;
+        string? bestDir = null;
+        var bestCount = -1;
+
+        foreach (var teamDir in Directory.GetDirectories(teamsDir))
+        {
+            var teamName = Path.GetFileName(teamDir);
+            var teamConfig = await TryLoadTeamConfigAsync(teamName, cancellationToken);
+            if (teamConfig is null)
+            {
+                continue;
+            }
+
+            var owns = string.Equals(teamConfig.LeadSessionId, sessionId, StringComparison.Ordinal);
+            if (!owns && IsAutoSelfTeam(teamConfig))
+            {
+                liveSessions ??= await LoadLiveSessionsAsync(cancellationToken);
+                owns = string.Equals(ResolveSelfTeamOwnerId(teamConfig, liveSessions), sessionId, StringComparison.Ordinal);
+            }
+
+            if (!owns)
+            {
+                continue;
+            }
+
+            var teamTaskDir = Path.GetFullPath(Path.Combine(tasksRoot, teamName));
+            if (!PathHelper.IsUnderDirectory(teamTaskDir, tasksRoot) || !Directory.Exists(teamTaskDir))
+            {
+                continue;
+            }
+
+            var count = Directory.GetFiles(teamTaskDir, "*.json").Length;
+            if (count > bestCount)
+            {
+                bestCount = count;
+                bestDir = teamTaskDir;
+            }
+        }
+
+        // Prefix-derived self-team dir: Claude Code names a session's own list
+        // session-{first-8-hex-of-id}. Covers the config-less case the teams scan misses.
+        var (prefixDir, prefixCount) = ResolvePrefixTaskDir(sessionId, tasksRoot);
+        if (prefixDir is not null && prefixCount > bestCount)
+        {
+            bestDir = prefixDir;
+        }
+
+        return bestDir;
+    }
+
+    /// <summary>
+    /// Resolves the prefix-derived self-team task directory for a UUID session
+    /// (tasks/session-{first-8-hex}), returning its path and task-file count, or (null, -1)
+    /// when the id is already a session-{id} name or the directory does not exist.
+    /// </summary>
+    private static (string? Dir, int Count) ResolvePrefixTaskDir(
+        string sessionId,
+        string tasksRoot)
+    {
+        if (sessionId.StartsWith("session-", StringComparison.Ordinal))
+        {
+            return (null, -1);
+        }
+
+        var dash = sessionId.IndexOf('-', StringComparison.Ordinal);
+        var prefix = dash > 0 ? sessionId[..dash] : sessionId;
+        if (prefix.Length == 0)
+        {
+            return (null, -1);
+        }
+
+        var prefixDir = Path.GetFullPath(Path.Combine(tasksRoot, "session-" + prefix));
+        if (!PathHelper.IsUnderDirectory(prefixDir, tasksRoot) || !Directory.Exists(prefixDir))
+        {
+            return (null, -1);
+        }
+
+        return (prefixDir, Directory.GetFiles(prefixDir, "*.json").Length);
+    }
+
+    /// <summary>
+    /// Collapses per-session self-team task directories into the session that owns them.
+    /// Claude Code stores a session's tasks under tasks/session-{id}/ (an auto-created
+    /// self-team list), which discovery surfaces as its own card — so a session appears
+    /// twice: the real UUID card plus a session-{id} card holding the tasks. This attaches
+    /// the tasks to the owning card (the one with the most tasks wins) and removes the
+    /// duplicate. Owner resolution order: the team's leadSessionId, the UUID whose prefix the
+    /// dir name carries, then the live session matched by cwd and boot time (a resumed session
+    /// keeps writing to the original team's list under a new id).
+    /// </summary>
+    private async Task MergeSelfTeamCardsAsync(
+        List<SessionInfo> sessions,
+        CancellationToken cancellationToken)
+    {
+        var byId = new Dictionary<string, SessionInfo>(StringComparer.Ordinal);
+        foreach (var session in sessions)
+        {
+            byId[session.Id] = session;
+        }
+
+        IReadOnlyList<LiveSession>? liveSessions = null;
+        var toRemove = new HashSet<SessionInfo>();
+
+        foreach (var session in sessions)
+        {
+            if (!session.Id.StartsWith("session-", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var prefix = session.Id["session-".Length..];
+            var teamConfig = await TryLoadTeamConfigAsync(session.Id, cancellationToken);
+
+            var owner = ResolveOwnerCard(session, prefix, teamConfig, byId);
+            if (owner is null && teamConfig is not null && IsAutoSelfTeam(teamConfig))
+            {
+                liveSessions ??= await LoadLiveSessionsAsync(cancellationToken);
+                var ownerId = ResolveSelfTeamOwnerId(teamConfig, liveSessions);
+                if (ownerId is not null)
+                {
+                    byId.TryGetValue(ownerId, out owner);
+                }
+            }
+
+            if (owner is null || ReferenceEquals(owner, session))
+            {
+                continue;
+            }
+
+            AttachRicherTaskCounts(owner, session);
+            toRemove.Add(session);
+        }
+
+        if (toRemove.Count > 0)
+        {
+            sessions.RemoveAll(toRemove.Contains);
+        }
+    }
+
+    /// <summary>
+    /// Resolves the owning card for a session-{prefix} self-team dir via the team's
+    /// leadSessionId, then the discovered UUID session whose id starts with the dir prefix.
+    /// Returns null when neither is present (the caller then tries the live-session registry).
+    /// </summary>
+    private static SessionInfo? ResolveOwnerCard(
+        SessionInfo selfTeam,
+        string prefix,
+        TeamConfig? teamConfig,
+        Dictionary<string, SessionInfo> byId)
+    {
+        if (teamConfig?.LeadSessionId is { } leadId &&
+            !string.Equals(leadId, selfTeam.Id, StringComparison.Ordinal) &&
+            byId.TryGetValue(leadId, out var leadCard))
+        {
+            return leadCard;
+        }
+
+        if (prefix.Length > 0)
+        {
+            foreach (var candidate in byId.Values)
+            {
+                if (!candidate.Id.StartsWith("session-", StringComparison.Ordinal) &&
+                    candidate.Id.Length > prefix.Length &&
+                    candidate.Id[prefix.Length] == '-' &&
+                    candidate.Id.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Copies the self-team card's task counts onto the owner card when they are richer,
+    /// so the owning session reflects the tasks that live under its self-team dir.
+    /// </summary>
+    private static void AttachRicherTaskCounts(
+        SessionInfo owner,
+        SessionInfo selfTeam)
+    {
+        if (selfTeam.TaskCount <= owner.TaskCount)
+        {
+            return;
+        }
+
+        owner.TaskCount = selfTeam.TaskCount;
+        owner.Pending = selfTeam.Pending;
+        owner.InProgress = selfTeam.InProgress;
+        owner.Completed = selfTeam.Completed;
+        owner.Progress = selfTeam.Progress;
+        if (selfTeam.PeakTaskCount > owner.PeakTaskCount)
+        {
+            owner.PeakTaskCount = selfTeam.PeakTaskCount;
+        }
+    }
+
+    /// <summary>
+    /// Given an auto-created self-team config, returns the id of the live interactive session
+    /// that owns it — same working directory, started within the boot window of the team's
+    /// creation — or null. Bridges a resumed session whose team leadSessionId points at a
+    /// now-ghost id that no longer maps to a discoverable session.
+    /// </summary>
+    private static string? ResolveSelfTeamOwnerId(
+        TeamConfig teamConfig,
+        IReadOnlyList<LiveSession> liveSessions)
+    {
+        if (teamConfig.CreatedAt is not { } createdAt)
+        {
+            return null;
+        }
+
+        var teamCwd = teamConfig.Members is { Count: > 0 } members ? members[0]?.Cwd : null;
+        teamCwd ??= teamConfig.WorkingDir;
+        if (string.IsNullOrEmpty(teamCwd))
+        {
+            return null;
+        }
+
+        // Match on cwd + boot-time proximity only. The team's createdAt is stamped at the
+        // owning session's boot, so the closest same-cwd session within the window is the
+        // owner regardless of its kind (interactive, bg, …) — filtering by kind wrongly
+        // excludes background sessions that legitimately own a task list.
+        string? best = null;
+        var bestDelta = long.MaxValue;
+        foreach (var live in liveSessions)
+        {
+            if (live.SessionId is null ||
+                !string.Equals(live.Cwd, teamCwd, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var delta = System.Math.Abs(live.StartedAt - createdAt);
+            if (delta <= SelfTeamBootWindowMs && delta < bestDelta)
+            {
+                best = live.SessionId;
+                bestDelta = delta;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Reads Claude Code's live-session registry (~/.claude/sessions/{pid}.json), cached for
+    /// 5 seconds. Used to match an auto-created self-team back to the live session that owns it.
+    /// </summary>
+    private async Task<IReadOnlyList<LiveSession>> LoadLiveSessionsAsync(
+        CancellationToken cancellationToken)
+    {
+        const string cacheKey = "live-sessions";
+        if (cache.TryGetValue(cacheKey, out IReadOnlyList<LiveSession>? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var result = new List<LiveSession>();
+        var sessionsDir = Path.Combine(claudeDir, "sessions");
+        if (Directory.Exists(sessionsDir))
+        {
+            foreach (var file in Directory.GetFiles(sessionsDir, "*.json"))
+            {
+                try
+                {
+                    var json = await File.ReadAllTextAsync(file, cancellationToken);
+                    var entry = JsonSerializer.Deserialize<LiveSession>(json, jsonSerializerOptions);
+                    if (entry?.SessionId is not null)
+                    {
+                        result.Add(entry);
+                    }
+                }
+                catch (JsonException)
+                {
+                    // Skip malformed registry entries
+                }
+                catch (IOException)
+                {
+                    // Skip locked files
+                }
+            }
+        }
+
+        cache.Set(cacheKey, (IReadOnlyList<LiveSession>)result, TimeSpan.FromSeconds(5));
+        return result;
     }
 
     private static string? ProjectDisplayName(string? projectPath)
