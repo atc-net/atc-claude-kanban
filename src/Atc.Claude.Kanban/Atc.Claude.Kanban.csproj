@@ -24,8 +24,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Atc.Rest.MinimalApi" Version="2.0.37" />
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.3" />
+    <PackageReference Include="Atc.Rest.MinimalApi" Version="2.0.41" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.10" />
   </ItemGroup>
 
   <ItemGroup>

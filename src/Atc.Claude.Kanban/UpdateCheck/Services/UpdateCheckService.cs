@@ -224,6 +224,7 @@ public sealed partial class UpdateCheckService : BackgroundService
         BroadcastVersionUpdate(currentVersionString, latestVersionString);
     }
 
+    [SuppressMessage("Security", "S4036:Use an absolute path for this command", Justification = "The 'dotnet' CLI is resolved from PATH intentionally to run 'dotnet tool update'; the SDK location is machine-specific and cannot be hard-coded.")]
     private async Task<bool> TryAutoUpdateAsync(
         CancellationToken cancellationToken)
     {
