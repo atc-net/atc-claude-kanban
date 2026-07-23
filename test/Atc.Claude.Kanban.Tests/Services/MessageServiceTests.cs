@@ -245,7 +245,7 @@ public sealed class MessageServiceTests : IDisposable
 
         // Assert
         messages.Should().HaveCount(1);
-        messages[0].Text!.Length.Should().BeLessOrEqualTo(503); // 500 + "..."
+        messages[0].Text!.Length.Should().BeLessThanOrEqualTo(503); // 500 + "..."
         messages[0].FullText!.Length.Should().Be(1000);
     }
 

@@ -48,6 +48,7 @@ public sealed class UtilityEndpointDefinition : IEndpointDefinition
         }
     }
 
+    [SuppressMessage("Security", "S4036:Use an absolute path for this command", Justification = "The VS Code 'code' launcher is resolved from PATH intentionally; its install location is machine- and OS-specific and cannot be hard-coded.")]
     internal static Results<Ok, BadRequest, StatusCodeHttpResult> OpenInEditor(
         [FromBody] OpenInEditorRequest request)
     {
