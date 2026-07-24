@@ -343,7 +343,11 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 
 | Variable | Description |
 |----------|-------------|
+| `CLAUDE_CONFIG_DIR` | Path to the Claude data directory (overrides the `~/.claude` default) |
+| `CLAUDE_DIR` | Fallback data directory path, used when `CLAUDE_CONFIG_DIR` is not set |
 | `ATC_NO_UPDATE_CHECK=1` | Disable the NuGet update check on startup |
+
+The data directory is resolved in order: `--dir` flag > `CLAUDE_CONFIG_DIR` > `CLAUDE_DIR` > `~/.claude`. A leading `~` in either variable is expanded to your home directory.
 
 The update check is also automatically suppressed in CI environments (`CI`, `TF_BUILD`, or `GITHUB_ACTIONS` env vars detected).
 

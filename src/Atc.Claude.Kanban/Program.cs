@@ -35,9 +35,10 @@ public static class Program
         var openBrowser = false;
         var noUpdateCheck = false;
 
-        var claudeDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".claude");
+        var claudeDir = ResolveDefaultClaudeDir(
+            Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR"),
+            Environment.GetEnvironmentVariable("CLAUDE_DIR"),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
 
         var i = 0;
         while (i < args.Length)
@@ -83,6 +84,31 @@ public static class Program
             ClaudeDir = claudeDir,
             NoUpdateCheck = noUpdateCheck,
         };
+    }
+
+    /// <summary>
+    /// Resolves the default ~/.claude data directory used when no <c>--dir</c> flag is given.
+    /// Precedence: <c>CLAUDE_CONFIG_DIR</c> &gt; <c>CLAUDE_DIR</c> &gt; <c>{home}/.claude</c>.
+    /// A leading <c>~</c> in an env value is expanded to the home directory.
+    /// </summary>
+    /// <param name="configDir">Value of the CLAUDE_CONFIG_DIR environment variable, if any.</param>
+    /// <param name="claudeDirEnv">Value of the CLAUDE_DIR environment variable, if any.</param>
+    /// <param name="homeDirectory">The user's home directory.</param>
+    /// <returns>The resolved data directory path.</returns>
+    internal static string ResolveDefaultClaudeDir(
+        string? configDir,
+        string? claudeDirEnv,
+        string homeDirectory)
+    {
+        var configured = !string.IsNullOrEmpty(configDir) ? configDir : claudeDirEnv;
+        if (!string.IsNullOrEmpty(configured))
+        {
+            return configured.StartsWith('~')
+                ? homeDirectory + configured[1..]
+                : configured;
+        }
+
+        return Path.Combine(homeDirectory, ".claude");
     }
 
     private static void EnsurePortAvailable(int port)
