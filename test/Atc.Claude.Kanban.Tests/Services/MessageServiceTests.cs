@@ -897,4 +897,36 @@ public sealed class MessageServiceTests : IDisposable
         image!.Value.MediaType.Should().Be("image/png");
         image.Value.Data.Should().Equal(imageBytes);
     }
+
+    [Fact]
+    public async Task GetRecentMessages_CountsToolResultImages_AndReadsThemByIndex()
+    {
+        // Arrange — an assistant Read whose tool_result carries a base64 image.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "img-tool-session";
+        const string toolUseId = "tu-read-img";
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+
+        // "aGVsbG8=" is base64 for "hello" — valid base64 the reader will decode.
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", sessionId, message = new { role = "user", content = "Read the screenshot" } }),
+            JsonSerializer.Serialize(new { type = "assistant", sessionId, message = new { role = "assistant", content = new object[] { new { type = "tool_use", id = toolUseId, name = "Read", input = new { file_path = "/tmp/shot.png" } } } } }),
+            JsonSerializer.Serialize(new { type = "user", sessionId, message = new { role = "user", content = new object[] { new { type = "tool_result", tool_use_id = toolUseId, content = new object[] { new { type = "image", source = new { type = "base64", media_type = "image/png", data = "aGVsbG8=" } } } } } } }));
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+
+        var service = new MessageService(tempDir, cache);
+
+        // Act
+        var messages = await service.GetRecentMessagesAsync(sessionId, cancellationToken: cancellationToken);
+        var image = await service.ReadToolResultImageAsync(sessionId, toolUseId, 0, cancellationToken);
+
+        // Assert
+        var toolEntry = messages.Should().ContainSingle(m => m.ToolUseId == toolUseId).Subject;
+        toolEntry.ToolResultImageCount.Should().Be(1);
+        image.Should().NotBeNull();
+        image!.Value.MediaType.Should().Be("image/png");
+        image.Value.Data.Should().Equal(System.Text.Encoding.UTF8.GetBytes("hello"));
+    }
 }

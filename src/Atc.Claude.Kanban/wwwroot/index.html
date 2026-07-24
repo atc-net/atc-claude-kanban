@@ -6630,6 +6630,18 @@
       return `<div class="user-attach-chips">${chips}</div>`;
     }
 
+    // Renders chips for base64 images embedded in a tool_result (e.g. a Read of an image
+    // file); each fetches the image lazily by index and opens a preview.
+    function renderToolResultImages(msg) {
+      if (!msg.toolResultImageCount || !msg.toolUseId || !currentSessionId) return '';
+      const chips = [];
+      for (let i = 0; i < msg.toolResultImageCount; i++) {
+        const src = `/api/sessions/${encodeURIComponent(currentSessionId)}/tool-result-image/${encodeURIComponent(msg.toolUseId)}/${i}`;
+        chips.push(`<button class="user-attach-chip" data-action="showImage" data-src="${escapeAttr(src)}" title="View image the agent read">🖼 image</button>`);
+      }
+      return `<div class="user-attach-chips">${chips.join('')}</div>`;
+    }
+
     function showImagePreview(src) {
       const overlay = ensureMsgDetailOverlay();
       overlay.querySelector('.modal-title').textContent = 'Image';
@@ -6866,10 +6878,13 @@
         detailAttrs = ` data-action="showToolDetail" data-tool-key="${escapeAttr(key)}" style="cursor:pointer"`;
       }
 
+      const imagesHtml = compact ? '' : renderToolResultImages(msg);
+
       return `<div class="msg-entry msg-tool${compactClass}"${detailAttrs}>
         <div class="msg-tool-name">${icon}${toolName}${agentLink}</div>
         ${(displayText || readRange) ? `<div class="msg-text">${displayText}${readRange}</div>` : ''}
         ${paramsHtml}
+        ${imagesHtml}
         ${resultHtml}
         ${ts ? `<div class="msg-timestamp">${ts}</div>` : ''}
       </div>`;

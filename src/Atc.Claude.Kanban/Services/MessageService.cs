@@ -231,6 +231,7 @@ public sealed class MessageService
         var parsed = new List<(JsonDocument Doc, string Line)>();
         var toolResults = new Dictionary<string, string>(StringComparer.Ordinal);
         var answerPayloads = new Dictionary<string, AnswerPayload>(StringComparer.Ordinal);
+        var toolResultImageCounts = new Dictionary<string, int>(StringComparer.Ordinal);
 
         for (var i = startIndex; i < lines.Length; i++)
         {
@@ -259,20 +260,21 @@ public sealed class MessageService
             if (root.TryGetProperty("type", out var typeEl) &&
                 string.Equals(typeEl.GetString(), "user", StringComparison.Ordinal))
             {
-                CollectToolResultsFromEntry(root, toolResults, answerPayloads);
+                CollectToolResultsFromEntry(root, toolResults, answerPayloads, toolResultImageCounts);
             }
 
             parsed.Add((doc, line));
         }
 
-        var messages = BuildMessageEntries(parsed, toolResults, answerPayloads);
+        var messages = BuildMessageEntries(parsed, toolResults, answerPayloads, toolResultImageCounts);
         return messages;
     }
 
     private static List<MessageEntry> BuildMessageEntries(
         List<(JsonDocument Doc, string Line)> parsed,
         Dictionary<string, string> toolResults,
-        Dictionary<string, AnswerPayload> answerPayloads)
+        Dictionary<string, AnswerPayload> answerPayloads,
+        Dictionary<string, int> toolResultImageCounts)
     {
         var messages = new List<MessageEntry>();
 
@@ -298,7 +300,7 @@ public sealed class MessageService
             }
             else if (string.Equals(entryType, "assistant", StringComparison.Ordinal))
             {
-                ParseAssistantEntry(root, timestamp, uuid, toolResults, answerPayloads, messages);
+                ParseAssistantEntry(root, timestamp, uuid, toolResults, answerPayloads, toolResultImageCounts, messages);
             }
             else if (string.Equals(entryType, "queue-operation", StringComparison.Ordinal))
             {
@@ -330,7 +332,8 @@ public sealed class MessageService
     private static void CollectToolResultsFromEntry(
         JsonElement root,
         Dictionary<string, string> toolResults,
-        Dictionary<string, AnswerPayload> answerPayloads)
+        Dictionary<string, AnswerPayload> answerPayloads,
+        Dictionary<string, int> toolResultImageCounts)
     {
         if (!root.TryGetProperty("message", out var msgEl) ||
             !msgEl.TryGetProperty("content", out var contentEl) ||
@@ -369,11 +372,44 @@ public sealed class MessageService
                 toolResults[toolUseId] = resultText;
             }
 
+            var imageCount = CountToolResultImages(block);
+            if (imageCount > 0)
+            {
+                toolResultImageCounts[toolUseId] = imageCount;
+            }
+
             if (answerPayload is not null)
             {
                 answerPayloads[toolUseId] = answerPayload;
             }
         }
+    }
+
+    // Counts base64 image blocks inside a tool_result's content array (e.g. the output of
+    // a Read on an image file). The renderer requests each by index via the endpoint.
+    private static int CountToolResultImages(JsonElement block)
+    {
+        if (!block.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var part in contentEl.EnumerateArray())
+        {
+            if (part.TryGetProperty("type", out var typeEl) &&
+                string.Equals(typeEl.GetString(), "image", StringComparison.Ordinal) &&
+                part.TryGetProperty("source", out var sourceEl) &&
+                sourceEl.ValueKind == JsonValueKind.Object &&
+                sourceEl.TryGetProperty("type", out var srcTypeEl) &&
+                string.Equals(srcTypeEl.GetString(), "base64", StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static AnswerPayload? ExtractAnswerPayload(JsonElement root)
@@ -933,6 +969,7 @@ public sealed class MessageService
         string? uuid,
         Dictionary<string, string> toolResults,
         Dictionary<string, AnswerPayload> answerPayloads,
+        Dictionary<string, int> toolResultImageCounts,
         List<MessageEntry> messages)
     {
         if (!root.TryGetProperty("message", out var msgEl))
@@ -988,7 +1025,7 @@ public sealed class MessageService
             }
             else if (string.Equals(blockType, "tool_use", StringComparison.Ordinal))
             {
-                ParseToolUseBlock(block, timestamp, uuid, model, toolResults, answerPayloads, messages);
+                ParseToolUseBlock(block, timestamp, uuid, model, toolResults, answerPayloads, toolResultImageCounts, messages);
             }
         }
     }
@@ -1030,6 +1067,7 @@ public sealed class MessageService
         string? model,
         Dictionary<string, string> toolResults,
         Dictionary<string, AnswerPayload> answerPayloads,
+        Dictionary<string, int> toolResultImageCounts,
         List<MessageEntry> messages)
     {
         var toolName = block.TryGetProperty("name", out var nameEl)
@@ -1057,6 +1095,12 @@ public sealed class MessageService
 
         var displayText = BuildToolDisplayText(toolName, toolInput);
 
+        var imageCount = 0;
+        if (toolUseId is not null)
+        {
+            toolResultImageCounts.TryGetValue(toolUseId, out imageCount);
+        }
+
         messages.Add(new MessageEntry
         {
             Type = "tool_use",
@@ -1069,6 +1113,7 @@ public sealed class MessageService
             Model = model,
             Uuid = uuid,
             AnswerPayload = answerPayload,
+            ToolResultImageCount = imageCount,
         });
     }
 
@@ -1222,6 +1267,144 @@ public sealed class MessageService
                 dataEl.ValueKind != JsonValueKind.String)
             {
                 return null;
+            }
+
+            var data = dataEl.GetString();
+            if (string.IsNullOrEmpty(data))
+            {
+                return null;
+            }
+
+            var mediaType = sourceEl.TryGetProperty("media_type", out var mediaTypeEl)
+                ? mediaTypeEl.GetString() ?? "image/png"
+                : "image/png";
+
+            try
+            {
+                return (mediaType, Convert.FromBase64String(data));
+            }
+            catch (FormatException)
+            {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the Nth base64 image embedded in a tool_result block (e.g. the output of a
+    /// Read on an image file), located by tool_use id. Bytes are served on demand so the
+    /// message list stays small.
+    /// </summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <param name="toolUseId">The tool_use id whose tool_result holds the image.</param>
+    /// <param name="imageIndex">The zero-based index of the image within the tool_result.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The media type and image bytes, or null when not found.</returns>
+    public async Task<(string MediaType, byte[] Data)?> ReadToolResultImageAsync(
+        string sessionId,
+        string toolUseId,
+        int imageIndex,
+        CancellationToken cancellationToken = default)
+    {
+        if (imageIndex < 0 || string.IsNullOrEmpty(toolUseId))
+        {
+            return null;
+        }
+
+        var jsonlPath = FindSessionJsonlPath(sessionId);
+        if (jsonlPath is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(jsonlPath);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
+        {
+            if (line.Length == 0 ||
+                line[0] != '{' ||
+                !line.Contains(toolUseId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                var image = TryReadToolResultImage(line, toolUseId, imageIndex);
+                if (image is not null)
+                {
+                    return image;
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip malformed lines.
+            }
+        }
+
+        return null;
+    }
+
+    private static (string MediaType, byte[] Data)? TryReadToolResultImage(
+        string line,
+        string toolUseId,
+        int imageIndex)
+    {
+        using var doc = JsonDocument.Parse(line);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (!block.TryGetProperty("type", out var typeEl) ||
+                !string.Equals(typeEl.GetString(), "tool_result", StringComparison.Ordinal) ||
+                !block.TryGetProperty("tool_use_id", out var idEl) ||
+                !string.Equals(idEl.GetString(), toolUseId, StringComparison.Ordinal) ||
+                !block.TryGetProperty("content", out var resultContentEl) ||
+                resultContentEl.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            var image = ReadNthBase64Image(resultContentEl, imageIndex);
+            if (image is not null)
+            {
+                return image;
+            }
+        }
+
+        return null;
+    }
+
+    private static (string MediaType, byte[] Data)? ReadNthBase64Image(
+        JsonElement contentEl,
+        int imageIndex)
+    {
+        var index = 0;
+        foreach (var part in contentEl.EnumerateArray())
+        {
+            if (!part.TryGetProperty("type", out var partTypeEl) ||
+                !string.Equals(partTypeEl.GetString(), "image", StringComparison.Ordinal) ||
+                !part.TryGetProperty("source", out var sourceEl) ||
+                sourceEl.ValueKind != JsonValueKind.Object ||
+                !sourceEl.TryGetProperty("data", out var dataEl) ||
+                dataEl.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            if (index != imageIndex)
+            {
+                index++;
+                continue;
             }
 
             var data = dataEl.GetString();
