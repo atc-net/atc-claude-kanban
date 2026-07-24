@@ -186,6 +186,7 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 - Open/closed state persists across page reloads (localStorage)
 - Click a message to open a detail modal with a fullscreen toggle for wide tool outputs
 - `ReportFindings` tool calls render as ranked cards with verdict (CONFIRMED/PLAUSIBLE) and outcome (fixed/no-change-needed/skipped) badges, file locations, and failure scenarios
+- Images the agent reads via the `Read` tool surface as a chip on the tool entry; click to preview the exact image the agent saw (bytes fetched lazily)
 
 <p align="center">
   <img src="docs/msg-log-dark.png" alt="Session log panel with tool icons, a queued prompt badge, and per-model assistant labels" width="900">
@@ -197,6 +198,10 @@ Toggle with the chat icon in the toolbar or `Shift+L`:
 
 <p align="center">
   <img src="docs/report-findings-dark.png" alt="ReportFindings tool call rendered as ranked findings cards with verdict and outcome badges" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/read-image-dark.png" alt="An image the agent read via the Read tool, previewed from the session log" width="900">
 </p>
 
 ### ℹ️ Session Info

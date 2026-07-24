@@ -45,6 +45,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithSummary("Retrieve a user message image.");
 
         group
+            .MapGet("/{sessionId}/tool-result-image/{toolUseId}/{imageIndex:int}", GetToolResultImage)
+            .WithName("GetToolResultImage")
+            .WithDescription("Retrieve a base64 image embedded in a tool_result (e.g. a Read of an image file).")
+            .WithSummary("Retrieve a tool-result image.");
+
+        group
             .MapGet("/{sessionId}/tool-stats", GetToolStats)
             .WithName("GetToolStats")
             .WithDescription("Retrieve aggregated tool usage statistics for a session.")
@@ -126,6 +132,22 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             parameters.SessionId,
             parameters.MessageUuid,
             parameters.BlockIndex,
+            cancellationToken);
+
+        return image is null
+            ? TypedResults.NotFound()
+            : TypedResults.File(image.Value.Data, image.Value.MediaType);
+    }
+
+    internal static async Task<Results<FileContentHttpResult, NotFound>> GetToolResultImage(
+        [FromServices] MessageService messageService,
+        [AsParameters] ToolResultImageParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var image = await messageService.ReadToolResultImageAsync(
+            parameters.SessionId,
+            parameters.ToolUseId,
+            parameters.ImageIndex,
             cancellationToken);
 
         return image is null

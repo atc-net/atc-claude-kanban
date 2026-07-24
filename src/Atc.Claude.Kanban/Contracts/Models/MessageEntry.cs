@@ -96,6 +96,15 @@ public sealed class MessageEntry
     public List<MessageImage>? Images { get; set; }
 
     /// <summary>
+    /// Gets or sets the number of base64 images embedded in this tool_use's tool_result
+    /// (e.g. a Read of an image file). Bytes are fetched lazily by index via the
+    /// tool-result-image endpoint so the message payload stays small.
+    /// </summary>
+    [JsonPropertyName("toolResultImageCount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int ToolResultImageCount { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether this user message was queued
     /// (written as a "queue-operation"/"enqueue" line) rather than sent directly.
     /// </summary>
