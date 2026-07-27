@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.18.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.17.0...v1.18.0) (2026-07-27)
+
+
+### Features
+
+* add workflow scripts viewer and run view ([09854d7](https://github.com/atc-net/atc-claude-kanban/commit/09854d7aa89dbd56bad5a9f57d02256dee76ca33))
+* render images the agent reads via the Read tool ([c7cd130](https://github.com/atc-net/atc-claude-kanban/commit/c7cd130fcd609992830e48213ce65dd8e74fe02e))
+* render ReportFindings tool calls as ranked findings cards ([3d3086c](https://github.com/atc-net/atc-claude-kanban/commit/3d3086cc3a7962acabaf89e32161fd2c4c1e25c8))
+* resolve data directory from CLAUDE_CONFIG_DIR and CLAUDE_DIR env vars ([2f87620](https://github.com/atc-net/atc-claude-kanban/commit/2f87620c4188b09c311571aa455d9f768efd1905))
+
+
+### Bug Fixes
+
+* attach per-session self-team tasks to their owning session ([4da8510](https://github.com/atc-net/atc-claude-kanban/commit/4da85101654a5c300398700ad09110ff6dd3efa6))
+* count only running subagents as active ([a2f18e4](https://github.com/atc-net/atc-claude-kanban/commit/a2f18e4a1d5de666fea630825da3c55eff5b2161))
+* index only base64 sources when reading tool-result images ([68760db](https://github.com/atc-net/atc-claude-kanban/commit/68760dbaf7fa167e0d67c1fad838048aad468310))
+* resolve workflow subagent transcripts nested under run directories ([77ecebe](https://github.com/atc-net/atc-claude-kanban/commit/77ecebe5cf479f89df81e5f4a3b386ca6977deb8))
+* treat auto-created single-member self-teams as plain sessions ([e48f0de](https://github.com/atc-net/atc-claude-kanban/commit/e48f0de2d292c9b518b4e965f4173170d11cb916))
+
 ## [1.17.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.16.0...v1.17.0) (2026-06-12)
 
 
