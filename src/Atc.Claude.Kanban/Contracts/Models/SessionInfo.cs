@@ -133,7 +133,8 @@ public sealed class SessionInfo
     public int SubagentCount { get; set; }
 
     /// <summary>
-    /// Gets or sets the number of subagents that are not stopped (modified within 90 seconds).
+    /// Gets or sets the number of subagents currently running (modified within 15 seconds).
+    /// Idle agents are excluded so a finished run stops counting as active work.
     /// </summary>
     [JsonPropertyName("activeSubagentCount")]
     public int ActiveSubagentCount { get; set; }
