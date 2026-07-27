@@ -20,6 +20,7 @@ public sealed class SessionService
     private readonly JsonSerializerOptions jsonSerializerOptions;
     private readonly SubagentService subagentService;
     private readonly SessionActivityService activityService;
+    private readonly WorkflowService? workflowService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SessionService"/> class.
@@ -29,18 +30,21 @@ public sealed class SessionService
     /// <param name="jsonSerializerOptions">The shared JSON serializer options.</param>
     /// <param name="subagentService">The subagent service for enriching sessions with subagent counts.</param>
     /// <param name="activityService">The activity service for enriching sessions with status and tokens.</param>
+    /// <param name="workflowService">Optional service supplying each session's workflow-script counts.</param>
     public SessionService(
         string claudeDir,
         IMemoryCache cache,
         JsonSerializerOptions jsonSerializerOptions,
         SubagentService subagentService,
-        SessionActivityService activityService)
+        SessionActivityService activityService,
+        WorkflowService? workflowService = null)
     {
         this.claudeDir = claudeDir;
         this.cache = cache;
         this.jsonSerializerOptions = jsonSerializerOptions;
         this.subagentService = subagentService;
         this.activityService = activityService;
+        this.workflowService = workflowService;
     }
 
     /// <summary>
@@ -155,6 +159,17 @@ public sealed class SessionService
         {
             sessions[i].ActivityStatus = await activityService.GetActivityStatusAsync(sessions[i].Id, cancellationToken);
             sessions[i].TokenUsage = await activityService.GetTokenUsageAsync(sessions[i].Id, cancellationToken);
+        }
+
+        // Flag which sessions have Workflow-tool scripts (a single index lookup per session)
+        if (workflowService is not null)
+        {
+            foreach (var session in sessions)
+            {
+                var (hasWorkflow, workflowCount) = workflowService.GetWorkflowSummary(session.Id);
+                session.HasWorkflow = hasWorkflow;
+                session.WorkflowCount = workflowCount;
+            }
         }
 
         // Merge lead sessions into their team sessions so subagents and metadata

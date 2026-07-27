@@ -37,6 +37,7 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 
 - 🤖 **Agent teams** — color-coded team members, owner filtering, member badges
 - 🧩 **Subagent visibility** — active subagents with descriptions, names, and copy-to-clipboard prompts
+- ⚙️ **Workflow viewer** — declared phases, the agent roster with journal-derived statuses, and the script source
 
 **Live & real-time**
 
@@ -168,6 +169,22 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 
 <p align="center">
   <img src="docs/workflow-subagents-dark.png" alt="Subagent panel listing workflow-spawned agents alongside a regular subagent" width="900">
+</p>
+
+### ⚙️ Workflow Viewer
+
+Sessions that used the **Workflow tool** get a gear badge; click it (or press `W`) to open the workflow viewer:
+
+- **Phase outline** — the phases declared in the script's `meta` block, with their detail lines
+- **Agent roster** — every agent in the run with its task, model, tool count and duration, plus a `N/M agents done` ratio. Status comes from the run's `journal.jsonl`, the only record of whether an agent actually finished — transcript timestamps only say when it last wrote
+- **Script source** — syntax-highlighted and collapsed by default, with an open-in-editor button
+- A picker first when a session has several workflows
+- The `meta` block is read by pattern-matching the source; the script is **never executed**
+
+> The roster is flat: which agent ran in which phase exists only at runtime and is never written to disk.
+
+<p align="center">
+  <img src="docs/workflow-run-dark.png" alt="Workflow viewer showing the declared phases, the agent roster with journal-derived statuses, and the syntax-highlighted script source" width="900">
 </p>
 
 ### 💬 Session Message Log
@@ -302,6 +319,7 @@ A separate **colour theme picker** (palette icon) offers 17 popular editor palet
 | `Shift+C` | Copy session id |
 | `Shift+L` | Toggle message log panel |
 | `N` | Toggle scratchpad |
+| `W` | Open the workflow viewer (sessions with workflow scripts) |
 
 <p align="center">
   <img src="docs/help-modal-dark.png" alt="Keyboard shortcuts overlay" width="900">
@@ -330,6 +348,8 @@ The tool watches these paths under `~/.claude/`:
 | `projects/{hash}/sessions-index.json` | Session metadata |
 | `projects/{hash}/{sessionId}/subagents/agent-*.jsonl` | Subagent transcripts |
 | `projects/{hash}/{sessionId}/subagents/workflows/{runId}/agent-*.jsonl` | Workflow subagent transcripts |
+| `projects/{hash}/{sessionId}/subagents/workflows/{runId}/journal.jsonl` | Workflow run journal (per-agent start/result) |
+| `projects/{hash}/{sessionId}/workflows/scripts/{name}-{runId}.js` | Workflow scripts |
 | `plans/{slug}.md` | Plan markdown files |
 
 ## 📂 Claude Code Directory Structure
@@ -349,8 +369,9 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 │   └── {path-hash}/
 │       ├── sessions-index.json         ← Session list with project path, git branch
 │       ├── {sessionId}.jsonl           ← Session transcript (one JSON object per line)
+│       ├── {sessionId}/workflows/scripts/  ← Workflow tool scripts (.js)
 │       └── {sessionId}/subagents/      ← Subagent transcripts
-│           └── workflows/{runId}/      ← Workflow subagent transcripts
+│           └── workflows/{runId}/      ← Workflow subagent transcripts + run journal
 │
 └── plans/                              ← Plan markdown files
     └── {slug}.md

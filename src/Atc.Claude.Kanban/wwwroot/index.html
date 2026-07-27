@@ -1702,6 +1702,158 @@
       color: var(--text-tertiary);
     }
 
+    /* Workflow viewer */
+    #workflow-modal .modal {
+      max-width: 860px;
+      width: 94vw;
+    }
+    .workflow-indicator {
+      cursor: pointer;
+      color: var(--text-tertiary);
+      display: inline-flex;
+      align-items: center;
+    }
+    .workflow-indicator:hover {
+      color: var(--accent);
+    }
+    .workflow-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+    .workflow-summary {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .workflow-ratio {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-text);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      padding: 1px 7px;
+    }
+    .workflow-summary-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .workflow-phases {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 6px 0 14px;
+    }
+    .workflow-phase {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+    }
+    .workflow-phase-num {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      min-width: 1.4em;
+      text-align: right;
+    }
+    .workflow-phase-title {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .workflow-phase-detail {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .workflow-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 2px 0 8px;
+    }
+    .workflow-agents td,
+    .workflow-agents th {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+    .workflow-agent-desc {
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-agent-status {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 1px 6px;
+      border-radius: 3px;
+      border: 1px solid currentColor;
+      white-space: nowrap;
+    }
+    .workflow-agent-status.done {
+      color: var(--success);
+    }
+    .workflow-agent-status.running {
+      color: var(--warning);
+    }
+    /* The script is a full source file, so it needs real height and its own scrollbar —
+       the shared tool-result box clips to a couple of lines with overflow hidden. */
+    .msg-tool-result.workflow-source {
+      max-height: min(420px, 45vh);
+      overflow: auto;
+      white-space: pre;
+      word-break: normal;
+      padding: 0;
+      scrollbar-width: thin;
+    }
+    .msg-tool-result.workflow-source .tool-detail-pre {
+      margin: 0;
+      max-height: none;
+      overflow: visible;
+    }
+    #workflow-modal .modal.fullscreen .msg-tool-result.workflow-source {
+      max-height: none;
+    }
+    .workflow-picks {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .workflow-pick {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      text-align: left;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-surface);
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
+    .workflow-pick:hover {
+      border-color: var(--accent);
+    }
+    .workflow-pick-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .workflow-pick-desc {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .workflow-pick-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
     /* Marks a subagent spawned by the Workflow tool rather than the Agent tool. */
     .subagent-workflow-badge {
       font-size: 10px;
@@ -5450,6 +5602,7 @@
               ${session.isCompleted ? `<span class="completed-badge" title="Completed (${session.peakTaskCount} tasks)">Done ${session.peakTaskCount}</span>` : ''}
               ${session.activeSubagentCount > 0 ? `<span class="subagent-badge" title="${session.activeSubagentCount} active subagent${session.activeSubagentCount !== 1 ? 's' : ''} (${session.subagentCount} total)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>${session.activeSubagentCount}</span>` : ''}
               ${session.hasPlan ? `<span class="plan-indicator" data-action="openPlanForSession" data-session-id="${session.slug || session.id}" title="View plan"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>` : ''}
+              ${session.hasWorkflow ? `<span class="workflow-indicator" data-action="showWorkflows" data-session-id="${session.id}" title="${session.workflowCount} workflow${session.workflowCount !== 1 ? 's' : ''} — view scripts and run state"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>` : ''}
               ${sessionHasScratchpadNotes(session.id) ? `<span class="scratchpad-badge" data-action="openSessionScratchpad" data-session-id="${session.id}" title="Open scratchpad"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>` : ''}
               ${session.project ? `<span class="session-project-actions"><span class="session-project-btn" data-action="copyPath" data-path="${escapeHtml(session.project)}" title="Copy path"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="session-project-btn" data-action="openFolder" data-path="${escapeHtml(session.project)}" title="Open in explorer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span></span>` : ''}
               ${hasInProgress ? '<span class="pulse"></span>' : ''}
@@ -7282,6 +7435,152 @@
       return version ? `${name} ${version}` : name;
     }
 
+    // ── Workflow viewer ────────────────────────────────────────────
+    // Shows a session's Workflow-tool scripts: the declared phases, the agent roster
+    // reconstructed from the run journal, and the script source itself.
+    let _workflowSessionId = null;
+
+    function ensureWorkflowOverlay() {
+      let overlay = document.getElementById('workflow-modal');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'workflow-modal';
+        overlay.className = 'modal-overlay';
+        overlay.dataset.action = 'closeWorkflowModal';
+        overlay.innerHTML = `<div class="modal">
+          <div class="modal-header">
+            <h3 class="modal-title">Workflows</h3>
+            <div style="display:flex;gap:4px;">
+              <button class="icon-btn" data-action="toggleWorkflowFullscreen" title="Toggle fullscreen" aria-label="Toggle fullscreen">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;">
+                  <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+                </svg>
+              </button>
+              <button class="modal-close" data-action="closeWorkflowModal">&times;</button>
+            </div>
+          </div>
+          <div id="workflow-body" class="tool-stats-body"></div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" data-action="closeWorkflowModal">Close</button>
+          </div>
+        </div>`;
+        document.body.appendChild(overlay);
+      }
+      return overlay;
+    }
+
+    async function showWorkflowsModal(sessionId) {
+      _workflowSessionId = sessionId;
+      const overlay = ensureWorkflowOverlay();
+      const body = document.getElementById('workflow-body');
+      body.innerHTML = '<div style="color:var(--text-secondary)">Loading…</div>';
+      overlay.classList.add('visible');
+
+      try {
+        const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/workflows`);
+        const data = await res.json();
+        const workflows = data.workflows || [];
+        if (!workflows.length) {
+          body.innerHTML = '<div style="color:var(--text-secondary)">No workflow scripts for this session.</div>';
+          return;
+        }
+        // One workflow opens straight into its run view; several offer a picker first.
+        if (workflows.length === 1) {
+          await renderWorkflowRun(workflows[0].id);
+        } else {
+          renderWorkflowPicker(workflows);
+        }
+      } catch (err) {
+        log.error('[workflows] load failed:', err);
+        body.innerHTML = '<div style="color:var(--danger,#ef5350)">Failed to load workflows.</div>';
+      }
+    }
+
+    function renderWorkflowPicker(workflows) {
+      const rows = workflows.map(w => `
+        <button class="workflow-pick" data-action="openWorkflowRun" data-workflow-id="${escapeAttr(w.id)}">
+          <span class="workflow-pick-name">${escapeHtml(w.name || w.id)}</span>
+          ${w.description ? `<span class="workflow-pick-desc">${escapeHtml(w.description)}</span>` : ''}
+          <span class="workflow-pick-meta">${escapeHtml(w.id)} · ${formatDate(w.modifiedAt)}</span>
+        </button>`).join('');
+      document.getElementById('workflow-body').innerHTML =
+        `<div class="tool-detail-key">${workflows.length} workflows</div><div class="workflow-picks">${rows}</div>`;
+    }
+
+    async function renderWorkflowRun(workflowId) {
+      const sessionId = _workflowSessionId;
+      const body = document.getElementById('workflow-body');
+      body.innerHTML = '<div style="color:var(--text-secondary)">Loading run…</div>';
+
+      const [runRes, srcRes] = await Promise.all([
+        fetch(`/api/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(workflowId)}/run`),
+        fetch(`/api/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(workflowId)}`),
+      ]);
+      if (!runRes.ok) {
+        body.innerHTML = '<div style="color:var(--danger,#ef5350)">Workflow not found.</div>';
+        return;
+      }
+      const run = await runRes.json();
+      const source = srcRes.ok ? (await srcRes.json()).content : '';
+
+      document.querySelector('#workflow-modal .modal-title').textContent = run.name || 'Workflow';
+
+      const phases = (run.phases || []).map((p, i) => `
+        <div class="workflow-phase">
+          <span class="workflow-phase-num">${i + 1}</span>
+          <div><div class="workflow-phase-title">${escapeHtml(p.title)}</div>
+          ${p.detail ? `<div class="workflow-phase-detail">${escapeHtml(p.detail)}</div>` : ''}</div>
+        </div>`).join('');
+
+      const agents = (run.agents || []).map(a => `
+        <tr>
+          <td><span class="workflow-agent-status ${a.status}">${escapeHtml(a.status)}</span></td>
+          <td class="workflow-agent-desc" title="${escapeAttr(a.description || '')}">${escapeHtml(a.description || a.agentId)}</td>
+          <td>${a.model ? escapeHtml(formatModelName(a.model)) : '—'}</td>
+          <td>${a.toolUses != null ? a.toolUses : '—'}</td>
+          <td>${a.durationMs != null ? Math.round(a.durationMs / 1000) + 's' : '—'}</td>
+        </tr>`).join('');
+
+      const sourceId = 'wf-src-' + workflowId.replace(/[^a-z0-9_-]/gi, '');
+      body.innerHTML = `
+        ${run.description ? `<div class="workflow-desc">${escapeHtml(run.description)}</div>` : ''}
+        <div class="workflow-summary">
+          <span class="workflow-ratio">${run.doneCount}/${run.startedCount} agents done</span>
+          ${run.startedAt ? `<span class="workflow-summary-meta">started ${formatDate(run.startedAt)}</span>` : ''}
+          <button class="subagent-action-btn" data-action="openWorkflowInEditor" data-workflow-id="${escapeAttr(workflowId)}" title="Open script in editor">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Open script
+          </button>
+        </div>
+        ${phases ? `<div class="tool-detail-key">Phases</div><div class="workflow-phases">${phases}</div>` : ''}
+        <div class="tool-detail-key">Agents (${(run.agents || []).length})</div>
+        <div class="workflow-note">Which agent ran in which phase is runtime-only and never written to disk, so the roster is flat.</div>
+        <table class="tool-stats-table workflow-agents"><thead><tr>
+          <th>Status</th><th>Task</th><th>Model</th><th>Tools</th><th>Duration</th>
+        </tr></thead><tbody>${agents || '<tr><td colspan="5">No agent transcripts found for this run.</td></tr>'}</tbody></table>
+        <button class="msg-result-toggle" data-action="toggleWorkflowSource" data-target="${sourceId}">Show script source</button>
+        <div id="${sourceId}" class="msg-tool-result workflow-source"><pre class="tool-detail-pre"><code class="hljs language-javascript">${
+          typeof hljs !== 'undefined' ? hljs.highlight(source, { language: 'javascript' }).value : escapeHtml(source)
+        }</code></pre></div>`;
+    }
+
+    function closeWorkflowModal() {
+      const overlay = document.getElementById('workflow-modal');
+      if (overlay) overlay.classList.remove('visible');
+    }
+
+    function toggleWorkflowFullscreen() {
+      const modal = document.querySelector('#workflow-modal .modal');
+      if (modal) modal.classList.toggle('fullscreen');
+    }
+
+    async function openWorkflowInEditor(workflowId) {
+      try {
+        await fetch(`/api/sessions/${encodeURIComponent(_workflowSessionId)}/workflows/${encodeURIComponent(workflowId)}/open`, { method: 'POST' });
+      } catch (err) {
+        log.error('[workflows] open failed:', err);
+      }
+    }
+
     function ensureUsageOverlay() {
       let overlay = document.getElementById('usage-modal');
       if (!overlay) {
@@ -7930,6 +8229,14 @@
           if (session?.project) openFolder(session.project);
           return;
         }
+        if (e.key === 'w' || e.key === 'W') {
+          e.preventDefault();
+          const highlighted = sessionsList.querySelector('.session-item.kb-selected');
+          const sid = highlighted?.dataset.sessionId || currentSessionId;
+          const session = sessions.find(s => s.id === sid);
+          if (session?.hasWorkflow) showWorkflowsModal(sid);
+          return;
+        }
         if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
           e.preventDefault();
           showHelpModal();
@@ -8022,6 +8329,18 @@
         if (!e.target.closest('input, textarea, [contenteditable]')) {
           e.preventDefault();
           toggleScratchpad();
+          return;
+        }
+      }
+
+      // Workflow viewer for the selected session, when it has any workflow scripts.
+      if (e.key === 'w' || e.key === 'W') {
+        if (!e.target.closest('input, textarea, [contenteditable]')) {
+          e.preventDefault();
+          const session = sessions.find(s => s.id === currentSessionId);
+          if (session && session.hasWorkflow) {
+            showWorkflowsModal(currentSessionId);
+          }
           return;
         }
       }
@@ -9301,6 +9620,28 @@
           if (entry) showToolDetailModal(entry.toolName, entry.toolInput, entry.answerPayload);
           break;
         }
+        case 'toggleWorkflowSource': {
+          const targetId = actionEl.dataset.target;
+          const el = targetId ? document.getElementById(targetId) : null;
+          if (el) {
+            el.classList.toggle('expanded');
+            actionEl.textContent = el.classList.contains('expanded') ? 'Hide script source' : 'Show script source';
+          }
+          break;
+        }
+        case 'showWorkflows': if (sessionId) showWorkflowsModal(sessionId); break;
+        case 'closeWorkflowModal': closeWorkflowModal(); break;
+        case 'toggleWorkflowFullscreen': toggleWorkflowFullscreen(); break;
+        case 'openWorkflowRun': {
+          const wfId = actionEl.dataset.workflowId;
+          if (wfId) renderWorkflowRun(wfId);
+          break;
+        }
+        case 'openWorkflowInEditor': {
+          const wfId = actionEl.dataset.workflowId;
+          if (wfId) openWorkflowInEditor(wfId);
+          break;
+        }
         case 'showImage': {
           const src = actionEl.dataset.src;
           if (src) showImagePreview(src);
@@ -9394,6 +9735,10 @@
                 <tr>
                   <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">R</kbd></td>
                   <td style="padding: 4px 0; color: var(--text-primary);">Refresh data</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">W</kbd></td>
+                  <td style="padding: 4px 0; color: var(--text-primary);">Workflow viewer (session with workflows)</td>
                 </tr>
               </table>
             </div>

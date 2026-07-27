@@ -183,12 +183,50 @@ Write-Jsonl (Join-Path $projectsRoot "$wfDir\agent-awf000002.jsonl") @(
     [ordered]@{ type = 'user'; timestamp = (Stamp 29); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_wf_so'; content = 'ok' }) } }
 )
 # The run's journal sits beside the agent transcripts; it must not be listed as an agent.
+# The journal's result events are what mark an agent "done" in the workflow run view.
 Write-Jsonl (Join-Path $projectsRoot "$wfDir\journal.jsonl") @(
     [ordered]@{ type = 'started'; agentId = 'awf000001' },
     [ordered]@{ type = 'started'; agentId = 'awf000002' },
     [ordered]@{ type = 'result'; agentId = 'awf000001' },
     [ordered]@{ type = 'result'; agentId = 'awf000002' }
 )
+# Per-agent metadata written next to each transcript by the Workflow runtime.
+foreach ($wfAgent in @('awf000001', 'awf000002')) {
+    $metaPath = Join-Path $projectsRoot "$wfDir\agent-$wfAgent.meta.json"
+    New-Item -ItemType Directory -Force -Path (Split-Path $metaPath) | Out-Null
+    Set-Content -Path $metaPath -Value ([ordered]@{ agentType = 'workflow-subagent'; spawnDepth = 1 } | ConvertTo-Json -Compress) -Encoding utf8
+}
+
+# The workflow script itself, persisted under workflows/scripts/<name>-<runId>.js. Its meta
+# block is what the run view reads for the workflow name, description and phase outline.
+$wfScriptDir = Join-Path $projectsRoot "acme\$s1\workflows\scripts"
+New-Item -ItemType Directory -Force -Path $wfScriptDir | Out-Null
+$wfScript = @"
+export const meta = {
+  name: 'audit-coupon-pricing',
+  description: 'Audit every coupon pricing rule, then adversarially verify each finding',
+  phases: [
+    { title: 'Audit', detail: 'one agent per pricing rule, in parallel' },
+    { title: 'Verify', detail: 'each finding independently checked before it is reported' },
+  ],
+}
+
+const RULES = ['stacking', 'expiry', 'percentage-cap']
+
+phase('Audit')
+const findings = await parallel(
+  RULES.map((rule) => () => agent(``Audit the `${rule} pricing rule for bugs.``, { label: ``audit:`${rule}`` })),
+)
+
+phase('Verify')
+const verified = await pipeline(
+  findings.filter(Boolean),
+  (finding) => agent(``Adversarially verify: `${finding}``, { schema: VERDICT_SCHEMA }),
+)
+
+return { verified }
+"@
+Set-Content -Path (Join-Path $wfScriptDir "audit-coupon-pricing-$wfRun.js") -Value $wfScript -Encoding utf8
 
 # ── Session 2: acme-storefront — large (1M) context, completed ────────────────
 Write-Task $s2 1 'Extract cart reducer' 'completed' $null
