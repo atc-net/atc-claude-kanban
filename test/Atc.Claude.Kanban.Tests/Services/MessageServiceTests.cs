@@ -899,6 +899,59 @@ public sealed class MessageServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ReadToolResultImage_IndexesOnlyBase64Sources_SoIndicesMatchTheCount()
+    {
+        // Arrange — a tool_result holding a non-base64 image source before a base64 one. The
+        // count reports a single image, so index 0 must be the base64 block; indexing across
+        // every image source instead would return the wrong one.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "mixed-image-session";
+        const string toolUseId = "tu-mixed";
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", sessionId, message = new { role = "user", content = "Read them" } }),
+            JsonSerializer.Serialize(new { type = "assistant", sessionId, message = new { role = "assistant", content = new object[] { new { type = "tool_use", id = toolUseId, name = "Read", input = new { file_path = "/tmp/x.png" } } } } }),
+            JsonSerializer.Serialize(new
+            {
+                type = "user",
+                sessionId,
+                message = new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new
+                        {
+                            type = "tool_result",
+                            tool_use_id = toolUseId,
+                            content = new object[]
+                            {
+                                new { type = "image", source = new { type = "url", data = "https://example.test/a.png" } },
+                                new { type = "image", source = new { type = "base64", media_type = "image/png", data = "aGVsbG8=" } },
+                            },
+                        },
+                    },
+                },
+            }));
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+
+        var service = new MessageService(tempDir, cache);
+
+        // Act
+        var messages = await service.GetRecentMessagesAsync(sessionId, cancellationToken: cancellationToken);
+        var image = await service.ReadToolResultImageAsync(sessionId, toolUseId, 0, cancellationToken);
+
+        // Assert
+        messages.Should().ContainSingle(m => m.ToolUseId == toolUseId)
+            .Which.ToolResultImageCount.Should().Be(1);
+        image.Should().NotBeNull();
+        image!.Value.Data.Should().Equal(System.Text.Encoding.UTF8.GetBytes("hello"));
+    }
+
+    [Fact]
     public async Task GetSubagentMessages_ResolvesWorkflowAgent_NestedUnderRunDirectory()
     {
         // Arrange — a workflow-spawned agent's transcript lives under
