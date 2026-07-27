@@ -1702,6 +1702,17 @@
       color: var(--text-tertiary);
     }
 
+    /* Marks a subagent spawned by the Workflow tool rather than the Agent tool. */
+    .subagent-workflow-badge {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: var(--accent-dim);
+      color: var(--accent-text);
+      border: 1px solid var(--accent);
+      white-space: nowrap;
+    }
+
     .subagent-desc {
       font-size: 11px;
       color: var(--text-tertiary);
@@ -3254,7 +3265,9 @@
       width: 92vw;
     }
     #usage-modal .modal {
-      max-width: 720px;
+      /* Wide enough that a participant label plus its badge and completion stats
+         stay on one line instead of wrapping into the numeric columns. */
+      max-width: 880px;
       width: 94vw;
     }
     .usage-table th,
@@ -3473,6 +3486,10 @@
     .usage-table th:nth-child(2),
     .usage-table td:nth-child(2) {
       text-align: left;
+    }
+    /* Keep a participant's label, badge and completion stats on one line. */
+    .usage-table td:first-child {
+      white-space: nowrap;
     }
     .usage-agent-label {
       padding-left: 14px;
@@ -5225,6 +5242,7 @@
             <span class="subagent-status-dot ${agent.status}"></span>
             <span>${escapeHtml(agent.agentName || agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
+            ${agent.workflowRunId ? `<span class="subagent-workflow-badge" title="Spawned by the Workflow tool (run ${escapeAttr(agent.workflowRunId)})">⚙ workflow</span>` : ''}
             ${displayDesc ? `<button class="subagent-copy-btn" data-action="copyText" data-text="${escapeHtml(displayDesc)}" data-label="Description copied" title="Copy description"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
           </div>
           ${displayDesc ? `<div class="subagent-desc" title="${escapeHtml(displayDesc)}">${escapeHtml(displayDesc)}</div>` : ''}
@@ -5233,6 +5251,7 @@
             <div class="subagent-detail-row"><span class="subagent-detail-label">Agent</span><span class="subagent-detail-value">${escapeHtml(agent.agentId)}</span></div>
             ${agent.agentName ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Name</span><span class="subagent-detail-value">${escapeHtml(agent.agentName)}</span></div>` : ''}
             ${agent.model ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Model</span><span class="subagent-detail-value">${escapeHtml(agent.model)}</span></div>` : ''}
+            ${agent.workflowRunId ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Workflow</span><span class="subagent-detail-value">${escapeHtml(agent.workflowRunId)}</span></div>` : ''}
             ${agent.cwd ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Dir</span><span class="subagent-detail-value" title="${escapeHtml(agent.cwd)}">${escapeHtml(agent.cwd)}</span></div>` : ''}
             ${agent.startedAt ? `<div class="subagent-detail-row"><span class="subagent-detail-label">Started</span><span class="subagent-detail-value">${new Date(agent.startedAt).toLocaleString()}</span></div>` : ''}
             <div class="subagent-detail-row"><span class="subagent-detail-label">Last</span><span class="subagent-detail-value">${new Date(agent.lastActivityAt).toLocaleString()}</span></div>
@@ -7349,6 +7368,10 @@
         if (row.durationMs != null) parts.push(`${Math.round(row.durationMs / 1000)}s`);
         return parts.length ? ` <span class="usage-agent-meta">· ${parts.join(' · ')}</span>` : '';
       };
+      // Workflow-spawned agents are marked so they are distinguishable from Agent-tool subagents.
+      const usageWorkflowBadge = (row) => row.workflowRunId
+        ? ` <span class="subagent-workflow-badge" title="Spawned by the Workflow tool (run ${escapeAttr(row.workflowRunId)})">⚙ workflow</span>`
+        : '';
       const subheader = (text) => `<tr class="usage-subheader"><td colspan="7">${text}</td></tr>`;
       let bodyRows = '';
       if (lead) {
@@ -7359,7 +7382,7 @@
       if (agents.length) {
         bodyRows += subheader(`Subagents (${agents.length})`);
         bodyRows += agents.map((row) => modelsOf(row)
-          .map((model, index) => modelRowHtml(model, index === 0 ? `<span class="usage-agent-label">${escapeHtml(row.label)}</span>${usageMeta(row)}` : ''))
+          .map((model, index) => modelRowHtml(model, index === 0 ? `<span class="usage-agent-label">${escapeHtml(row.label)}</span>${usageWorkflowBadge(row)}${usageMeta(row)}` : ''))
           .join('')).join('');
       }
       bodyRows += `<tr class="usage-total">

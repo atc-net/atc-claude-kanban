@@ -1462,10 +1462,28 @@ public sealed class MessageService
 
         foreach (var hashDir in Directory.GetDirectories(projectsDir))
         {
-            var jsonlFile = Path.Combine(hashDir, sessionId, "subagents", $"agent-{agentId}.jsonl");
+            var subagentsDir = Path.Combine(hashDir, sessionId, "subagents");
+            var jsonlFile = Path.Combine(subagentsDir, $"agent-{agentId}.jsonl");
             if (File.Exists(jsonlFile))
             {
                 return jsonlFile;
+            }
+
+            // Workflow-spawned subagents sit one level deeper, under
+            // subagents/workflows/{runId}/, so fall back to those run directories.
+            var workflowsDir = Path.Combine(subagentsDir, "workflows");
+            if (!Directory.Exists(workflowsDir))
+            {
+                continue;
+            }
+
+            foreach (var runDir in Directory.GetDirectories(workflowsDir))
+            {
+                var nestedFile = Path.Combine(runDir, $"agent-{agentId}.jsonl");
+                if (File.Exists(nestedFile))
+                {
+                    return nestedFile;
+                }
             }
         }
 

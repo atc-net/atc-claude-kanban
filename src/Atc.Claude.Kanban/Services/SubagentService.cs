@@ -10,6 +10,11 @@ public sealed class SubagentService
     private const int LastMessageMaxLength = 200;
     private const int TailReadSize = 5120;
 
+    // A structured result is far larger than a text reply (several KB) and is not the final
+    // transcript line, so it needs its own window rather than the last-message tail size.
+    private const int StructuredResultReadSize = 262144;
+    private const int StructuredResultFieldMaxLength = 80;
+
     private static readonly TimeSpan ActiveThreshold = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan IdleThreshold = TimeSpan.FromSeconds(90);
 
@@ -128,6 +133,24 @@ public sealed class SubagentService
             {
                 result.Add(file);
             }
+
+            // Workflow-spawned subagents live one level deeper, under
+            // subagents/workflows/{runId}/agent-*.jsonl. Enumerate those run directories
+            // explicitly rather than recursing, so this stays bounded on the session-scan
+            // hot path; the agent-* pattern also excludes the run's journal.jsonl.
+            var workflowsDir = Path.Combine(subagentsDir, "workflows");
+            if (!Directory.Exists(workflowsDir))
+            {
+                continue;
+            }
+
+            foreach (var runDir in Directory.GetDirectories(workflowsDir))
+            {
+                foreach (var file in Directory.GetFiles(runDir, "agent-*.jsonl"))
+                {
+                    result.Add(file);
+                }
+            }
         }
 
         return result;
@@ -161,11 +184,20 @@ public sealed class SubagentService
 
         var metadata = await ReadSubagentMetadataAsync(filePath, cancellationToken);
 
-        // Only read last message for non-active agents to avoid reading files mid-write
+        // Only read a result for non-active agents to avoid reading files mid-write
         if (!string.Equals(status, "active", StringComparison.Ordinal))
         {
-            metadata.LastMessage = await ReadLastMessageAsync(filePath, cancellationToken);
+            metadata.LastMessage = await ReadAgentResultAsync(filePath, cancellationToken);
         }
+
+        var workflowRunId = ResolveWorkflowRunId(filePath);
+
+        // A workflow agent is spawned by the Workflow runtime rather than the Agent tool, so the
+        // parent transcript holds no toolUseResult record to enrich from. Derive the equivalent
+        // stats from the agent's own transcript so its row is not left blank.
+        var (toolUses, durationMs) = workflowRunId is null
+            ? (null, null)
+            : await DeriveWorkflowStatsAsync(filePath, metadata.StartedAt, cancellationToken);
 
         return new SubagentInfo
         {
@@ -181,7 +213,137 @@ public sealed class SubagentService
             Cwd = metadata.Cwd,
             TranscriptPath = filePath,
             TranscriptDir = Path.GetDirectoryName(filePath),
+            WorkflowRunId = workflowRunId,
+            ToolUses = toolUses,
+            DurationMs = durationMs,
         };
+    }
+
+    /// <summary>
+    /// Returns an agent's result: its last assistant text, or — for a schema'd workflow agent that
+    /// ends on a forced StructuredOutput call and never emits text — that structured result.
+    /// </summary>
+    private static async Task<string?> ReadAgentResultAsync(
+        string filePath,
+        CancellationToken cancellationToken)
+        => await ReadLastMessageAsync(filePath, cancellationToken)
+           ?? await ReadStructuredResultAsync(filePath, cancellationToken);
+
+    /// <summary>
+    /// Derives a workflow agent's tool count and active duration from its own transcript, standing
+    /// in for the Agent-tool completion record that workflow-spawned agents never produce.
+    /// </summary>
+    private static async Task<(int? ToolUses, long? DurationMs)> DeriveWorkflowStatsAsync(
+        string filePath,
+        DateTime? startedAt,
+        CancellationToken cancellationToken)
+    {
+        var stats = await ReadWorkflowStatsAsync(filePath, cancellationToken);
+
+        var durationMs = startedAt is not null && stats.LastTimestamp is not null
+            ? (long?)(stats.LastTimestamp.Value - startedAt.Value).TotalMilliseconds
+            : null;
+
+        return (stats.ToolUses, durationMs);
+    }
+
+    /// <summary>
+    /// Scans a workflow agent's transcript for the stats the Agent-tool completion record would
+    /// otherwise supply: the number of tool calls it made and the timestamp of its final entry.
+    /// Cold path only — reached from the subagent list, never from the session-scan counts.
+    /// </summary>
+    private static async Task<(int? ToolUses, DateTime? LastTimestamp)> ReadWorkflowStatsAsync(
+        string filePath,
+        CancellationToken cancellationToken)
+    {
+        var toolUses = 0;
+        DateTime? lastTimestamp = null;
+
+        try
+        {
+            using var reader = new StreamReader(filePath);
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
+            {
+                if (line.Length == 0 || line[0] != '{')
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(line);
+                    var root = doc.RootElement;
+
+                    // Parsed exactly like the metadata timestamps this is subtracted from
+                    // (see ParseJsonlEntry); mixing DateTime kinds would skew the duration.
+                    if (root.TryGetProperty("timestamp", out var tsEl) &&
+                        tsEl.ValueKind == JsonValueKind.String &&
+                        DateTime.TryParse(tsEl.GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var ts))
+                    {
+                        lastTimestamp = ts;
+                    }
+
+                    toolUses += CountToolUseBlocks(root);
+                }
+                catch (JsonException)
+                {
+                    // Skip malformed lines
+                }
+            }
+        }
+        catch (IOException)
+        {
+            return (toolUses > 0 ? toolUses : null, lastTimestamp);
+        }
+
+        return (toolUses > 0 ? toolUses : null, lastTimestamp);
+    }
+
+    /// <summary>
+    /// Counts tool_use blocks in an assistant entry's content array.
+    /// </summary>
+    private static int CountToolUseBlocks(JsonElement root)
+    {
+        if (!root.TryGetProperty("type", out var entryTypeEl) ||
+            !string.Equals(entryTypeEl.GetString(), "assistant", StringComparison.Ordinal) ||
+            !root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (block.TryGetProperty("type", out var blockTypeEl) &&
+                string.Equals(blockTypeEl.GetString(), "tool_use", StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Returns the workflow run identifier for a transcript stored at
+    /// <c>subagents/workflows/{runId}/agent-*.jsonl</c>, or null for a regular subagent
+    /// transcript that sits directly in <c>subagents/</c>.
+    /// </summary>
+    private static string? ResolveWorkflowRunId(string filePath)
+    {
+        var runDir = Path.GetDirectoryName(filePath);
+        if (runDir is null)
+        {
+            return null;
+        }
+
+        var parentName = Path.GetFileName(Path.GetDirectoryName(runDir));
+        return string.Equals(parentName, "workflows", StringComparison.Ordinal)
+            ? Path.GetFileName(runDir)
+            : null;
     }
 
     private static async Task<SubagentMetadata> ReadSubagentMetadataAsync(
@@ -323,6 +485,150 @@ public sealed class SubagentService
             // File may have been deleted or locked
             return null;
         }
+    }
+
+    /// <summary>
+    /// Reads the tail of a transcript looking for the last StructuredOutput tool call and
+    /// renders its input compactly. Uses a larger window than the last-message read because a
+    /// structured result routinely exceeds it, and the call is not always the final line.
+    /// Cold path only — reached from the subagent list, never from the session-scan counts.
+    /// </summary>
+    private static async Task<string?> ReadStructuredResultAsync(
+        string filePath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var fileLength = stream.Length;
+            if (fileLength == 0)
+            {
+                return null;
+            }
+
+            var readSize = (int)System.Math.Min(StructuredResultReadSize, fileLength);
+            var start = fileLength - readSize;
+            stream.Seek(start, SeekOrigin.Begin);
+
+            var buffer = new byte[readSize];
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, readSize), cancellationToken);
+            var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+            // Reading from an offset can start mid-line; drop that partial head outright so a
+            // truncated record can never be mistaken for a malformed one.
+            if (start > 0)
+            {
+                var firstNewline = tail.IndexOf('\n', StringComparison.Ordinal);
+                tail = firstNewline < 0 ? string.Empty : tail[(firstNewline + 1)..];
+            }
+
+            return FindLastStructuredResult(tail);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Scans backwards for the last line holding a StructuredOutput tool call and renders its
+    /// input as a compact single line. The call is located by name rather than by position,
+    /// because trailing entries follow it in the transcript.
+    /// </summary>
+    private static string? FindLastStructuredResult(string tail)
+    {
+        var lines = tail.Split('\n');
+
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = lines[i].Trim();
+            if (line.Length == 0 ||
+                line[0] != '{' ||
+                !line.Contains("\"StructuredOutput\"", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(line);
+                var result = ExtractStructuredResult(doc.RootElement);
+                if (!string.IsNullOrWhiteSpace(result))
+                {
+                    return result;
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip malformed lines
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the StructuredOutput tool_use block in an assistant entry and flattens its input
+    /// to "key: value" pairs. Only scalar fields are rendered, each clipped, so the summary
+    /// stays readable within the last-message length budget.
+    /// </summary>
+    private static string? ExtractStructuredResult(JsonElement root)
+    {
+        if (!root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (!block.TryGetProperty("type", out var typeEl) ||
+                !string.Equals(typeEl.GetString(), "tool_use", StringComparison.Ordinal) ||
+                !block.TryGetProperty("name", out var nameEl) ||
+                !string.Equals(nameEl.GetString(), "StructuredOutput", StringComparison.Ordinal) ||
+                !block.TryGetProperty("input", out var inputEl) ||
+                inputEl.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var parts = new List<string>();
+            foreach (var field in inputEl.EnumerateObject())
+            {
+                var value = field.Value.ValueKind switch
+                {
+                    JsonValueKind.String => field.Value.GetString(),
+                    JsonValueKind.Number => field.Value.GetRawText(),
+                    JsonValueKind.True => "true",
+                    JsonValueKind.False => "false",
+                    _ => null,
+                };
+
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    continue;
+                }
+
+                var clipped = value.Length > StructuredResultFieldMaxLength
+                    ? string.Concat(value.AsSpan(0, StructuredResultFieldMaxLength), "...")
+                    : value;
+
+                parts.Add($"{field.Name}: {clipped.ReplaceLineEndings(" ")}");
+            }
+
+            if (parts.Count == 0)
+            {
+                continue;
+            }
+
+            var text = string.Join(" · ", parts);
+            return text.Length > LastMessageMaxLength
+                ? string.Concat(text.AsSpan(0, LastMessageMaxLength), "...")
+                : text;
+        }
+
+        return null;
     }
 
     /// <summary>
