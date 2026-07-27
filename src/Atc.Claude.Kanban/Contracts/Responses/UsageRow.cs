@@ -12,4 +12,5 @@ public sealed record UsageRow(
     [property: JsonPropertyName("costUsd")] double CostUsd,
     [property: JsonPropertyName("models")] IReadOnlyList<ModelUsage> Models,
     [property: JsonPropertyName("toolUses")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ToolUses = null,
-    [property: JsonPropertyName("durationMs")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs = null);
+    [property: JsonPropertyName("durationMs")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] long? DurationMs = null,
+    [property: JsonPropertyName("workflowRunId")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? WorkflowRunId = null);

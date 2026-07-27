@@ -480,4 +480,109 @@ public sealed class SubagentServiceTests : IDisposable
         subagents[0].AgentId.Should().Be(agentId);
         subagents[0].Status.Should().Be("stopped");
     }
+
+    [Fact]
+    public async Task GetSubagents_DiscoversWorkflowSubagents_NestedUnderRunDirectory()
+    {
+        // Arrange — workflow-spawned agents live under subagents/workflows/{runId}/, and the
+        // run's journal.jsonl sits beside them but must not be treated as an agent.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-wf";
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-wf", sessionId, "subagents");
+        var runDir = Path.Combine(subagentsDir, "workflows", "wf_abc123");
+        Directory.CreateDirectory(runDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, "agent-flat001.jsonl"),
+            BuildAssistantTranscript("Flat agent reply"),
+            cancellationToken);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(runDir, "agent-nested001.jsonl"),
+            BuildAssistantTranscript("Nested agent reply"),
+            cancellationToken);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(runDir, "journal.jsonl"),
+            JsonSerializer.Serialize(new { type = "started", agentId = "nested001" }),
+            cancellationToken);
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync(sessionId, cancellationToken);
+        var counts = service.GetSubagentCounts(sessionId);
+
+        // Assert — both agents found, journal excluded.
+        subagents.Select(s => s.AgentId).Should().BeEquivalentTo("flat001", "nested001");
+        counts.Total.Should().Be(2);
+
+        // The run id marks the workflow agent so the UI can distinguish it; a regular
+        // subagent sitting directly in subagents/ carries none.
+        subagents.Single(s => s.AgentId == "nested001").WorkflowRunId.Should().Be("wf_abc123");
+        subagents.Single(s => s.AgentId == "flat001").WorkflowRunId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GetSubagents_UsesStructuredOutput_WhenResultExceedsLastMessageTail()
+    {
+        // Arrange — a schema'd workflow agent emits no text response, only a forced
+        // StructuredOutput call. That call is not the final line and is larger than the
+        // last-message tail window, so it is only found by the wider structured-result read.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-so";
+        var runDir = Path.Combine(tempDir, "projects", "hash-so", sessionId, "subagents", "workflows", "wf_so");
+        Directory.CreateDirectory(runDir);
+
+        // Padding pushes the StructuredOutput line well beyond the 5120-byte tail read.
+        var padding = new string('x', 6000);
+        var lines = new[]
+        {
+            JsonSerializer.Serialize(new { type = "user", message = new { role = "user", content = "Verify the finding" } }),
+            JsonSerializer.Serialize(new
+            {
+                type = "assistant",
+                message = new
+                {
+                    role = "assistant",
+                    model = "claude-opus-4-8",
+                    content = new object[]
+                    {
+                        new
+                        {
+                            type = "tool_use",
+                            id = "tu-so",
+                            name = "StructuredOutput",
+                            input = new { finding = "Counts use mtime", confirmed = true, evidence = padding },
+                        },
+                    },
+                },
+            }),
+            JsonSerializer.Serialize(new { type = "user", message = new { role = "user", content = new object[] { new { type = "tool_result", tool_use_id = "tu-so", content = "ok" } } } }),
+        };
+
+        var filePath = Path.Combine(runDir, "agent-so001.jsonl");
+        await File.WriteAllTextAsync(filePath, string.Join("\n", lines), cancellationToken);
+
+        // A result is only read once the agent is no longer active (avoids reading mid-write).
+        File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow.AddMinutes(-2));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var subagents = await service.GetSubagentsForSessionAsync(sessionId, cancellationToken);
+
+        // Assert — the structured result stands in for the missing text reply.
+        var agent = subagents.Should().ContainSingle().Subject;
+        agent.AgentId.Should().Be("so001");
+        agent.LastMessage.Should().NotBeNullOrEmpty();
+        agent.LastMessage.Should().Contain("finding: Counts use mtime");
+        agent.LastMessage.Should().Contain("confirmed: true");
+    }
+
+    private static string BuildAssistantTranscript(string text)
+        => string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", message = new { role = "user", content = "Do the thing" } }),
+            JsonSerializer.Serialize(new { type = "assistant", message = new { role = "assistant", model = "claude-opus-4-8", content = new object[] { new { type = "text", text } } } }));
 }

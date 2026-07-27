@@ -163,6 +163,33 @@ Write-Jsonl (Join-Path $projectsRoot "acme\$s1\subagents\agent-areview1.jsonl") 
     [ordered]@{ type = 'assistant'; timestamp = (Stamp 36); message = [ordered]@{ role = 'assistant'; model = $haiku; content = @([ordered]@{ type = 'text'; text = 'Looks correct; suggest a null check.' }); usage = (Usage 1500 500 3000 19000) } }
 )
 
+# Session 1 workflow subagents — spawned by the Workflow tool, so their transcripts sit one
+# level deeper under subagents/workflows/<runId>/ and carry the "workflow" badge in the panel.
+# The second agent was given an output schema: it ends on a forced StructuredOutput call and
+# never writes a text reply, so the dashboard surfaces that structured result as its response.
+$wfRun = 'wf_7c31d0a8-204'
+$wfDir = "acme\$s1\subagents\workflows\$wfRun"
+Write-Jsonl (Join-Path $projectsRoot "$wfDir\agent-awf000001.jsonl") @(
+    [ordered]@{ type = 'user'; slug = 'audit-pricing-rules'; cwd = $acmeCwd; timestamp = (Stamp 31); message = [ordered]@{ role = 'user'; content = 'Audit every pricing rule for coupon stacking bugs.' } },
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 31); message = [ordered]@{ role = 'assistant'; model = $sonnet; content = @([ordered]@{ type = 'tool_use'; id = 'tu_wf_grep'; name = 'Grep'; input = [ordered]@{ pattern = 'Discount|Coupon'; path = 'src' } }); usage = (Usage 1400 300 2000 12000) } },
+    [ordered]@{ type = 'user'; timestamp = (Stamp 31); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_wf_grep'; content = 'src/CartTotals.cs, src/CouponService.cs' }) } },
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 30); message = [ordered]@{ role = 'assistant'; model = $sonnet; content = @([ordered]@{ type = 'tool_use'; id = 'tu_wf_read'; name = 'Read'; input = [ordered]@{ file_path = "$acmeCwd\src\CartTotals.cs" } }); usage = (Usage 1600 260 2400 18000) } },
+    [ordered]@{ type = 'user'; timestamp = (Stamp 30); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_wf_read'; content = 'public decimal Apply(Cart cart) { /* ... */ }' }) } },
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 30); message = [ordered]@{ role = 'assistant'; model = $sonnet; content = @([ordered]@{ type = 'text'; text = 'Stacking is guarded, but percentage coupons compound before the cap is applied.' }); usage = (Usage 4200 900 6000 42000) } }
+)
+Write-Jsonl (Join-Path $projectsRoot "$wfDir\agent-awf000002.jsonl") @(
+    [ordered]@{ type = 'user'; slug = 'verify-stacking-fix'; cwd = $acmeCwd; timestamp = (Stamp 31); message = [ordered]@{ role = 'user'; content = 'Adversarially verify the coupon-stacking finding.' } },
+    [ordered]@{ type = 'assistant'; timestamp = (Stamp 29); message = [ordered]@{ role = 'assistant'; model = $sonnet; content = @([ordered]@{ type = 'tool_use'; id = 'tu_wf_so'; name = 'StructuredOutput'; input = [ordered]@{ finding = 'Percentage coupons compound before the cap'; confirmed = $true; evidence = 'CartTotals.Apply() multiplies before clamping to MaxDiscount' } }); usage = (Usage 3800 700 5000 37000) } },
+    [ordered]@{ type = 'user'; timestamp = (Stamp 29); message = [ordered]@{ role = 'user'; content = @([ordered]@{ type = 'tool_result'; tool_use_id = 'tu_wf_so'; content = 'ok' }) } }
+)
+# The run's journal sits beside the agent transcripts; it must not be listed as an agent.
+Write-Jsonl (Join-Path $projectsRoot "$wfDir\journal.jsonl") @(
+    [ordered]@{ type = 'started'; agentId = 'awf000001' },
+    [ordered]@{ type = 'started'; agentId = 'awf000002' },
+    [ordered]@{ type = 'result'; agentId = 'awf000001' },
+    [ordered]@{ type = 'result'; agentId = 'awf000002' }
+)
+
 # ── Session 2: acme-storefront — large (1M) context, completed ────────────────
 Write-Task $s2 1 'Extract cart reducer' 'completed' $null
 Write-Task $s2 2 'Migrate components to new store' 'completed' $null

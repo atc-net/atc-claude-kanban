@@ -899,6 +899,33 @@ public sealed class MessageServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSubagentMessages_ResolvesWorkflowAgent_NestedUnderRunDirectory()
+    {
+        // Arrange — a workflow-spawned agent's transcript lives under
+        // subagents/workflows/{runId}/, not directly in subagents/.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-wf-msg";
+        const string agentId = "nested42";
+        var runDir = Path.Combine(tempDir, "projects", "hash-wf", sessionId, "subagents", "workflows", "wf_run1");
+        Directory.CreateDirectory(runDir);
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", message = new { role = "user", content = "Verify the finding" } }),
+            JsonSerializer.Serialize(new { type = "assistant", message = new { role = "assistant", content = new object[] { new { type = "text", text = "Confirmed in SubagentService." } } } }));
+        await File.WriteAllTextAsync(Path.Combine(runDir, $"agent-{agentId}.jsonl"), jsonl, cancellationToken);
+
+        var service = new MessageService(tempDir, cache);
+
+        // Act
+        var messages = await service.GetSubagentMessagesAsync(sessionId, agentId, cancellationToken: cancellationToken);
+
+        // Assert
+        messages.Should().HaveCount(2);
+        messages.Should().Contain(m => m.Type == "assistant" && m.Text!.Contains("Confirmed in SubagentService", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task GetRecentMessages_CountsToolResultImages_AndReadsThemByIndex()
     {
         // Arrange — an assistant Read whose tool_result carries a base64 image.

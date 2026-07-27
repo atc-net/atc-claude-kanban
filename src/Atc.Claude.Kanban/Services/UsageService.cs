@@ -51,7 +51,7 @@ public sealed class UsageService
 
             var usage = await activityService.GetTokenUsageForPathAsync(agent.TranscriptPath, cancellationToken);
             var label = agent.AgentName ?? agent.Slug ?? agent.AgentId;
-            rows.Add(ToRow(label, "agent", usage, agent.Model, agent.ToolUses, agent.DurationMs));
+            rows.Add(ToRow(label, "agent", usage, agent.Model, agent.ToolUses, agent.DurationMs, agent.WorkflowRunId));
         }
 
         long totalTokens = 0;
@@ -71,6 +71,7 @@ public sealed class UsageService
         SessionTokenUsage usage,
         string? fallbackModel,
         int? toolUses,
-        long? durationMs)
-        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd, usage.Models, toolUses, durationMs);
+        long? durationMs,
+        string? workflowRunId = null)
+        => new(label, kind, usage.Model ?? fallbackModel, usage.TotalTokens, usage.CostUsd, usage.Models, toolUses, durationMs, workflowRunId);
 }

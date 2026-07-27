@@ -164,6 +164,11 @@ When Claude Code spawns subagents via the Task tool, the dashboard shows:
 - Copy button on task prompts and expandable/scrollable detail view
 - "Show all" toggle to view historical subagents (default: active only)
 - Parsed from JSONL transcript files at `~/.claude/projects/{hash}/{sessionId}/subagents/`
+- **Workflow subagents** spawned by the Workflow tool are included too — their transcripts live one level deeper, under `subagents/workflows/{runId}/`. They carry a `⚙ workflow` badge so they're distinguishable from Agent-tool subagents at a glance, and the run id is shown in the expanded detail. A workflow agent given an output schema ends on a forced `StructuredOutput` call and never writes a text reply, so its structured result is surfaced as the agent's response instead
+
+<p align="center">
+  <img src="docs/workflow-subagents-dark.png" alt="Subagent panel listing workflow-spawned agents alongside a regular subagent" width="900">
+</p>
 
 ### 💬 Session Message Log
 
@@ -237,12 +242,16 @@ Each session shows accumulated token usage and estimated cost:
 
 Each session row shows a **context-window bar** — the latest turn's prompt size (input + cache) as a percentage of the model's window, color-coded green → amber → orange. The window size isn't recorded in the transcript, so it's inferred: 200K by default, or 1M once a session's context exceeds 200K.
 
-The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant and model** — the lead session plus each subagent, grouped under counted "Lead sessions" / "Subagents" subheaders, with **input / output / cache-read / cache-write** columns per model. Each subagent also shows its **tool-count and active duration** (`· 42 tools · 151s`) from the completion record. A session that switches models mid-run (e.g. Opus 4.7 → 4.8) is priced per model and shown as separate rows. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
+The **Session Usage** modal (pie-chart icon in the session info modal) breaks token usage and estimated cost down **by participant and model** — the lead session plus each subagent, grouped under counted "Lead sessions" / "Subagents" subheaders, with **input / output / cache-read / cache-write** columns per model. Each subagent also shows its **tool-count and active duration** (`· 42 tools · 151s`) from the completion record. Workflow-spawned agents are included and marked with a `⚙ workflow` badge; since the Workflow runtime writes no completion record, their tool count and duration are derived from their own transcript. A session that switches models mid-run (e.g. Opus 4.7 → 4.8) is priced per model and shown as separate rows. Handy for spotting, e.g., Explore subagents running on Haiku while the lead runs on Opus.
 
 > Cost is a list-price estimate from the per-message `usage` blocks in the transcript; it typically lands ~20–30% under Claude Code's own `/usage` (cache-creation tiering isn't recorded in the JSONL).
 
 <p align="center">
   <img src="docs/usage-modal-dark.png" alt="Session usage modal with per-subagent model breakdown" width="900">
+</p>
+
+<p align="center">
+  <img src="docs/usage-modal-workflow-dark.png" alt="Session usage modal showing workflow-spawned agents marked with a workflow badge alongside their tool counts and durations" width="900">
 </p>
 
 ### 🔧 Tool Statistics
@@ -320,6 +329,7 @@ The tool watches these paths under `~/.claude/`:
 | `teams/{teamName}/config.json` | Team configurations |
 | `projects/{hash}/sessions-index.json` | Session metadata |
 | `projects/{hash}/{sessionId}/subagents/agent-*.jsonl` | Subagent transcripts |
+| `projects/{hash}/{sessionId}/subagents/workflows/{runId}/agent-*.jsonl` | Workflow subagent transcripts |
 | `plans/{slug}.md` | Plan markdown files |
 
 ## 📂 Claude Code Directory Structure
@@ -340,6 +350,7 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 │       ├── sessions-index.json         ← Session list with project path, git branch
 │       ├── {sessionId}.jsonl           ← Session transcript (one JSON object per line)
 │       └── {sessionId}/subagents/      ← Subagent transcripts
+│           └── workflows/{runId}/      ← Workflow subagent transcripts
 │
 └── plans/                              ← Plan markdown files
     └── {slug}.md

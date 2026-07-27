@@ -109,4 +109,13 @@ public sealed class SubagentInfo
     [JsonPropertyName("durationMs")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public long? DurationMs { get; set; }
+
+    /// <summary>
+    /// Gets or sets the identifier of the workflow run that spawned this agent, taken from its
+    /// transcript directory (<c>subagents/workflows/{runId}/</c>), or null for an agent spawned
+    /// directly by the Agent tool. Lets the UI distinguish workflow agents from regular ones.
+    /// </summary>
+    [JsonPropertyName("workflowRunId")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? WorkflowRunId { get; set; }
 }
