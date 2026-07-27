@@ -1391,10 +1391,15 @@ public sealed class MessageService
         var index = 0;
         foreach (var part in contentEl.EnumerateArray())
         {
+            // Must match CountToolResultImages' base64 filter exactly: that count is what the
+            // caller indexes into, so admitting other source types here would shift the indices
+            // and hand back the wrong image.
             if (!part.TryGetProperty("type", out var partTypeEl) ||
                 !string.Equals(partTypeEl.GetString(), "image", StringComparison.Ordinal) ||
                 !part.TryGetProperty("source", out var sourceEl) ||
                 sourceEl.ValueKind != JsonValueKind.Object ||
+                !sourceEl.TryGetProperty("type", out var sourceTypeEl) ||
+                !string.Equals(sourceTypeEl.GetString(), "base64", StringComparison.Ordinal) ||
                 !sourceEl.TryGetProperty("data", out var dataEl) ||
                 dataEl.ValueKind != JsonValueKind.String)
             {
