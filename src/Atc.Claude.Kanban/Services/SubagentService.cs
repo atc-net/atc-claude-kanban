@@ -77,7 +77,10 @@ public sealed class SubagentService
 
     /// <summary>
     /// Returns lightweight subagent counts for a session without full JSONL parsing.
-    /// Only counts files and checks modification times.
+    /// Only counts files and checks modification times. The active count uses the same
+    /// threshold as the "active" status in the detailed listing, so an idle agent — one that
+    /// has stopped writing but is not yet aged out — does not keep its session in the
+    /// active filter.
     /// </summary>
     /// <param name="sessionId">The session identifier.</param>
     /// <returns>A tuple of (total count, active count).</returns>
@@ -97,7 +100,7 @@ public sealed class SubagentService
             try
             {
                 var lastWrite = File.GetLastWriteTimeUtc(file);
-                if (now - lastWrite < IdleThreshold)
+                if (now - lastWrite < ActiveThreshold)
                 {
                     active++;
                 }

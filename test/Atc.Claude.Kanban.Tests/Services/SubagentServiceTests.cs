@@ -162,8 +162,36 @@ public sealed class SubagentServiceTests : IDisposable
         // Assert
         total.Should().Be(2);
 
-        // Both files were just created, so they should be active (within 90s idle threshold)
+        // Both files were just created, so they are within the 15s active threshold
         active.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetSubagentCounts_ActiveCountMatchesActiveStatuses_InDetailedListing()
+    {
+        // Arrange — the lightweight count and the detailed listing must agree on "active".
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subagentsDir = Path.Combine(tempDir, "projects", "hash-agree", "session-agree", "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, "agent-fresh.jsonl"),
+            "{\"type\":\"user\"}",
+            cancellationToken);
+
+        var idleFile = Path.Combine(subagentsDir, "agent-stale.jsonl");
+        await File.WriteAllTextAsync(idleFile, "{\"type\":\"user\"}", cancellationToken);
+        File.SetLastWriteTimeUtc(idleFile, DateTime.UtcNow.AddSeconds(-45));
+
+        var service = new SubagentService(tempDir, cache);
+
+        // Act
+        var (_, active) = service.GetSubagentCounts("session-agree");
+        var subagents = await service.GetSubagentsForSessionAsync("session-agree", cancellationToken);
+
+        // Assert
+        var activeStatuses = subagents.Count(s => s.Status == "active");
+        active.Should().Be(activeStatuses);
     }
 
     [Fact]
@@ -297,7 +325,7 @@ public sealed class SubagentServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetSubagentCounts_CountsActiveAsNotStopped()
+    public async Task GetSubagentCounts_CountsOnlyRunningAgentsAsActive()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -313,7 +341,7 @@ public sealed class SubagentServiceTests : IDisposable
         await File.WriteAllTextAsync(file2, "{\"type\":\"user\"}", cancellationToken);
         await File.WriteAllTextAsync(file3, "{\"type\":\"user\"}", cancellationToken);
 
-        // file1: just created = active (within 90s), file2: 30s ago = idle (within 90s), file3: 2min ago = stopped
+        // file1: just created = active, file2: 30s ago = idle, file3: 2min ago = stopped
         File.SetLastWriteTimeUtc(file2, DateTime.UtcNow.AddSeconds(-30));
         File.SetLastWriteTimeUtc(file3, DateTime.UtcNow.AddMinutes(-2));
 
@@ -325,8 +353,9 @@ public sealed class SubagentServiceTests : IDisposable
         // Assert
         total.Should().Be(3);
 
-        // Active count uses IdleThreshold (90s), so active + idle = 2, stopped = 1
-        active.Should().Be(2);
+        // Only the still-running agent is active; idle and stopped agents are finished work
+        // and must not keep the session in the active filter.
+        active.Should().Be(1);
     }
 
     [Fact]
