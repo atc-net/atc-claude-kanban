@@ -41,12 +41,19 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<SessionActivityService>(),
             sp.GetRequiredService<SubagentService>()));
 
+        services.AddSingleton(sp => new WorkflowService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>(),
+            sp.GetRequiredService<JsonSerializerOptions>(),
+            sp.GetRequiredService<SubagentService>()));
+
         services.AddSingleton(sp => new SessionService(
             claudeDir,
             sp.GetRequiredService<IMemoryCache>(),
             sp.GetRequiredService<JsonSerializerOptions>(),
             sp.GetRequiredService<SubagentService>(),
-            sp.GetRequiredService<SessionActivityService>()));
+            sp.GetRequiredService<SessionActivityService>(),
+            sp.GetRequiredService<WorkflowService>()));
 
         services.AddSingleton(sp => new TaskService(
             claudeDir,

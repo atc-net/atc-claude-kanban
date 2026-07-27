@@ -7,6 +7,7 @@ global using System.Net.Sockets;
 global using System.Reflection;
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
+global using System.Text.RegularExpressions;
 global using System.Threading.Channels;
 global using Atc.Claude.Kanban.Contracts.Events;
 global using Atc.Claude.Kanban.Contracts.Models;

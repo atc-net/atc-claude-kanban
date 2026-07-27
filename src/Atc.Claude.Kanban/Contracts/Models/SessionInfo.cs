@@ -85,6 +85,18 @@ public sealed class SessionInfo
     public string? PlanTitle { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether this session has any Workflow-tool scripts.
+    /// </summary>
+    [JsonPropertyName("hasWorkflow")]
+    public bool HasWorkflow { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of Workflow-tool scripts belonging to this session.
+    /// </summary>
+    [JsonPropertyName("workflowCount")]
+    public int WorkflowCount { get; set; }
+
+    /// <summary>
     /// Gets or sets a value indicating whether this session is a team session.
     /// </summary>
     [JsonPropertyName("isTeam")]
