@@ -56,6 +56,45 @@ Real-time Kanban dashboard for monitoring [Claude Code](https://docs.anthropic.c
 ## 📋 Requirements
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) (or later, via RollForward)
+- Claude Code with the **task tools enabled** — see [Task tools opt-in](#task-tools-opt-in) below
+
+### Task tools opt-in
+
+The Kanban board reads the task files Claude Code writes under `~/.claude/tasks/`. Those files only exist while the session has Claude Code's `TaskCreate` / `TaskGet` / `TaskUpdate` / `TaskList` tools — and per the [Claude Code tools reference](https://code.claude.com/docs/en/tools-reference), those tools are left out by default when **all three** of the following hold:
+
+1. Claude Code is **v2.1.233 or later**, and
+2. the session runs **Opus 4.8, Sonnet 5, Fable 5, Mythos 5, or a later version of those families**, and
+3. **no opt-in is present**.
+
+Those models track multi-step work without a written checklist, and the tool definitions cost context, so Claude Code omits them. On any other model — Opus 4.7, for example — the four task tools are provided by default and no opt-in is needed.
+
+> **Symptom:** the sidebar still lists your sessions, and subagents, the message log, token/cost tracking, tool statistics and the workflow viewer all keep working (they read the session transcripts, not task files) — but the **Kanban columns and the Timeline view stay empty**, because nothing is writing task files.
+
+To opt in, set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for the Claude Code session. Either persistently, in `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TODO_TOOLS": "1"
+  }
+}
+```
+
+…or per launch:
+
+```powershell
+# PowerShell
+$env:CLAUDE_CODE_ENABLE_TODO_TOOLS = "1"; claude
+```
+
+```bash
+# bash / zsh
+CLAUDE_CODE_ENABLE_TODO_TOOLS=1 claude
+```
+
+Naming any of the task tools on the command line opts a session in as well — `claude --allowedTools TaskCreate`, or including them in `claude --tools ...` alongside the other tools you use (that flag restricts built-ins to the ones you name). Background sessions and Claude Code on the web always get the task tools regardless of model.
+
+A subagent is given the task tools only when its parent session has them, even when the subagent runs a different model — so opting the session in also restores task data for the subagent and agent-team rows on the board.
 
 ## 🚀 Getting Started
 
@@ -392,6 +431,8 @@ The dashboard reads from `~/.claude/`, where Claude Code stores all session data
 The data directory is resolved in order: `--dir` flag > `CLAUDE_CONFIG_DIR` > `CLAUDE_DIR` > `~/.claude`. A leading `~` in either variable is expanded to your home directory.
 
 The update check is also automatically suppressed in CI environments (`CI`, `TF_BUILD`, or `GITHUB_ACTIONS` env vars detected).
+
+`CLAUDE_CODE_ENABLE_TODO_TOOLS` is **Claude Code's** variable, not the dashboard's — the dashboard never reads it. It controls whether Claude Code writes the task files this board displays; see [Task tools opt-in](#task-tools-opt-in).
 
 ## 🏗️ Architecture
 
