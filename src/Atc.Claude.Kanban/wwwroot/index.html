@@ -5975,7 +5975,7 @@
       `;
 
       // Build meta text with project path, branch, and description
-      const projectName = session.project ? session.project.split('/').pop() : null;
+      const projectName = session.project ? session.project.split(/[/\\]/).pop() : null;
       const metaParts = [session.isCompleted ? `Completed · ${currentTasks.length} tasks` : `${currentTasks.length} tasks`];
       if (projectName) {
         metaParts.push(projectName);
