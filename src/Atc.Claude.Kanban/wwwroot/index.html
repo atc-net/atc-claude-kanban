@@ -5558,6 +5558,22 @@
     let lastCurrentTasksHash = '';
     let lastSubagentsHash = '';
 
+    // A failed refresh leaves the last good board on screen. Say so once on the way down and
+    // once on the way back up, rather than on every poll while the server is unreachable.
+    let refreshFailing = false;
+
+    function noteRefreshFailure() {
+      if (refreshFailing) return;
+      refreshFailing = true;
+      showToast('Refresh failed — showing the last known state', 'error', 4000);
+    }
+
+    function noteRefreshSuccess() {
+      if (!refreshFailing) return;
+      refreshFailing = false;
+      showToast('Refresh recovered', 'success', 1500);
+    }
+
     async function fetchTasks(sessionId) {
       try {
         viewMode = 'session';
@@ -5580,6 +5596,8 @@
           }
         }
 
+        noteRefreshSuccess();
+
         const hash = JSON.stringify(newTasks);
         if (sessionId === currentSessionId && hash === lastCurrentTasksHash) {
           log.debug('[fetchTasks] No changes, skipping render');
@@ -5596,7 +5614,16 @@
         if (messagePanel.classList.contains('visible')) fetchMessages(sessionId);
       } catch (error) {
         log.error('Failed to fetch tasks:', error);
-        currentTasks = [];
+        noteRefreshFailure();
+
+        // A failed refresh is not an empty session. Keep the cards already on screen when they
+        // belong to this session, so a dropped poll or a restarting server does not blank a
+        // board that was correct a moment ago. Only clear when the failure happened while
+        // switching sessions, where the previous session's cards would be actively misleading.
+        if (sessionId !== currentSessionId) {
+          currentTasks = [];
+        }
+
         currentSessionId = sessionId;
         lastCurrentTasksHash = '';
         lastSubagentsHash = '';
@@ -5612,7 +5639,12 @@
         currentSessionId = null;
         ownerFilter = '';
         const res = await fetch('/api/tasks/all');
+        if (!res.ok) {
+          throw new Error(`Failed to fetch all tasks: ${res.status}`);
+        }
+
         let tasks = await res.json();
+        noteRefreshSuccess();
         if (filterProject) {
           tasks = tasks.filter(t => matchesProjectFilter(t.project));
         }
@@ -5622,7 +5654,9 @@
         fetchSubagents(null);
         renderSessions();
       } catch (error) {
+        // Leaves the previous board on screen; an error body is not a task list.
         log.error('Failed to fetch all tasks:', error);
+        noteRefreshFailure();
       }
     }
 
