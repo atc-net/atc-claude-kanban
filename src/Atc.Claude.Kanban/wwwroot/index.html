@@ -2227,6 +2227,63 @@
     }
 
     /* Modal */
+    .session-picker-list {
+      margin-top: 10px;
+      max-height: 48vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .session-picker-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 10px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: none;
+      color: var(--text-primary);
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .session-picker-item:hover {
+      background: var(--bg-hover);
+    }
+
+    .session-picker-item.selected {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    .session-picker-name {
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-picker-meta {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .session-picker-live {
+      color: var(--success);
+    }
+
+    .session-picker-empty {
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 10px 2px;
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -8206,6 +8263,170 @@
 
     let _helpModalKeyHandler = null;
 
+    // Ranked matches for the session picker. Pure, so it can be exercised on its own: a
+    // session is kept when the query matches its name, project path, branch or id, and the
+    // better match wins before recency does. An empty query lists everything by recency.
+    const SESSION_PICKER_LIMIT = 60;
+
+    function sessionPickerFields(session) {
+      const project = session.project || '';
+      return {
+        name: session.name || '',
+        folder: project ? project.split(/[/\\]/).filter(Boolean).pop() || project : '',
+        project,
+        branch: session.gitBranch || '',
+        id: session.id || '',
+      };
+    }
+
+    // Lower is better. Keeps a name match ahead of a path match, and a prefix ahead of a
+    // substring, so typing the first letters of a session name lands on it.
+    function sessionPickerScore(session, query) {
+      if (!query) return 0;
+      const fields = sessionPickerFields(session);
+      const q = query.toLowerCase();
+      const weights = [
+        [fields.name, 0],
+        [fields.folder, 10],
+        [fields.branch, 20],
+        [fields.project, 30],
+        [fields.id, 40],
+      ];
+
+      let best = Number.POSITIVE_INFINITY;
+      for (const [value, weight] of weights) {
+        const text = String(value).toLowerCase();
+        if (!text) continue;
+        if (text.startsWith(q)) best = Math.min(best, weight);
+        else if (text.includes(q)) best = Math.min(best, weight + 1);
+        else if (fuzzyMatch(value, query)) best = Math.min(best, weight + 2);
+      }
+
+      return best;
+    }
+
+    function rankSessionsForPicker(allSessions, query) {
+      return (allSessions || [])
+        .map(session => ({ session, score: sessionPickerScore(session, query) }))
+        .filter(entry => Number.isFinite(entry.score))
+        .sort((a, b) => {
+          if (a.score !== b.score) return a.score - b.score;
+          const at = new Date(a.session.modifiedAt || 0).getTime();
+          const bt = new Date(b.session.modifiedAt || 0).getTime();
+          return bt - at;
+        })
+        .slice(0, SESSION_PICKER_LIMIT)
+        .map(entry => entry.session);
+    }
+
+    let pickerMatches = [];
+    let pickerIndex = 0;
+
+    function renderSessionPicker() {
+      const input = document.getElementById('session-picker-input');
+      const list = document.getElementById('session-picker-list');
+      pickerMatches = rankSessionsForPicker(sessions, input.value.trim());
+
+      if (pickerMatches.length === 0) {
+        pickerIndex = 0;
+        list.innerHTML = '<div class="session-picker-empty">No session matches that.</div>';
+        return;
+      }
+
+      pickerIndex = Math.min(pickerIndex, pickerMatches.length - 1);
+      list.innerHTML = pickerMatches.map((session, index) => {
+        const fields = sessionPickerFields(session);
+        const meta = [fields.folder, fields.branch].filter(Boolean).join(' - ');
+        const live = isSessionLive(session) ? '<span class="session-picker-live">o</span> ' : '';
+        return `
+          <button type="button" role="option" aria-selected="${index === pickerIndex}"
+                  class="session-picker-item${index === pickerIndex ? ' selected' : ''}"
+                  data-action="choosePickerSession" data-session-id="${escapeHtml(session.id)}">
+            <div class="session-picker-name">${live}${escapeHtml(fields.name)}</div>
+            ${meta ? `<div class="session-picker-meta">${escapeHtml(meta)}</div>` : ''}
+          </button>`;
+      }).join('');
+
+      list.querySelector('.session-picker-item.selected')
+        ?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function movePickerSelection(delta) {
+      if (pickerMatches.length === 0) return;
+      const count = pickerMatches.length;
+      pickerIndex = ((pickerIndex + delta) % count + count) % count;
+      renderSessionPicker();
+    }
+
+    let pickerInputBound = false;
+
+    // Bound on first open, not at load: the modal markup follows this script in the document,
+    // so the input does not exist while the script is being evaluated.
+    function bindSessionPickerInput(input) {
+      if (pickerInputBound) return;
+      pickerInputBound = true;
+
+      input.addEventListener('input', () => {
+        pickerIndex = 0;
+        renderSessionPicker();
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeSessionPicker();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          movePickerSelection(1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          movePickerSelection(-1);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          choosePickerSession(pickerMatches[pickerIndex]?.id);
+        }
+      });
+    }
+
+    function openSessionPicker() {
+      const modal = document.getElementById('session-picker-modal');
+      const input = document.getElementById('session-picker-input');
+      if (!modal || !input) return;
+
+      bindSessionPickerInput(input);
+      pickerIndex = 0;
+      input.value = '';
+      modal.classList.add('visible');
+      renderSessionPicker();
+      input.focus();
+    }
+
+    function closeSessionPicker() {
+      document.getElementById('session-picker-modal').classList.remove('visible');
+      pickerMatches = [];
+      pickerIndex = 0;
+    }
+
+    function choosePickerSession(sessionId) {
+      if (!sessionId) return;
+      const session = sessions.find(s => s.id === sessionId);
+      closeSessionPicker();
+
+      // The pick may sit inside a collapsed section, or be filtered out of the sidebar
+      // altogether. renderSessions force-includes the selected session, so opening its
+      // section is all that is left to do.
+      if (session) {
+        let changed = collapsedProjectGroups.delete(session.project || '__ungrouped__');
+        if (pinnedSessionIds.has(session.id)) {
+          changed = collapsedProjectGroups.delete('__pinned__') || changed;
+        }
+
+        if (changed) persistCollapsedGroups();
+      }
+
+      fetchTasks(sessionId);
+    }
+
     function showHelpModal() {
       const modal = document.getElementById('help-modal');
       modal.classList.add('visible');
@@ -8258,6 +8479,12 @@
       // pass through.
       const isOwnedCtrlCombo = e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && (e.key === 'd' || e.key === 'D');
       if ((e.ctrlKey || e.metaKey || e.altKey) && !isOwnedCtrlCombo) {
+        return;
+      }
+
+      if (e.code === 'KeyP' && e.shiftKey) {
+        e.preventDefault();
+        openSessionPicker();
         return;
       }
 
@@ -9913,6 +10140,9 @@
           document.getElementById('themeMenu')?.classList.remove('open');
           break;
         case 'showHelpModal': showHelpModal(); break;
+        case 'openSessionPicker': openSessionPicker(); break;
+        case 'closeSessionPicker': closeSessionPicker(); break;
+        case 'choosePickerSession': choosePickerSession(sessionId); break;
 
         // Session list
         case 'fetchTasks': fetchTasks(sessionId); break;
@@ -10064,6 +10294,24 @@
   </script>
 
   <!-- Help Modal -->
+  <div id="session-picker-modal" class="modal-overlay" data-action="closeSessionPicker">
+    <div class="modal" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Go to session</h3>
+        <button class="modal-close" aria-label="Close dialog" data-action="closeSessionPicker">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input id="session-picker-input" class="search-input" type="text" autocomplete="off"
+               spellcheck="false" placeholder="Filter by name, project, branch or id">
+        <div id="session-picker-list" class="session-picker-list" role="listbox"></div>
+      </div>
+    </div>
+  </div>
+
   <div id="help-modal" class="modal-overlay" data-action="closeHelpModal">
     <div class="modal" style="max-width: 860px; overflow-y: auto;">
       <div class="modal-header">
@@ -10083,6 +10331,10 @@
                 <tr>
                   <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">?</kbd></td>
                   <td style="padding: 4px 0; color: var(--text-primary);">Show keyboard shortcuts</td>
+                </tr>
+                <tr>
+                  <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Shift+P</kbd></td>
+                  <td style="padding: 4px 0; color: var(--text-primary);">Go to session (filter by name, project, branch or id)</td>
                 </tr>
                 <tr>
                   <td style="padding: 4px 0; color: var(--text-secondary);"><kbd style="background: var(--bg-hover); padding: 2px 6px; border-radius: 4px; font-family: monospace;">Esc</kbd></td>
