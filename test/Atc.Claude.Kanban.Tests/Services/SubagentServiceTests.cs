@@ -614,4 +614,161 @@ public sealed class SubagentServiceTests : IDisposable
             "\n",
             JsonSerializer.Serialize(new { type = "user", message = new { role = "user", content = "Do the thing" } }),
             JsonSerializer.Serialize(new { type = "assistant", message = new { role = "assistant", model = "claude-opus-4-8", content = new object[] { new { type = "text", text } } } }));
+
+    [Fact]
+    public void FindLastAgentResult_PrefersHandback_OverEarlierAssistantText()
+    {
+        // A background agent narrates while it works and hands its report back at the end.
+        // The narration is not the result.
+        var tail = string.Join(
+            "\n",
+            AssistantText("Let me check the remaining files."),
+            Handback("All 12 files reviewed. Two need changes."));
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("All 12 files reviewed. Two need changes.");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_PrefersHandback_WhenTheSameTurnAlsoHasText()
+    {
+        var tail = JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new
+            {
+                content = new object[]
+                {
+                    new { type = "text", text = "Handing back now." },
+                    new { type = "tool_use", id = "t1", name = "SubagentHandback", input = new { message = "The real report." } },
+                },
+            },
+        });
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("The real report.");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_RendersHandbackWithoutFieldName()
+    {
+        var result = SubagentService.FindLastAgentResult(Handback("Done."));
+
+        result.Should().Be("Done.");
+        result.Should().NotContain("message:");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_CollapsesNewlinesInAHandback()
+    {
+        var result = SubagentService.FindLastAgentResult(Handback("# Title\n\nFirst point."));
+
+        result.Should().Be("# Title  First point.");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_ClipsALongHandback()
+    {
+        var longReport = new string('x', 500);
+
+        var result = SubagentService.FindLastAgentResult(Handback(longReport));
+
+        result.Should().HaveLength(203);
+        result.Should().EndWith("...");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_StillFlattensStructuredOutput()
+    {
+        var tail = JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new
+            {
+                content = new object[]
+                {
+                    new { type = "tool_use", id = "t1", name = "StructuredOutput", input = new { verdict = "pass", count = 3 } },
+                },
+            },
+        });
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("verdict: pass · count: 3");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_FallsBackToAssistantText_WhenThereIsNoResultCall()
+    {
+        var tail = string.Join(
+            "\n",
+            AssistantText("First thought."),
+            AssistantText("Final answer."));
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("Final answer.");
+    }
+
+    [Fact]
+    public void FindLastAgentResult_IgnoresBookkeepingAndToolEntries()
+    {
+        var tail = string.Join(
+            "\n",
+            Handback("The report."),
+            JsonSerializer.Serialize(new { type = "user", message = new { content = new object[] { new { type = "tool_result", tool_use_id = "t1" } } } }),
+            """{"type":"attachment"}""");
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("The report.");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not json at all")]
+    [InlineData("""{"type":"attachment"}""")]
+    public void FindLastAgentResult_ReturnsNull_WhenNoResultIsPresent(
+        string tail)
+    {
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public void FindLastAgentResult_SkipsAPartialLine_AndUsesTheRecordBeforeIt()
+    {
+        // A concurrent write can leave an unterminated last line.
+        var tail = string.Join(
+            "\n",
+            Handback("The report."),
+            """{"type":"assistant","message":{"content":[{"type":"text","te""");
+
+        var result = SubagentService.FindLastAgentResult(tail);
+
+        result.Should().Be("The report.");
+    }
+
+    private static string Handback(string message)
+        => JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new
+            {
+                content = new object[]
+                {
+                    new { type = "tool_use", id = "t1", name = "SubagentHandback", input = new { message } },
+                },
+            },
+        });
+
+    private static string AssistantText(string text)
+        => JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new { content = new object[] { new { type = "text", text } } },
+        });
 }
