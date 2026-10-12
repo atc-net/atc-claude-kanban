@@ -6143,9 +6143,11 @@
       renderSessions();
     }
 
-    function isTaskActuallyBlocked(task) {
-      if (!task.blockedBy || task.blockedBy.length === 0) return false;
-      return task.blockedBy.some(id => {
+    // The ids of blockers that have not completed yet. A blocker we cannot find is treated as
+    // unresolved, because its own session may simply not be loaded.
+    function unresolvedBlockers(task) {
+      if (!task.blockedBy || task.blockedBy.length === 0) return [];
+      return task.blockedBy.filter(id => {
         const blockingTask = currentTasks.find(t =>
           t.id === id && (viewMode !== 'all' || t.sessionId === task.sessionId)
         );
@@ -6153,8 +6155,13 @@
       });
     }
 
+    function isTaskActuallyBlocked(task) {
+      return unresolvedBlockers(task).length > 0;
+    }
+
     function renderTaskCard(task) {
-      const isBlocked = isTaskActuallyBlocked(task);
+      const blockers = unresolvedBlockers(task);
+      const isBlocked = blockers.length > 0;
       const taskId = viewMode === 'all' ? `${task.sessionId?.slice(0,4)}-${task.id}` : task.id;
       const sessionLabel = viewMode === 'all' && task.sessionName ? task.sessionName : null;
       const statusClass = task.status.replace('_', '-');
@@ -6178,7 +6185,7 @@
           <div class="task-title">${escapeHtml(task.subject)}</div>
           ${sessionLabel ? `<div class="task-session">${escapeHtml(sessionLabel)}</div>` : ''}
           ${task.status === 'in_progress' && task.activeForm ? `<div class="task-active">${escapeHtml(task.activeForm)}</div>` : ''}
-          ${isBlocked ? `<div class="task-blocked">Waiting on ${task.blockedBy.map(id => '#' + id).join(', ')}</div>` : ''}
+          ${isBlocked ? `<div class="task-blocked">Waiting on ${blockers.map(id => '#' + id).join(', ')}</div>` : ''}
           ${task.description ? `<div class="task-desc">${escapeHtml(task.description.split('\n')[0])}</div>` : ''}
         </div>
       `;
