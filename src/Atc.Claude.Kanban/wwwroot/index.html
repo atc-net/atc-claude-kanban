@@ -8279,8 +8279,12 @@
       };
     }
 
-    // Lower is better. Keeps a name match ahead of a path match, and a prefix ahead of a
-    // substring, so typing the first letters of a session name lands on it.
+    // Same delimiters fuzzyMatch splits on, so "rate" is a word in "rate-limiter".
+    const WORD_SPLIT_PATTERN = /[\s\-_\/\\.]+/;
+
+    // Lower is better. A name match beats a path match, and within a field a whole-string
+    // prefix beats a word prefix, which beats a match buried mid-word. Without the word tier,
+    // "rate" ranked "Migrate charts" above "Fix rate-limiter", since both merely contain it.
     function sessionPickerScore(session, query) {
       if (!query) return 0;
       const fields = sessionPickerFields(session);
@@ -8297,9 +8301,11 @@
       for (const [value, weight] of weights) {
         const text = String(value).toLowerCase();
         if (!text) continue;
+
         if (text.startsWith(q)) best = Math.min(best, weight);
-        else if (text.includes(q)) best = Math.min(best, weight + 1);
-        else if (fuzzyMatch(value, query)) best = Math.min(best, weight + 2);
+        else if (text.split(WORD_SPLIT_PATTERN).some(word => word.startsWith(q))) best = Math.min(best, weight + 1);
+        else if (text.includes(q)) best = Math.min(best, weight + 2);
+        else if (fuzzyMatch(value, query)) best = Math.min(best, weight + 3);
       }
 
       return best;
