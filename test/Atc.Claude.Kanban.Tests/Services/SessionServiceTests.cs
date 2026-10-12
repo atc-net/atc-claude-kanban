@@ -804,6 +804,48 @@ public sealed class SessionServiceTests : IDisposable
         sessions[0].ModifiedAt.Should().BeCloseTo(taskFileUtc, TimeSpan.FromSeconds(1));
     }
 
+    [Fact]
+    public async Task GetSessions_TakesTranscriptTimeFromTheLead_ForATeamRow()
+    {
+        // Arrange - a team row is keyed by team name and has no transcript of its own, so its
+        // recency has to come from the lead session that is actually talking.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string teamName = "research-team";
+        const string leadId = "lead-session";
+
+        await WriteTaskAsync(teamName, "1", "pending", cancellationToken);
+
+        await WriteTeamConfigAsync(
+            teamName,
+            new
+            {
+                name = teamName,
+                leadSessionId = leadId,
+                members = new[]
+                {
+                    new { agentId = "team-lead@" + teamName, name = "team-lead", agentType = "team-lead" },
+                    new { agentId = "researcher@" + teamName, name = "researcher", agentType = "researcher" },
+                },
+            },
+            cancellationToken);
+
+        var teamDir = Path.Combine(tempDir, "tasks", teamName);
+        File.SetLastWriteTimeUtc(Path.Combine(teamDir, "1.json"), StaleUtc);
+        Directory.SetLastWriteTimeUtc(teamDir, StaleUtc);
+
+        var transcriptUtc = await WriteTranscriptAsync(leadId, cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        var team = sessions.Single(s => s.Id == teamName);
+        team.IsTeam.Should().BeTrue();
+        team.ModifiedAt.Should().BeCloseTo(transcriptUtc, TimeSpan.FromSeconds(1));
+    }
+
     private static readonly DateTime StaleUtc = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
     private SessionService CreateService()
