@@ -15,6 +15,12 @@ public sealed class SubagentService
     private const int StructuredResultReadSize = 262144;
     private const int StructuredResultFieldMaxLength = 80;
 
+    // The two tool calls that carry an agent's result rather than its narration. A background
+    // agent ends on a hand-back holding its report; a schema'd workflow agent on a forced
+    // structured output.
+    private const string HandbackToolName = "SubagentHandback";
+    private const string StructuredOutputToolName = "StructuredOutput";
+
     private static readonly TimeSpan ActiveThreshold = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan IdleThreshold = TimeSpan.FromSeconds(90);
 
@@ -223,14 +229,17 @@ public sealed class SubagentService
     }
 
     /// <summary>
-    /// Returns an agent's result: its last assistant text, or — for a schema'd workflow agent that
-    /// ends on a forced StructuredOutput call and never emits text — that structured result.
+    /// Returns an agent's result: whichever of its last assistant text and its hand-back or
+    /// structured-output call comes later in the transcript. Narration written before a
+    /// hand-back is not the result, so position decides rather than a fixed preference.
+    /// Reads a small tail first and widens only when that window holds no complete record,
+    /// which happens when the hand-back line alone is larger than it.
     /// </summary>
     private static async Task<string?> ReadAgentResultAsync(
         string filePath,
         CancellationToken cancellationToken)
-        => await ReadLastMessageAsync(filePath, cancellationToken)
-           ?? await ReadStructuredResultAsync(filePath, cancellationToken);
+        => await ReadAgentResultFromTailAsync(filePath, TailReadSize, cancellationToken)
+           ?? await ReadAgentResultFromTailAsync(filePath, StructuredResultReadSize, cancellationToken);
 
     /// <summary>
     /// Derives a workflow agent's tool count and active duration from its own transcript, standing
@@ -458,11 +467,16 @@ public sealed class SubagentService
     }
 
     /// <summary>
-    /// Reads the tail of a JSONL transcript file to extract the last assistant message content.
-    /// Seeks from the end to avoid reading the entire file.
+    /// Reads the last <paramref name="readSize"/> bytes of a transcript and returns the newest
+    /// agent result the window holds.
     /// </summary>
-    private static async Task<string?> ReadLastMessageAsync(
+    /// <param name="filePath">Absolute path to the agent transcript.</param>
+    /// <param name="readSize">How many bytes to read back from the end of the file.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The agent's result, or null when the window holds none.</returns>
+    private static async Task<string?> ReadAgentResultFromTailAsync(
         string filePath,
+        int readSize,
         CancellationToken cancellationToken)
     {
         try
@@ -474,47 +488,12 @@ public sealed class SubagentService
                 return null;
             }
 
-            var readSize = (int)System.Math.Min(TailReadSize, fileLength);
-            stream.Seek(-readSize, SeekOrigin.End);
-
-            var buffer = new byte[readSize];
-            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, readSize), cancellationToken);
-            var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-            return FindLastAssistantMessage(tail);
-        }
-        catch (IOException)
-        {
-            // File may have been deleted or locked
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Reads the tail of a transcript looking for the last StructuredOutput tool call and
-    /// renders its input compactly. Uses a larger window than the last-message read because a
-    /// structured result routinely exceeds it, and the call is not always the final line.
-    /// Cold path only — reached from the subagent list, never from the session-scan counts.
-    /// </summary>
-    private static async Task<string?> ReadStructuredResultAsync(
-        string filePath,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var fileLength = stream.Length;
-            if (fileLength == 0)
-            {
-                return null;
-            }
-
-            var readSize = (int)System.Math.Min(StructuredResultReadSize, fileLength);
-            var start = fileLength - readSize;
+            var window = (int)System.Math.Min(readSize, fileLength);
+            var start = fileLength - window;
             stream.Seek(start, SeekOrigin.Begin);
 
-            var buffer = new byte[readSize];
-            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, readSize), cancellationToken);
+            var buffer = new byte[window];
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, window), cancellationToken);
             var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
             // Reading from an offset can start mid-line; drop that partial head outright so a
@@ -525,119 +504,23 @@ public sealed class SubagentService
                 tail = firstNewline < 0 ? string.Empty : tail[(firstNewline + 1)..];
             }
 
-            return FindLastStructuredResult(tail);
+            return FindLastAgentResult(tail);
         }
         catch (IOException)
         {
+            // File may have been deleted or locked
             return null;
         }
     }
 
     /// <summary>
-    /// Scans backwards for the last line holding a StructuredOutput tool call and renders its
-    /// input as a compact single line. The call is located by name rather than by position,
-    /// because trailing entries follow it in the transcript.
+    /// Scans backwards for the newest assistant entry carrying a result, so a hand-back or
+    /// structured-output call wins over any narration written before it. Within a single entry
+    /// the result call also wins, because an assistant turn may hold both text and the call.
     /// </summary>
-    private static string? FindLastStructuredResult(string tail)
-    {
-        var lines = tail.Split('\n');
-
-        for (var i = lines.Length - 1; i >= 0; i--)
-        {
-            var line = lines[i].Trim();
-            if (line.Length == 0 ||
-                line[0] != '{' ||
-                !line.Contains("\"StructuredOutput\"", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                var result = ExtractStructuredResult(doc.RootElement);
-                if (!string.IsNullOrWhiteSpace(result))
-                {
-                    return result;
-                }
-            }
-            catch (JsonException)
-            {
-                // Skip malformed lines
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Finds the StructuredOutput tool_use block in an assistant entry and flattens its input
-    /// to "key: value" pairs. Only scalar fields are rendered, each clipped, so the summary
-    /// stays readable within the last-message length budget.
-    /// </summary>
-    private static string? ExtractStructuredResult(JsonElement root)
-    {
-        if (!root.TryGetProperty("message", out var msgEl) ||
-            !msgEl.TryGetProperty("content", out var contentEl) ||
-            contentEl.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var block in contentEl.EnumerateArray())
-        {
-            if (!block.TryGetProperty("type", out var typeEl) ||
-                !string.Equals(typeEl.GetString(), "tool_use", StringComparison.Ordinal) ||
-                !block.TryGetProperty("name", out var nameEl) ||
-                !string.Equals(nameEl.GetString(), "StructuredOutput", StringComparison.Ordinal) ||
-                !block.TryGetProperty("input", out var inputEl) ||
-                inputEl.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var parts = new List<string>();
-            foreach (var field in inputEl.EnumerateObject())
-            {
-                var value = field.Value.ValueKind switch
-                {
-                    JsonValueKind.String => field.Value.GetString(),
-                    JsonValueKind.Number => field.Value.GetRawText(),
-                    JsonValueKind.True => "true",
-                    JsonValueKind.False => "false",
-                    _ => null,
-                };
-
-                if (string.IsNullOrWhiteSpace(value))
-                {
-                    continue;
-                }
-
-                var clipped = value.Length > StructuredResultFieldMaxLength
-                    ? string.Concat(value.AsSpan(0, StructuredResultFieldMaxLength), "...")
-                    : value;
-
-                parts.Add($"{field.Name}: {clipped.ReplaceLineEndings(" ")}");
-            }
-
-            if (parts.Count == 0)
-            {
-                continue;
-            }
-
-            var text = string.Join(" · ", parts);
-            return text.Length > LastMessageMaxLength
-                ? string.Concat(text.AsSpan(0, LastMessageMaxLength), "...")
-                : text;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Searches backwards through JSONL lines to find the last assistant message text.
-    /// </summary>
-    private static string? FindLastAssistantMessage(string tail)
+    /// <param name="tail">The transcript tail to scan.</param>
+    /// <returns>The agent's result, or null when the window holds none.</returns>
+    internal static string? FindLastAgentResult(string tail)
     {
         var lines = tail.Split('\n');
 
@@ -655,34 +538,137 @@ public sealed class SubagentService
                 var root = doc.RootElement;
 
                 if (!root.TryGetProperty("type", out var typeEl) ||
-                    !string.Equals(typeEl.GetString(), "assistant", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (!root.TryGetProperty("message", out var msgEl) ||
+                    !string.Equals(typeEl.GetString(), "assistant", StringComparison.Ordinal) ||
+                    !root.TryGetProperty("message", out var msgEl) ||
                     !msgEl.TryGetProperty("content", out var contentEl))
                 {
                     continue;
                 }
 
-                var text = ExtractAssistantText(contentEl);
-                if (string.IsNullOrWhiteSpace(text))
+                var result = ExtractStructuredResult(root) ?? ClipResult(ExtractAssistantText(contentEl));
+                if (!string.IsNullOrWhiteSpace(result))
                 {
-                    continue;
+                    return result;
                 }
-
-                return text.Length > LastMessageMaxLength
-                    ? string.Concat(text.AsSpan(0, LastMessageMaxLength), "...")
-                    : text;
             }
             catch (JsonException)
             {
-                // Skip malformed lines (including partial first line from seek)
+                // Skip malformed lines, including a partial line left by a concurrent write
             }
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Clips a result to the last-message budget, returning null for blank input.
+    /// </summary>
+    /// <param name="text">The text to clip.</param>
+    /// <returns>The clipped text, or null when there was nothing to show.</returns>
+    private static string? ClipResult(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return text.Length > LastMessageMaxLength
+            ? string.Concat(text.AsSpan(0, LastMessageMaxLength), "...")
+            : text;
+    }
+
+    /// <summary>
+    /// Returns whether a tool name is one that carries an agent's result.
+    /// </summary>
+    /// <param name="toolName">The tool_use block's name.</param>
+    /// <returns><see langword="true"/> for a hand-back or structured-output call.</returns>
+    private static bool IsResultToolName(string? toolName)
+        => string.Equals(toolName, StructuredOutputToolName, StringComparison.Ordinal) ||
+           string.Equals(toolName, HandbackToolName, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Finds the result-carrying tool_use block in an assistant entry. A hand-back's report is
+    /// returned on its own, because its single field name adds nothing and the per-field clip
+    /// would cut the report down to a fragment. Anything else is flattened to "key: value"
+    /// pairs, scalar fields only, each clipped so the summary stays within the length budget.
+    /// </summary>
+    private static string? ExtractStructuredResult(JsonElement root)
+    {
+        if (!root.TryGetProperty("message", out var msgEl) ||
+            !msgEl.TryGetProperty("content", out var contentEl) ||
+            contentEl.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var block in contentEl.EnumerateArray())
+        {
+            if (!block.TryGetProperty("type", out var typeEl) ||
+                !string.Equals(typeEl.GetString(), "tool_use", StringComparison.Ordinal) ||
+                !block.TryGetProperty("name", out var nameEl) ||
+                !IsResultToolName(nameEl.GetString()) ||
+                !block.TryGetProperty("input", out var inputEl) ||
+                inputEl.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            if (string.Equals(nameEl.GetString(), HandbackToolName, StringComparison.Ordinal) &&
+                inputEl.TryGetProperty("message", out var messageEl) &&
+                messageEl.ValueKind == JsonValueKind.String)
+            {
+                var handback = ClipResult(messageEl.GetString()?.ReplaceLineEndings(" "));
+                if (handback is not null)
+                {
+                    return handback;
+                }
+            }
+
+            var flattened = FlattenResultInput(inputEl);
+            if (flattened is not null)
+            {
+                return flattened;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Flattens a result call's input object to a single "key: value" line. Only scalar fields
+    /// are rendered, each clipped, so one long field cannot crowd out the rest.
+    /// </summary>
+    /// <param name="inputElement">The tool_use block's input object.</param>
+    /// <returns>The flattened line, or null when no scalar field carried a value.</returns>
+    private static string? FlattenResultInput(JsonElement inputElement)
+    {
+        var parts = new List<string>();
+        foreach (var field in inputElement.EnumerateObject())
+        {
+            var value = field.Value.ValueKind switch
+            {
+                JsonValueKind.String => field.Value.GetString(),
+                JsonValueKind.Number => field.Value.GetRawText(),
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => null,
+            };
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            var clipped = value.Length > StructuredResultFieldMaxLength
+                ? string.Concat(value.AsSpan(0, StructuredResultFieldMaxLength), "...")
+                : value;
+
+            parts.Add($"{field.Name}: {clipped.ReplaceLineEndings(" ")}");
+        }
+
+        return parts.Count == 0
+            ? null
+            : ClipResult(string.Join(" · ", parts));
     }
 
     /// <summary>
