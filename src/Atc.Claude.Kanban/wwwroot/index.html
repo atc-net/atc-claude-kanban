@@ -38,6 +38,25 @@
       --plan-dim: rgba(134, 168, 134, 0.18);
       --mono: 'IBM Plex Mono', monospace;
       --serif: 'Playfair Display', serif;
+
+      /* ANSI SGR palette for tool output. Tuned for the dark surfaces;
+         body.light overrides the darker half so both themes stay readable. */
+      --ansi-black: #5c6066;
+      --ansi-red: #f07171;
+      --ansi-green: #6fcf8e;
+      --ansi-yellow: #e5c07b;
+      --ansi-blue: #74a7f0;
+      --ansi-magenta: #c792ea;
+      --ansi-cyan: #56b6c2;
+      --ansi-white: #d8dae0;
+      --ansi-bright-black: #7d808a;
+      --ansi-bright-red: #ff8f8f;
+      --ansi-bright-green: #8ee5a8;
+      --ansi-bright-yellow: #f5d49a;
+      --ansi-bright-blue: #96bdf7;
+      --ansi-bright-magenta: #ddb3f5;
+      --ansi-bright-cyan: #7fd3dc;
+      --ansi-bright-white: #f5f6f8;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2046,6 +2065,24 @@
       --warning-dim: rgba(176, 125, 10, 0.15);
       --plan: #5a7a5a;
       --plan-dim: rgba(90, 122, 90, 0.15);
+
+      /* ANSI output on a light surface: darken so the mid-tones keep contrast. */
+      --ansi-black: #2b2b2b;
+      --ansi-red: #c0392b;
+      --ansi-green: #1a7f4b;
+      --ansi-yellow: #8a6a00;
+      --ansi-blue: #1f5fbf;
+      --ansi-magenta: #8e44ad;
+      --ansi-cyan: #0f7b86;
+      --ansi-white: #5a5a5a;
+      --ansi-bright-black: #555555;
+      --ansi-bright-red: #e04a3a;
+      --ansi-bright-green: #22995a;
+      --ansi-bright-yellow: #a37f00;
+      --ansi-bright-blue: #2a73d9;
+      --ansi-bright-magenta: #a155c4;
+      --ansi-bright-cyan: #138e9b;
+      --ansi-bright-white: #333333;
     }
 
     body.light::before {
@@ -3218,6 +3255,49 @@
     .msg-tool-result.expanded {
       display: block;
     }
+
+    /* SGR attributes emitted by ansiToHtml. */
+    .ansi-fg-black { color: var(--ansi-black); }
+    .ansi-fg-red { color: var(--ansi-red); }
+    .ansi-fg-green { color: var(--ansi-green); }
+    .ansi-fg-yellow { color: var(--ansi-yellow); }
+    .ansi-fg-blue { color: var(--ansi-blue); }
+    .ansi-fg-magenta { color: var(--ansi-magenta); }
+    .ansi-fg-cyan { color: var(--ansi-cyan); }
+    .ansi-fg-white { color: var(--ansi-white); }
+    .ansi-fg-bright-black { color: var(--ansi-bright-black); }
+    .ansi-fg-bright-red { color: var(--ansi-bright-red); }
+    .ansi-fg-bright-green { color: var(--ansi-bright-green); }
+    .ansi-fg-bright-yellow { color: var(--ansi-bright-yellow); }
+    .ansi-fg-bright-blue { color: var(--ansi-bright-blue); }
+    .ansi-fg-bright-magenta { color: var(--ansi-bright-magenta); }
+    .ansi-fg-bright-cyan { color: var(--ansi-bright-cyan); }
+    .ansi-fg-bright-white { color: var(--ansi-bright-white); }
+
+    .ansi-bg-black { background-color: var(--ansi-black); }
+    .ansi-bg-red { background-color: var(--ansi-red); }
+    .ansi-bg-green { background-color: var(--ansi-green); }
+    .ansi-bg-yellow { background-color: var(--ansi-yellow); }
+    .ansi-bg-blue { background-color: var(--ansi-blue); }
+    .ansi-bg-magenta { background-color: var(--ansi-magenta); }
+    .ansi-bg-cyan { background-color: var(--ansi-cyan); }
+    .ansi-bg-white { background-color: var(--ansi-white); }
+    .ansi-bg-bright-black { background-color: var(--ansi-bright-black); }
+    .ansi-bg-bright-red { background-color: var(--ansi-bright-red); }
+    .ansi-bg-bright-green { background-color: var(--ansi-bright-green); }
+    .ansi-bg-bright-yellow { background-color: var(--ansi-bright-yellow); }
+    .ansi-bg-bright-blue { background-color: var(--ansi-bright-blue); }
+    .ansi-bg-bright-magenta { background-color: var(--ansi-bright-magenta); }
+    .ansi-bg-bright-cyan { background-color: var(--ansi-bright-cyan); }
+    .ansi-bg-bright-white { background-color: var(--ansi-bright-white); }
+
+    .ansi-bold { font-weight: 700; }
+    .ansi-dim { opacity: 0.65; }
+    .ansi-italic { font-style: italic; }
+    .ansi-underline { text-decoration: underline; }
+    .ansi-strike { text-decoration: line-through; }
+    .ansi-underline.ansi-strike { text-decoration: underline line-through; }
+    .ansi-hidden { visibility: hidden; }
 
     .msg-result-toggle {
       font-size: 11px;
@@ -6733,7 +6813,7 @@
             const tsFirst = formatMsgTimestamp(first.timestamp);
             const tsLast = formatMsgTimestamp(last.timestamp);
             const timeRange = tsFirst && tsLast ? `${tsFirst} – ${tsLast}` : tsFirst || '';
-            const headerDetail = escapeHtml(toolDetailText(first));
+            const headerDetail = escapeHtml(stripAnsi(toolDetailText(first)));
             const items = [];
             for (let j = i; j < runEnd; j++) items.push(renderToolUseEntry(messages[j], true));
             parts.push(`<div class="msg-tool-group">
@@ -6995,7 +7075,9 @@
 
     function renderToolUseEntry(msg, compact) {
       const toolName = escapeHtml(msg.toolName || 'Tool');
-      const rawDisplayText = escapeHtml(toolDetailText(msg));
+      // Stripped rather than coloured: this is a single summary line whose
+      // escaped file path gets string-replaced below, which spans would break.
+      const rawDisplayText = escapeHtml(stripAnsi(toolDetailText(msg)));
       const ts = formatMsgTimestamp(msg.timestamp);
       const compactClass = compact ? ' msg-tool-grouped' : '';
       const icon = getToolIcon(msg.toolName);
@@ -7034,7 +7116,7 @@
         const resultId = 'tr-' + (msg.toolUseId || Math.random().toString(36).substring(2, 8));
         resultHtml = `
           <button class="msg-result-toggle" data-action="toggleToolResult" data-target="${resultId}">Show result</button>
-          <div id="${resultId}" class="msg-tool-result">${escapeHtml(msg.toolResult)}</div>`;
+          <div id="${resultId}" class="msg-tool-result">${ansiToHtml(msg.toolResult)}</div>`;
       }
 
       let agentLink = '';
@@ -8460,6 +8542,211 @@
       const div = document.createElement('div');
       div.textContent = text;
       return div.innerHTML;
+    }
+
+    // Tool output is raw bytes from someone else's program — Bash stdout, file
+    // contents, compiler diagnostics. It arrives full of escape sequences that
+    // render as mojibake, so it gets tokenized rather than printed verbatim.
+    //
+    // SECURITY: every text run is passed through escapeHtml individually and the
+    // spans are built around the already-escaped text. The assembled HTML is never
+    // escaped as a whole, and no part of the input ever reaches an attribute.
+    const ANSI_BASE_COLORS = [
+      'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+    ];
+
+    // Matches, in order: an SGR sequence (captured), any other CSI sequence,
+    // an OSC/DCS string, a two-character escape, or a stray control character.
+    const ANSI_TOKEN_PATTERN = new RegExp(
+      '\\u001b\\[([0-9;:]*)m' +
+      '|\\u001b\\[[0-9;:<>=?]*[ -/]*[@-~]' +
+      '|\\u001b[\\]P^_][\\s\\S]*?(?:\\u0007|\\u001b\\\\|$)' +
+      '|\\u001b[@-Z\\\\-_]' +
+      '|([\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f])',
+      'g');
+
+    const ANSI_NEEDS_WORK_PATTERN = /[\u001b\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+
+    // The 6x6x6 cube and greyscale ramp of the 256-colour palette.
+    function ansiCubeColor(index) {
+      if (index < 16) {
+        const name = ANSI_BASE_COLORS[index % 8];
+        return index < 8 ? name : `bright-${name}`;
+      }
+
+      if (index < 232) {
+        const level = index - 16;
+        const steps = [0, 95, 135, 175, 215, 255];
+        const r = steps[Math.floor(level / 36) % 6];
+        const g = steps[Math.floor(level / 6) % 6];
+        const b = steps[level % 6];
+        return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+      }
+
+      const grey = 8 + ((index - 232) * 10);
+      const clamped = Math.min(238, grey);
+      return `#${((1 << 24) + (clamped << 16) + (clamped << 8) + clamped).toString(16).slice(1)}`;
+    }
+
+    function ansiHexColor(red, green, blue) {
+      const clamp = (value) => Math.max(0, Math.min(255, value | 0));
+      const packed = (1 << 24) + (clamp(red) << 16) + (clamp(green) << 8) + clamp(blue);
+      return `#${packed.toString(16).slice(1)}`;
+    }
+
+    // Consumes an extended-colour sequence (38/48) starting at `index`,
+    // returning the colour and how many parameters it swallowed.
+    function ansiExtendedColor(params, index) {
+      const mode = params[index + 1];
+      if (mode === 5) {
+        return { color: ansiCubeColor(params[index + 2] || 0), consumed: 2 };
+      }
+
+      if (mode === 2) {
+        return {
+          color: ansiHexColor(params[index + 2], params[index + 3], params[index + 4]),
+          consumed: 4,
+        };
+      }
+
+      return { color: null, consumed: 1 };
+    }
+
+    function ansiApplySgr(state, rawParams) {
+      // An empty parameter list means reset, as does an explicit 0.
+      const params = rawParams === ''
+        ? [0]
+        : rawParams.split(';').map((part) => parseInt(part.split(':')[0], 10) || 0);
+
+      for (let i = 0; i < params.length; i++) {
+        const code = params[i];
+
+        if (code === 0) {
+          state.fg = null;
+          state.bg = null;
+          state.bold = false;
+          state.dim = false;
+          state.italic = false;
+          state.underline = false;
+          state.strike = false;
+          state.hidden = false;
+        } else if (code === 1) state.bold = true;
+        else if (code === 2) state.dim = true;
+        else if (code === 3) state.italic = true;
+        else if (code === 4) state.underline = true;
+        else if (code === 8) state.hidden = true;
+        else if (code === 9) state.strike = true;
+        else if (code === 22) { state.bold = false; state.dim = false; }
+        else if (code === 23) state.italic = false;
+        else if (code === 24) state.underline = false;
+        else if (code === 28) state.hidden = false;
+        else if (code === 29) state.strike = false;
+        else if (code >= 30 && code <= 37) state.fg = ANSI_BASE_COLORS[code - 30];
+        else if (code === 38) {
+          const extended = ansiExtendedColor(params, i);
+          state.fg = extended.color;
+          i += extended.consumed;
+        } else if (code === 39) state.fg = null;
+        else if (code >= 40 && code <= 47) state.bg = ANSI_BASE_COLORS[code - 40];
+        else if (code === 48) {
+          const extended = ansiExtendedColor(params, i);
+          state.bg = extended.color;
+          i += extended.consumed;
+        } else if (code === 49) state.bg = null;
+        else if (code >= 90 && code <= 97) state.fg = `bright-${ANSI_BASE_COLORS[code - 90]}`;
+        else if (code >= 100 && code <= 107) state.bg = `bright-${ANSI_BASE_COLORS[code - 100]}`;
+      }
+    }
+
+    // Builds the span attributes for the current state, or null when it is plain.
+    function ansiStateToAttributes(state) {
+      const classes = [];
+      const inlineStyles = [];
+
+      if (state.fg) {
+        if (state.fg.charAt(0) === '#') inlineStyles.push(`color:${state.fg}`);
+        else classes.push(`ansi-fg-${state.fg}`);
+      }
+
+      if (state.bg) {
+        if (state.bg.charAt(0) === '#') inlineStyles.push(`background-color:${state.bg}`);
+        else classes.push(`ansi-bg-${state.bg}`);
+      }
+
+      if (state.bold) classes.push('ansi-bold');
+      if (state.dim) classes.push('ansi-dim');
+      if (state.italic) classes.push('ansi-italic');
+      if (state.underline) classes.push('ansi-underline');
+      if (state.strike) classes.push('ansi-strike');
+      if (state.hidden) classes.push('ansi-hidden');
+
+      if (!classes.length && !inlineStyles.length) return null;
+
+      // Both halves are built from a fixed vocabulary and clamped integers, never
+      // from input text, so neither can carry a quote out of the attribute.
+      let attributes = '';
+      if (classes.length) attributes += ` class="${classes.join(' ')}"`;
+      if (inlineStyles.length) attributes += ` style="${inlineStyles.join(';')}"`;
+      return attributes;
+    }
+
+    /**
+     * Renders text containing ANSI escape sequences as HTML, dropping the
+     * sequences that only move a cursor around and colouring the rest.
+     */
+    function ansiToHtml(text) {
+      if (text === null || text === undefined) return '';
+
+      // A carriage return means "redraw this line" on a terminal. There is no
+      // line to redraw here, so treat it as a break and let CRLF collapse.
+      const input = String(text).replace(/\r\n?/g, '\n');
+      if (!ANSI_NEEDS_WORK_PATTERN.test(input)) return escapeHtml(input);
+
+      const state = {
+        fg: null, bg: null, bold: false, dim: false,
+        italic: false, underline: false, strike: false, hidden: false,
+      };
+
+      let html = '';
+      let cursor = 0;
+      let openAttributes = null;
+      ANSI_TOKEN_PATTERN.lastIndex = 0;
+
+      const appendText = (chunk) => {
+        if (!chunk) return;
+        const escaped = escapeHtml(chunk);
+        html += openAttributes ? `<span${openAttributes}>${escaped}</span>` : escaped;
+      };
+
+      let match = ANSI_TOKEN_PATTERN.exec(input);
+      while (match !== null) {
+        appendText(input.slice(cursor, match.index));
+        cursor = match.index + match[0].length;
+
+        // An SGR sequence changes the style for what follows. Everything else the
+        // pattern matches — cursor moves, OSC strings, stray control characters —
+        // is simply not appended, which is how it gets dropped.
+        if (match[1] !== undefined) {
+          ansiApplySgr(state, match[1]);
+          openAttributes = ansiStateToAttributes(state);
+        }
+
+        match = ANSI_TOKEN_PATTERN.exec(input);
+      }
+
+      appendText(input.slice(cursor));
+      return html;
+    }
+
+    /** Strips ANSI sequences and control characters, leaving plain text. */
+    function stripAnsi(text) {
+      if (text === null || text === undefined) return '';
+
+      const input = String(text).replace(/\r\n?/g, '\n');
+      if (!ANSI_NEEDS_WORK_PATTERN.test(input)) return input;
+
+      ANSI_TOKEN_PATTERN.lastIndex = 0;
+      return input.replace(ANSI_TOKEN_PATTERN, '');
     }
 
     function cleanAgentDescription(text) {
