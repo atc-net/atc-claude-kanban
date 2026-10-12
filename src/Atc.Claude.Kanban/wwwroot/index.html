@@ -5704,7 +5704,7 @@
       const total = session.taskCount;
       const percent = total > 0 ? Math.round((session.completed / total) * 100) : 0;
       const isActive = session.id === currentSessionId && viewMode === 'session';
-      const hasInProgress = session.inProgress > 0;
+      const isLive = isSessionLive(session);
       const sessionName = session.name || session.id;
       const projectName = session.project ? session.project.split(/[/\\]/).pop() : null;
       const primaryName = projectName || sessionName;
@@ -5742,7 +5742,7 @@
               ${session.hasWorkflow ? `<span class="workflow-indicator" data-action="showWorkflows" data-session-id="${session.id}" title="${session.workflowCount} workflow${session.workflowCount !== 1 ? 's' : ''} — view scripts and run state"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>` : ''}
               ${sessionHasScratchpadNotes(session.id) ? `<span class="scratchpad-badge" data-action="openSessionScratchpad" data-session-id="${session.id}" title="Open scratchpad"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>` : ''}
               ${session.project ? `<span class="session-project-actions"><span class="session-project-btn" data-action="copyPath" data-path="${escapeHtml(session.project)}" title="Copy path"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="session-project-btn" data-action="openFolder" data-path="${escapeHtml(session.project)}" title="Open in explorer"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span></span>` : ''}
-              ${hasInProgress ? '<span class="pulse"></span>' : ''}
+              ${isLive ? '<span class="pulse"></span>' : ''}
             </span>
             <div class="progress-bar"><div class="progress-fill" style="width: ${percent}%"></div></div>
             <span class="progress-text">${session.isCompleted ? 'Done' : `${session.completed}/${total}`}</span>
@@ -5801,13 +5801,18 @@
       return `<div class="token-info"><span>${tokenDisplay} tokens</span><span class="${costClass}" title="Estimated cost based on token usage — not an actual charge">${costDisplay}</span></div>`;
     }
 
-    // A session counts as "active" when it has running work or live (thinking/waiting)
-    // activity. Mirrors upstream: an error state is not "active".
-    function isSessionActive(session) {
-      return session.inProgress > 0
-        || session.activeSubagentCount > 0
+    // Live means "doing something right now", and only the transcript can say that. An error
+    // state is not live.
+    function isSessionLive(session) {
+      return session.activeSubagentCount > 0
         || session.activityStatus === 'thinking'
         || session.activityStatus === 'waiting';
+    }
+
+    // Active is wider than live: it also covers a session holding running work, which is what
+    // keeps a project section expanded and counted.
+    function isSessionActive(session) {
+      return isSessionLive(session) || session.inProgress > 0;
     }
 
     // Renders the non-archived sessions grouped by project, with collapsible headers
