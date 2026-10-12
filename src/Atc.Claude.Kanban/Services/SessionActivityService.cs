@@ -605,6 +605,34 @@ public sealed class SessionActivityService
             ? value.GetInt64()
             : 0;
 
+    /// <summary>
+    /// Returns the last-write time of a session's transcript, or <see langword="null"/>
+    /// when the session has no transcript on disk.
+    /// </summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <returns>The transcript's last-write time in UTC, or null when it cannot be read.</returns>
+    public DateTime? TryGetTranscriptLastWriteUtc(string sessionId)
+    {
+        var jsonlPath = FindSessionJsonlPath(sessionId);
+        if (jsonlPath is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return File.GetLastWriteTimeUtc(jsonlPath);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private string? FindSessionJsonlPath(string sessionId)
     {
         var projectsDir = Path.Combine(claudeDir, "projects");

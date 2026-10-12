@@ -722,4 +722,113 @@ public sealed class SessionServiceTests : IDisposable
             JsonSerializer.Serialize(config),
             cancellationToken);
     }
+
+    [Fact]
+    public async Task GetSessions_PrefersTranscriptTime_WhenTranscriptIsNewerThanTaskDirectory()
+    {
+        // Arrange - the conversation is live while the task files sit untouched
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionDir = Path.Combine(tempDir, "tasks", "session-abc");
+        Directory.CreateDirectory(sessionDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionDir, "1.json"),
+            JsonSerializer.Serialize(new { id = "1", subject = "Test task", status = "pending" }),
+            cancellationToken);
+
+        File.SetLastWriteTimeUtc(Path.Combine(sessionDir, "1.json"), StaleUtc);
+        Directory.SetLastWriteTimeUtc(sessionDir, StaleUtc);
+        var transcriptUtc = await WriteTranscriptAsync("session-abc", cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].ModifiedAt.Should().BeCloseTo(transcriptUtc, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task GetSessions_PrefersTranscriptTime_ForSubagentOnlySession()
+    {
+        // Arrange - subagents finished long ago but the lead conversation continues
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectDir = Path.Combine(tempDir, "projects", "D--test-project", "session-xyz");
+        var subagentsDir = Path.Combine(projectDir, "subagents");
+        Directory.CreateDirectory(subagentsDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(subagentsDir, "agent-1.jsonl"),
+            JsonSerializer.Serialize(new { type = "assistant" }),
+            cancellationToken);
+
+        Directory.SetLastWriteTimeUtc(projectDir, StaleUtc);
+        var transcriptUtc = await WriteTranscriptAsync("session-xyz", cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].ModifiedAt.Should().BeCloseTo(transcriptUtc, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task GetSessions_KeepsTaskDirectoryTime_WhenTranscriptIsOlder()
+    {
+        // Arrange - a resumed transcript must never drag a fresh task list backwards
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionDir = Path.Combine(tempDir, "tasks", "session-abc");
+        Directory.CreateDirectory(sessionDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionDir, "1.json"),
+            JsonSerializer.Serialize(new { id = "1", subject = "Test task", status = "pending" }),
+            cancellationToken);
+
+        await WriteTranscriptAsync("session-abc", cancellationToken);
+        SetTranscriptWriteTimeUtc("session-abc", StaleUtc);
+
+        var taskFileUtc = File.GetLastWriteTimeUtc(Path.Combine(sessionDir, "1.json"));
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle();
+        sessions[0].ModifiedAt.Should().BeCloseTo(taskFileUtc, TimeSpan.FromSeconds(1));
+    }
+
+    private static readonly DateTime StaleUtc = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    private SessionService CreateService()
+        => new(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+    private string TranscriptPath(string sessionId)
+        => Path.Combine(tempDir, "projects", "D--test-project", sessionId + ".jsonl");
+
+    private void SetTranscriptWriteTimeUtc(
+        string sessionId,
+        DateTime writeTimeUtc)
+        => File.SetLastWriteTimeUtc(TranscriptPath(sessionId), writeTimeUtc);
+
+    private async Task<DateTime> WriteTranscriptAsync(
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var transcript = TranscriptPath(sessionId);
+        Directory.CreateDirectory(Path.GetDirectoryName(transcript)!);
+
+        await File.WriteAllTextAsync(
+            transcript,
+            JsonSerializer.Serialize(new { type = "assistant", message = new { content = new[] { new { type = "text", text = "hi" } } } }),
+            cancellationToken);
+
+        return File.GetLastWriteTimeUtc(transcript);
+    }
 }
