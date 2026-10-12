@@ -292,7 +292,7 @@ Each session shows accumulated token usage and estimated cost:
 
 - Token count (e.g., "45.9M tokens") and cost (e.g., "$76.19")
 - Color-coded by cost: green (<$0.50), yellow (<$2), orange (<$5), red (>=$5)
-- Model-aware pricing: Opus 4.5+ ($5/$25), Sonnet ($3/$15), Haiku 4.5 ($1/$5) per 1M tokens, with cache-creation (1.25×) and cache-read (0.10×) multipliers
+- Model-aware pricing from Anthropic's published list prices, covering the whole lineup — Fable and Mythos, Opus 4 through 5.5, Sonnet 4 through 5.5 and Haiku 3.5 through 5.5 — with each model's own input, cache-write, cache-read and output rate. Versions are priced apart where they differ: Opus 5.5 is $4/$20 while Opus 4.1 is $15/$75, and cache reads range from a tenth of input down to a fortieth on the newest models
 
 ### 🧮 Context Window & Usage
 
