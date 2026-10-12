@@ -5,6 +5,9 @@ namespace Atc.Claude.Kanban.Tests.Services;
 /// </summary>
 public sealed class SessionActivityServiceTests : IDisposable
 {
+    private const string ToolResultEntry =
+        """{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}""";
+
     private readonly string tempDir;
     private readonly MemoryCache cache;
 
@@ -331,4 +334,95 @@ public sealed class SessionActivityServiceTests : IDisposable
         var opus = usage.Models.Single(model => model.Model == "claude-opus-4-8");
         (opus.CostUsd + haiku.CostUsd).Should().BeApproximately(usage.CostUsd, 1e-9);
     }
+
+    [Fact]
+    public void DeriveStatus_ReturnsThinking_WhenToolResultIsBuriedUnderSidecarEntries()
+    {
+        // A tool result is the signal that work is in flight, even though Claude Code
+        // appends several bookkeeping entries after it.
+        var tail = WithSidecars(ToolResultEntry);
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 0);
+
+        status.Should().Be("thinking");
+    }
+
+    [Fact]
+    public void DeriveStatus_ReturnsThinking_WhenInFlightTurnPausesBetween15And60s()
+    {
+        // A model turn routinely pauses longer than the thinking threshold between
+        // transcript writes; that is still work in flight, not an idle session.
+        var tail = WithSidecars(ToolResultEntry);
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 30);
+
+        status.Should().Be("thinking");
+    }
+
+    [Fact]
+    public void DeriveStatus_ReturnsIdle_WhenInFlightTurnExceedsIdleThreshold()
+    {
+        var tail = WithSidecars(ToolResultEntry);
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 61);
+
+        status.Should().Be("idle");
+    }
+
+    [Fact]
+    public void DeriveStatus_ReturnsThinking_WhenAssistantToolUseIsBuriedUnderSidecarEntries()
+    {
+        var tail = WithSidecars(JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new { content = new[] { new { type = "tool_use", id = "t1", name = "Bash" } } },
+        }));
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 5);
+
+        status.Should().Be("thinking");
+    }
+
+    [Fact]
+    public void DeriveStatus_ReturnsWaiting_WhenAssistantTextIsBuriedUnderSidecarEntries()
+    {
+        var tail = WithSidecars(JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            message = new { content = new[] { new { type = "text", text = "done" } } },
+        }));
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 5);
+
+        status.Should().Be("waiting");
+    }
+
+    [Fact]
+    public void DeriveStatus_ReturnsError_WhenErrorEntryIsBuriedUnderSidecarEntries()
+    {
+        var tail = WithSidecars(string.Join(
+            Environment.NewLine,
+            ToolResultEntry,
+            JsonSerializer.Serialize(new { type = "error", message = "something broke" })));
+
+        var status = SessionActivityService.DeriveStatusFromEntries(tail, 5);
+
+        status.Should().Be("error");
+    }
+
+    // Claude Code appends bookkeeping entries after a turn. They carry no status signal,
+    // so a real conversation entry is almost never the last line of a live transcript.
+    private static readonly string[] SidecarEntries =
+    [
+        """{"type":"attachment"}""",
+        """{"type":"last-prompt"}""",
+        """{"type":"ai-title"}""",
+        """{"type":"mode"}""",
+        """{"type":"permission-mode"}""",
+        """{"type":"atis-latch"}""",
+        """{"type":"attachment"}""",
+    ];
+
+    private static string WithSidecars(string conversationEntries)
+        => string.Join(Environment.NewLine, [conversationEntries, .. SidecarEntries]);
 }

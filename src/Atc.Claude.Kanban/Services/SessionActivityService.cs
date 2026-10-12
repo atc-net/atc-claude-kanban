@@ -151,7 +151,8 @@ public sealed class SessionActivityService
 
     /// <summary>
     /// Derives status from the last few JSONL entries using elapsed time and content types.
-    /// Follows the Stargx deriveStatus pattern: only classify within 15s window, idle otherwise.
+    /// Only conversation and progress entries are considered; bookkeeping entries written
+    /// after a turn are skipped so they cannot mask an active session.
     /// </summary>
     /// <param name="tail">The raw tail content from the JSONL file.</param>
     /// <param name="elapsedSeconds">Seconds since the file was last modified.</param>
@@ -184,42 +185,49 @@ public sealed class SessionActivityService
             return "idle";
         }
 
-        // Within 15s window — classify based on most recent entry of any type
-        if (elapsedSeconds < ThinkingThresholdSeconds)
+        // Work in flight stays live for the whole idle window. A model turn routinely
+        // pauses longer than the thinking threshold between transcript writes, and the
+        // frontend polls activity on a similar interval, so classifying only inside the
+        // shorter window made a busy session flicker to idle between its own writes.
+        if (string.Equals(scanResult.LastEntryType, "progress", StringComparison.Ordinal) ||
+            string.Equals(scanResult.LastEntryType, "user", StringComparison.Ordinal))
         {
-            if (string.Equals(scanResult.LastEntryType, "assistant", StringComparison.Ordinal))
-            {
-                if (scanResult.LastContentTypes.Contains("tool_use", StringComparer.Ordinal))
-                {
-                    return "thinking";
-                }
+            return "thinking";
+        }
 
-                if (scanResult.LastContentTypes.Contains("text", StringComparer.Ordinal))
-                {
-                    return "waiting";
-                }
-
-                if (scanResult.LastContentTypes.Contains("thinking", StringComparer.Ordinal))
-                {
-                    return "thinking";
-                }
-            }
-
-            if (string.Equals(scanResult.LastEntryType, "progress", StringComparison.Ordinal))
+        if (string.Equals(scanResult.LastEntryType, "assistant", StringComparison.Ordinal))
+        {
+            if (scanResult.LastContentTypes.Contains("tool_use", StringComparer.Ordinal) ||
+                scanResult.LastContentTypes.Contains("thinking", StringComparer.Ordinal))
             {
                 return "thinking";
             }
 
-            if (string.Equals(scanResult.LastEntryType, "user", StringComparison.Ordinal))
+            // A finished answer is only worth flagging briefly. After that the session has
+            // simply gone quiet waiting for the user, which is not an activity state.
+            if (scanResult.LastContentTypes.Contains("text", StringComparer.Ordinal) &&
+                elapsedSeconds < ThinkingThresholdSeconds)
             {
-                return "thinking";
+                return "waiting";
             }
-
-            return "idle";
         }
 
         return "idle";
     }
+
+    /// <summary>
+    /// Returns whether an entry type carries an activity signal. Claude Code appends
+    /// bookkeeping entries after a turn — attachments, titles, mode and permission
+    /// markers — so the last line of a live transcript is almost never a conversation
+    /// entry. Only the types listed here may decide status; anything unrecognised is
+    /// skipped rather than read as a session that has stopped.
+    /// </summary>
+    /// <param name="entryType">The JSONL entry's type field.</param>
+    /// <returns><see langword="true"/> when the entry type carries an activity signal.</returns>
+    private static bool IsStatusSignalType(string entryType)
+        => string.Equals(entryType, "assistant", StringComparison.Ordinal) ||
+           string.Equals(entryType, "user", StringComparison.Ordinal) ||
+           string.Equals(entryType, "progress", StringComparison.Ordinal);
 
     private static ScanResult ScanLastEntries(string tail)
     {
@@ -294,7 +302,7 @@ public sealed class SessionActivityService
                 hasRecentError = true;
             }
 
-            if (lastEntryType is null)
+            if (lastEntryType is null && IsStatusSignalType(entryType))
             {
                 lastEntryType = entryType;
                 ExtractContentTypes(root, entryType, lastContentTypes);
