@@ -322,6 +322,12 @@ The **Tool Statistics** modal (bar-chart icon in the session info modal) aggrega
 
 Sidebar sessions are grouped by project under collapsible headers. Each header shows an **active/total** count (e.g. `2/5`, active part in green) and a project-view button. A collapsed section **auto-expands** when newly-active work lands in it (and when you switch to the "Active Only" filter), so running sessions stay visible; idle sections stay collapsed. **Pin** any session via its pin icon to lift it into a collapsible "Pinned" group at the top. Collapsed groups and pins persist in `localStorage`.
 
+### 🔍 Session Picker
+
+Press `Shift+P` to filter every loaded session by **name, project folder, full path, git branch or session id**. Arrow keys move the selection, `Enter` opens, `Esc` closes. Matches are ranked by how well they fit before recency, so the first few letters of a session name usually land on it.
+
+The picker searches all loaded sessions rather than the filtered sidebar, so it reaches a session the current project filter or the session limit would otherwise hide. Opening one expands its project section (and the "Pinned" group, if that is where it lives).
+
 ### 🌗 Themes
 
 Dark and light themes follow your system preference and can be toggled with the header icon (or `T`); the choice persists across reloads.
@@ -341,6 +347,7 @@ A separate **colour theme picker** (palette icon) offers 17 popular editor palet
 | Key | Action |
 |-----|--------|
 | `?` | Show help |
+| `Shift+P` | Go to session (filter by name, project, branch or id) |
 | `j`/`k` | Navigate up/down |
 | `h`/`l` | Navigate columns |
 | `Enter` | Toggle task detail |
