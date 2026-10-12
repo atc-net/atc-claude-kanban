@@ -328,6 +328,10 @@ Press `Shift+P` to filter every loaded session by **name, project folder, full p
 
 The picker searches all loaded sessions rather than the filtered sidebar, so it reaches a session the current project filter or the session limit would otherwise hide. Opening one expands its project section (and the "Pinned" group, if that is where it lives).
 
+<p align="center">
+  <img src="docs/session-picker-dark.png" alt="Session picker filtering sessions by project" width="900">
+</p>
+
 ### 🌗 Themes
 
 Dark and light themes follow your system preference and can be toggled with the header icon (or `T`); the choice persists across reloads.
