@@ -5492,9 +5492,9 @@
       container.innerHTML = agents.map(agent => {
         const displayDesc = getDisplayDesc(agent);
         return `
-        <div class="subagent-card ${agent.status} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
+        <div class="subagent-card ${escapeHtml(agent.status)} ${expandedSubagentIds.has(agent.agentId) ? 'expanded' : ''}" data-agent-id="${escapeHtml(agent.agentId)}" data-action="toggleSubagentDetail">
           <div class="subagent-card-header">
-            <span class="subagent-status-dot ${agent.status}"></span>
+            <span class="subagent-status-dot ${escapeHtml(agent.status)}"></span>
             <span>${escapeHtml(agent.agentName || agent.slug || agent.agentId)}</span>
             ${agent.model ? `<span class="subagent-model">${escapeHtml(agent.model)}</span>` : ''}
             ${agent.workflowRunId ? `<span class="subagent-workflow-badge" title="Spawned by the Workflow tool (run ${escapeAttr(agent.workflowRunId)})">⚙ workflow</span>` : ''}
@@ -5724,7 +5724,7 @@
       const pinned = pinnedSessionIds.has(session.id);
 
       return `
-        <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass}${statusClass} ${isActive ? 'active' : ''}" title="${tooltip}">
+        <button data-action="fetchTasks" data-session-id="${session.id}" class="session-item${archivedClass}${statusClass} ${isActive ? 'active' : ''}" title="${escapeHtml(tooltip)}">
           <div class="session-name">${escapeHtml(primaryName)}</div>
           ${secondaryName ? `<div class="session-secondary">${escapeHtml(secondaryName)}</div>` : ''}
           ${gitBranch ? `<div class="session-branch">${gitBranch}</div>` : ''}
@@ -8602,10 +8602,17 @@
       return date.toLocaleDateString();
     }
 
+    // Safe in both text and attribute positions. This used to set textContent and read back
+    // innerHTML, which escapes & < > but leaves quotes alone, so a quote in agent-written text
+    // could close an attribute built with it and add another one.
     function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
+      if (text === null || text === undefined) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // Tool output is raw bytes from someone else's program — Bash stdout, file
