@@ -4887,6 +4887,29 @@
       error: console.error.bind(console),
     };
 
+    // localStorage throws outright when site data is blocked by policy or a private window,
+    // and when the quota is full. Several reads run while the page is still being set up, so
+    // an unguarded access takes the whole board down instead of losing one preference.
+    const storage = {
+      getItem(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      },
+      setItem(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch { /* preference not persisted */ }
+      },
+      removeItem(key) {
+        try {
+          localStorage.removeItem(key);
+        } catch { /* preference not cleared */ }
+      },
+    };
+
     // State
     let sessions = [];
     let currentSessionId = null;
@@ -4898,19 +4921,19 @@
     let recentProjects = new Set();
     let searchQuery = ''; // Search query for fuzzy search
     let allTasksCache = []; // Cache all tasks for search
-    let notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
+    let notificationsEnabled = storage.getItem('notificationsEnabled') === 'true';
     let previousTaskStatuses = new Map();
     const ARCHIVE_DAYS = 7;
-    let archivedExpanded = localStorage.getItem('archivedExpanded') === 'true';
+    let archivedExpanded = storage.getItem('archivedExpanded') === 'true';
     const collapsedProjectGroups = new Set();
     try {
-      JSON.parse(localStorage.getItem('collapsedGroups') || '[]').forEach(path => collapsedProjectGroups.add(path));
+      JSON.parse(storage.getItem('collapsedGroups') || '[]').forEach(path => collapsedProjectGroups.add(path));
     } catch { /* ignore malformed persisted state */ }
     const pinnedSessionIds = new Set();
     try {
-      JSON.parse(localStorage.getItem('pinnedSessions') || '[]').forEach(id => pinnedSessionIds.add(id));
+      JSON.parse(storage.getItem('pinnedSessions') || '[]').forEach(id => pinnedSessionIds.add(id));
     } catch { /* ignore malformed persisted state */ }
-    let currentView = localStorage.getItem('currentView') || 'kanban';
+    let currentView = storage.getItem('currentView') || 'kanban';
     let bulkDeleteSessionId = null; // Track session for bulk delete
     let ownerFilter = '';
     let selectedTaskId = null;
@@ -5636,7 +5659,7 @@
 
     function toggleArchived() {
       archivedExpanded = !archivedExpanded;
-      localStorage.setItem('archivedExpanded', String(archivedExpanded));
+      storage.setItem('archivedExpanded', String(archivedExpanded));
       const header = document.querySelector('.archived-header');
       const container = document.querySelector('.archived-sessions');
       if (header) header.classList.toggle('expanded', archivedExpanded);
@@ -5818,7 +5841,7 @@
 
     function persistCollapsedGroups() {
       try {
-        localStorage.setItem('collapsedGroups', JSON.stringify([...collapsedProjectGroups]));
+        storage.setItem('collapsedGroups', JSON.stringify([...collapsedProjectGroups]));
       } catch { /* ignore quota errors */ }
     }
 
@@ -5850,7 +5873,7 @@
       if (pinnedSessionIds.has(sessionId)) pinnedSessionIds.delete(sessionId);
       else pinnedSessionIds.add(sessionId);
       try {
-        localStorage.setItem('pinnedSessions', JSON.stringify([...pinnedSessionIds]));
+        storage.setItem('pinnedSessions', JSON.stringify([...pinnedSessionIds]));
       } catch { /* ignore quota errors */ }
       renderSessions();
     }
@@ -6290,7 +6313,7 @@
       if (zone === 'sidebar') {
         if (sidebar.classList.contains('collapsed')) {
           sidebar.classList.remove('collapsed');
-          localStorage.setItem('sidebar-collapsed', false);
+          storage.setItem('sidebar-collapsed', false);
         }
         sidebar.classList.add('sidebar-focused');
         const items = getSessionItems();
@@ -6611,7 +6634,7 @@
         const sid = currentSessionId;
         if (sid) fetchMessages(sid);
         messagePanel.classList.add('visible');
-        try { localStorage.setItem('message-panel-open', 'true'); } catch (_) {}
+        try { storage.setItem('message-panel-open', 'true'); } catch (_) {}
       }
     }
 
@@ -6626,7 +6649,7 @@
       msgUserScrolledUp = false;
       currentMessages = [];
       lastMessagesHash = '';
-      try { localStorage.setItem('message-panel-open', 'false'); } catch (_) {}
+      try { storage.setItem('message-panel-open', 'false'); } catch (_) {}
     }
 
     async function fetchMessages(sessionId) {
@@ -7860,7 +7883,7 @@
     }
 
     function sessionHasScratchpadNotes(sessionId) {
-      try { return !!(localStorage.getItem(sessionScratchpadKey(sessionId)) || '').trim(); }
+      try { return !!(storage.getItem(sessionScratchpadKey(sessionId)) || '').trim(); }
       catch (_) { return false; }
     }
 
@@ -7907,7 +7930,7 @@
       overlay.dataset.sessionId = sid;
       const textarea = document.getElementById('scratchpad-text');
       const key = sessionScratchpadKey(sid);
-      textarea.value = localStorage.getItem(key) || '';
+      textarea.value = storage.getItem(key) || '';
       updateScratchpadCount();
 
       textarea.oninput = () => {
@@ -7936,10 +7959,10 @@
 
     function persistScratchpad(sessionId, value) {
       const key = sessionScratchpadKey(sessionId);
-      const had = !!(localStorage.getItem(key) || '').trim();
+      const had = !!(storage.getItem(key) || '').trim();
       const has = !!(value || '').trim();
-      if (has) localStorage.setItem(key, value);
-      else localStorage.removeItem(key);
+      if (has) storage.setItem(key, value);
+      else storage.removeItem(key);
       if (had !== has) renderSessions();
     }
 
@@ -7978,7 +8001,7 @@
           handle.classList.remove('active');
           document.body.style.cursor = '';
           document.body.style.userSelect = '';
-          localStorage.setItem('message-panel-width', messagePanel.style.width);
+          storage.setItem('message-panel-width', messagePanel.style.width);
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
         };
@@ -7987,7 +8010,7 @@
         document.addEventListener('mouseup', onUp);
       });
 
-      const saved = localStorage.getItem('message-panel-width');
+      const saved = storage.getItem('message-panel-width');
       if (saved) messagePanel.style.width = saved;
     })();
 
@@ -8793,13 +8816,13 @@
         Notification.requestPermission().then(perm => {
           if (perm === 'granted') {
             notificationsEnabled = true;
-            localStorage.setItem('notificationsEnabled', 'true');
+            storage.setItem('notificationsEnabled', 'true');
             updateNotificationButton();
           }
         });
       } else {
         notificationsEnabled = !notificationsEnabled;
-        localStorage.setItem('notificationsEnabled', String(notificationsEnabled));
+        storage.setItem('notificationsEnabled', String(notificationsEnabled));
         updateNotificationButton();
       }
     }
@@ -8879,7 +8902,7 @@
 
     function switchView(view) {
       currentView = view;
-      localStorage.setItem('currentView', view);
+      storage.setItem('currentView', view);
       applyView();
       if (view === 'timeline') {
         renderTimeline();
@@ -9135,11 +9158,11 @@
       if (isCurrentlyLight) {
         document.body.classList.remove('light');
         document.body.classList.add('dark-forced');
-        localStorage.setItem('theme', 'dark');
+        storage.setItem('theme', 'dark');
       } else {
         document.body.classList.add('light');
         document.body.classList.remove('dark-forced');
-        localStorage.setItem('theme', 'light');
+        storage.setItem('theme', 'light');
       }
       updateThemeIcon();
       syncHljsTheme();
@@ -9154,11 +9177,9 @@
     function isLightTheme() {
       if (document.body.classList.contains('light')) return true;
       if (document.body.classList.contains('dark-forced')) return false;
-      try {
-        const saved = localStorage.getItem('theme');
-        if (saved === 'light') return true;
-        if (saved === 'dark') return false;
-      } catch { /* site data blocked - fall through to the system preference */ }
+      const saved = storage.getItem('theme');
+      if (saved === 'light') return true;
+      if (saved === 'dark') return false;
       return window.matchMedia('(prefers-color-scheme: light)').matches;
     }
 
@@ -9177,7 +9198,7 @@
     }
 
     function loadTheme() {
-      const saved = localStorage.getItem('theme');
+      const saved = storage.getItem('theme');
       if (saved === 'light') {
         document.body.classList.add('light');
         document.body.classList.remove('dark-forced');
@@ -9215,7 +9236,7 @@
 
     function loadColorTheme() {
       buildThemeMenu();
-      const colorTheme = localStorage.getItem('color-theme');
+      const colorTheme = storage.getItem('color-theme');
       if (colorTheme) document.body.dataset.colorTheme = colorTheme;
       syncColorThemeSelect(colorTheme || 'ember');
       // Close the popover on any click outside the picker.
@@ -9247,10 +9268,10 @@
     function setColorTheme(id) {
       if (!id || id === 'ember') {
         delete document.body.dataset.colorTheme;
-        localStorage.removeItem('color-theme');
+        storage.removeItem('color-theme');
       } else {
         document.body.dataset.colorTheme = id;
-        localStorage.setItem('color-theme', id);
+        storage.setItem('color-theme', id);
       }
       syncColorThemeSelect(id);
     }
@@ -9258,7 +9279,7 @@
     function toggleSidebar() {
       const sidebar = document.querySelector('.sidebar');
       const collapsed = sidebar.classList.toggle('collapsed');
-      localStorage.setItem('sidebar-collapsed', collapsed);
+      storage.setItem('sidebar-collapsed', collapsed);
       if (collapsed) {
         sidebar.style.width = '';
         if (focusZone === 'sidebar') setFocusZone('board');
@@ -9273,10 +9294,10 @@
       // Suppress the width transition on initial load so the sidebar
       // snaps to the stored width instead of animating from the default.
       sidebar.style.transition = 'none';
-      if (localStorage.getItem('sidebar-collapsed') === 'true') {
+      if (storage.getItem('sidebar-collapsed') === 'true') {
         sidebar.classList.add('collapsed');
       }
-      const w = localStorage.getItem('sidebar-width');
+      const w = storage.getItem('sidebar-width');
       if (w) {
         sidebar.style.setProperty('--sidebar-width', w);
       }
@@ -9317,7 +9338,7 @@
         document.body.style.userSelect = '';
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        localStorage.setItem('sidebar-width', sidebar.style.getPropertyValue('--sidebar-width'));
+        storage.setItem('sidebar-width', sidebar.style.getPropertyValue('--sidebar-width'));
       }
     }
 
@@ -9773,7 +9794,7 @@
       document.getElementById('loading-state').style.display = 'none';
       document.querySelector('.sidebar').classList.remove('loading');
       const restoreMessagePanel = (() => {
-        try { return localStorage.getItem('message-panel-open') === 'true'; } catch (_) { return false; }
+        try { return storage.getItem('message-panel-open') === 'true'; } catch (_) { return false; }
       })();
       const afterLoad = urlState.session
         ? fetchTasks(urlState.session)
