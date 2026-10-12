@@ -8407,7 +8407,7 @@
       pickerIndex = 0;
     }
 
-    function choosePickerSession(sessionId) {
+    async function choosePickerSession(sessionId) {
       if (!sessionId) return;
       const session = sessions.find(s => s.id === sessionId);
       closeSessionPicker();
@@ -8424,7 +8424,29 @@
         if (changed) persistCollapsedGroups();
       }
 
-      fetchTasks(sessionId);
+      await fetchTasks(sessionId);
+
+      // fetchTasks renders the board but not the sidebar, so without this the row would not
+      // appear or take the active style until the next poll. renderSessions also moves the
+      // keyboard selection onto the active row, so j/k carries on from the session just picked.
+      renderSessions();
+      revealSidebarSession(sessionId);
+    }
+
+    // Brings a session's sidebar row on screen so its plan, token, cost and context details are
+    // visible straight after a pick, rather than leaving the list wherever it happened to be.
+    function revealSidebarSession(sessionId) {
+      const row = sessionsList.querySelector(
+        `.session-item[data-session-id="${CSS.escape(sessionId)}"]`);
+      if (!row) return;
+
+      // A stale pick lands in the collapsed archived section; open it rather than scrolling to
+      // a row the user cannot see.
+      if (row.closest('.archived-sessions:not(.visible)')) {
+        toggleArchived();
+      }
+
+      row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
     function showHelpModal() {
