@@ -17,6 +17,16 @@ $tasksRoot = Join-Path $OutDir 'tasks'
 $projectsRoot = Join-Path $OutDir 'projects'
 New-Item -ItemType Directory -Force -Path $tasksRoot, $projectsRoot, (Join-Path $OutDir 'teams'), (Join-Path $OutDir 'plans') | Out-Null
 
+# Windows PowerShell's -Encoding utf8 writes a byte-order mark, and the dashboard's JSONL
+# parsers skip any line that does not start with '{'. A BOM therefore swallowed the first
+# entry of every seeded transcript. Real transcripts have no BOM, so write without one on
+# both PowerShell 5.1 and 7+.
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+function Write-TextFile($path, $text) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
+    [System.IO.File]::WriteAllText($path, $text, $utf8NoBom)
+}
+
 $ts = [System.DateTime]::UtcNow
 function Stamp([int]$minutesAgo) { return $ts.AddMinutes(-$minutesAgo).ToString('o') }
 
@@ -28,7 +38,7 @@ function Usage($inp, $out, $cacheCreate, $cacheRead) {
 function Write-Jsonl($path, $objects) {
     New-Item -ItemType Directory -Force -Path (Split-Path $path) | Out-Null
     $lines = foreach ($o in $objects) { $o | ConvertTo-Json -Depth 40 -Compress }
-    Set-Content -Path $path -Value ($lines -join "`n") -Encoding utf8
+    Write-TextFile $path (($lines -join "`n") + "`n")
 }
 
 function Write-Task($sessionId, $id, $subject, $status, $activeForm, $owner) {
@@ -37,7 +47,7 @@ function Write-Task($sessionId, $id, $subject, $status, $activeForm, $owner) {
     $obj = [ordered]@{ id = "$id"; subject = $subject; status = $status }
     if ($activeForm) { $obj.activeForm = $activeForm }
     if ($owner) { $obj.owner = $owner }
-    Set-Content -Path (Join-Path $dir "$id.json") -Value ($obj | ConvertTo-Json -Compress) -Encoding utf8
+    Write-TextFile (Join-Path $dir "$id.json") ($obj | ConvertTo-Json -Compress)
 }
 
 # ── Project / session identifiers (all made up) ───────────────────────────────
@@ -194,7 +204,7 @@ Write-Jsonl (Join-Path $projectsRoot "$wfDir\journal.jsonl") @(
 foreach ($wfAgent in @('awf000001', 'awf000002')) {
     $metaPath = Join-Path $projectsRoot "$wfDir\agent-$wfAgent.meta.json"
     New-Item -ItemType Directory -Force -Path (Split-Path $metaPath) | Out-Null
-    Set-Content -Path $metaPath -Value ([ordered]@{ agentType = 'workflow-subagent'; spawnDepth = 1 } | ConvertTo-Json -Compress) -Encoding utf8
+    Write-TextFile $metaPath ([ordered]@{ agentType = 'workflow-subagent'; spawnDepth = 1 } | ConvertTo-Json -Compress)
 }
 
 # The workflow script itself, persisted under workflows/scripts/<name>-<runId>.js. Its meta
@@ -226,7 +236,7 @@ const verified = await pipeline(
 
 return { verified }
 "@
-Set-Content -Path (Join-Path $wfScriptDir "audit-coupon-pricing-$wfRun.js") -Value $wfScript -Encoding utf8
+Write-TextFile (Join-Path $wfScriptDir "audit-coupon-pricing-$wfRun.js") $wfScript
 
 # ── Session 2: acme-storefront — large (1M) context, completed ────────────────
 Write-Task $s2 1 'Extract cart reducer' 'completed' $null
@@ -271,7 +281,7 @@ $teamConfig = [ordered]@{
         [ordered]@{ name = 'api-integrator'; agentId = 'api0001'; agentType = 'backend'; model = $sonnet }
     )
 }
-Set-Content -Path (Join-Path $teamDir 'config.json') -Value ($teamConfig | ConvertTo-Json -Depth 10) -Encoding utf8
+Write-TextFile (Join-Path $teamDir 'config.json') ($teamConfig | ConvertTo-Json -Depth 10)
 
 # Team tasks live under tasks/<teamName>/ and are owned by members (owner-coloured on the board).
 Write-Task $team 1 'Build responsive header shell' 'completed' $null 'ui-builder'
