@@ -9671,9 +9671,14 @@
         ? fetch(`/api/teams/${sessionId}`).then(r => r.ok ? r.json() : null).catch(() => null)
         : Promise.resolve(null);
 
-      const planPromise = fetch(`/api/plans/${planSlug}`)
-        .then(r => r.ok ? r.json() : null).catch(() => null)
-        .then(data => data?.content || null);
+      // Only ask for a plan the session says it has. Without this the modal fired a request
+      // that was guaranteed to 404 for every session without one, and logged a console error
+      // each time it was opened.
+      const planPromise = session.hasPlan
+        ? fetch(`/api/plans/${planSlug}`)
+            .then(r => r.ok ? r.json() : null).catch(() => null)
+            .then(data => data?.content || null)
+        : Promise.resolve(null);
 
       const [teamConfig, planContent] = await Promise.all([teamPromise, planPromise]);
       if (_planSlug !== planSlug) return; // user opened a different modal mid-fetch
