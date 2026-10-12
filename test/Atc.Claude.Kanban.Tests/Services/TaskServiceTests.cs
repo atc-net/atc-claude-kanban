@@ -375,6 +375,67 @@ public sealed class TaskServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateTask_LeavesNoTemporaryFile_AndWritesCompleteJson()
+    {
+        // Arrange - Claude Code reads these files while the board writes them, so an update must
+        // replace the file in one step and leave nothing extra behind for the reader to find.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionDir = Path.Combine(tempDir, "tasks", "session-atomic");
+        Directory.CreateDirectory(sessionDir);
+        var taskFile = Path.Combine(sessionDir, "1.json");
+
+        await File.WriteAllTextAsync(
+            taskFile,
+            JsonSerializer.Serialize(new { id = "1", subject = "Old title", status = "pending" }),
+            cancellationToken);
+
+        var service = new TaskService(tempDir, sessionService, jsonSerializerOptions);
+
+        var updates = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+        {
+            ["subject"] = JsonSerializer.SerializeToElement("A much longer replacement title"),
+        };
+
+        // Act
+        var result = await service.UpdateTaskAsync("session-atomic", "1", updates, cancellationToken);
+
+        // Assert
+        result.Should().NotBeNull();
+        Directory.GetFiles(sessionDir, "*.tmp").Should().BeEmpty();
+        Directory.GetFiles(sessionDir).Should().ContainSingle();
+
+        // Parsing the file back proves the content is whole, not truncated mid-write.
+        var written = await File.ReadAllTextAsync(taskFile, cancellationToken);
+        using var reread = JsonDocument.Parse(written);
+        reread.RootElement.GetProperty("subject").GetString()
+            .Should().Be("A much longer replacement title");
+    }
+
+    [Fact]
+    public async Task AddNote_LeavesNoTemporaryFile()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionDir = Path.Combine(tempDir, "tasks", "session-note-atomic");
+        Directory.CreateDirectory(sessionDir);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionDir, "1.json"),
+            JsonSerializer.Serialize(new { id = "1", subject = "Task", description = "Body", status = "pending" }),
+            cancellationToken);
+
+        var service = new TaskService(tempDir, sessionService, jsonSerializerOptions);
+
+        // Act
+        var result = await service.AddNoteAsync("session-note-atomic", "1", "A note", cancellationToken);
+
+        // Assert
+        result.Should().NotBeNull();
+        Directory.GetFiles(sessionDir, "*.tmp").Should().BeEmpty();
+        Directory.GetFiles(sessionDir).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task UpdateTask_RejectsDisallowedFields()
     {
         // Arrange
