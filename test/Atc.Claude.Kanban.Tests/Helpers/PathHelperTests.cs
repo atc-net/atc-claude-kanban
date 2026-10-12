@@ -108,4 +108,58 @@ public sealed class PathHelperTests
         // Assert
         act.Should().Throw<ArgumentNullException>().WithParameterName("directory");
     }
+
+    [Fact]
+    public void IsSafeLaunchPath_ReturnsTrue_WhenPathIsFullyQualified()
+    {
+        // Act
+        var result = Kanban.Helpers.PathHelper.IsSafeLaunchPath(Path.GetTempPath());
+
+        // Assert
+        result.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void IsSafeLaunchPath_ReturnsFalse_WhenPathIsBlank(string? path)
+    {
+        // Act
+        var result = Kanban.Helpers.PathHelper.IsSafeLaunchPath(path);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("relative/file.txt")]
+    [InlineData("./file.txt")]
+    [InlineData("..")]
+    public void IsSafeLaunchPath_ReturnsFalse_WhenPathIsRelative(string path)
+    {
+        // Act
+        var result = Kanban.Helpers.PathHelper.IsSafeLaunchPath(path);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r")]
+    [InlineData("\0")]
+    [InlineData("")]
+    public void IsSafeLaunchPath_ReturnsFalse_WhenPathContainsControlCharacters(
+        string control)
+    {
+        // Arrange
+        var path = Path.Combine(Path.GetTempPath(), $"file{control}.txt");
+
+        // Act
+        var result = Kanban.Helpers.PathHelper.IsSafeLaunchPath(path);
+
+        // Assert
+        result.Should().BeFalse();
+    }
 }

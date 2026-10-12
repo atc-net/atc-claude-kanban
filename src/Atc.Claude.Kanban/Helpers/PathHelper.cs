@@ -44,4 +44,29 @@ public static class PathHelper
 
         return filePath.StartsWith(normalizedDir, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Validates that a path is safe to hand to an external process launcher.
+    /// </summary>
+    /// <remarks>
+    /// Rejects empty input, relative paths and paths containing control characters.
+    /// Existence is deliberately not checked here so the caller can apply the
+    /// appropriate file-or-directory test.
+    /// </remarks>
+    /// <param name="path">The path to validate.</param>
+    /// <returns><see langword="true"/> if <paramref name="path"/> is safe to launch.</returns>
+    public static bool IsSafeLaunchPath([NotNullWhen(true)] string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (path.Any(char.IsControl))
+        {
+            return false;
+        }
+
+        return Path.IsPathFullyQualified(path);
+    }
 }
