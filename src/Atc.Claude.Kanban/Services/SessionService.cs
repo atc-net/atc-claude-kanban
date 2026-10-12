@@ -161,16 +161,7 @@ public sealed class SessionService
             sessions[i].TokenUsage = await activityService.GetTokenUsageAsync(sessions[i].Id, cancellationToken);
         }
 
-        // Flag which sessions have Workflow-tool scripts (a single index lookup per session)
-        if (workflowService is not null)
-        {
-            foreach (var session in sessions)
-            {
-                var (hasWorkflow, workflowCount) = workflowService.GetWorkflowSummary(session.Id);
-                session.HasWorkflow = hasWorkflow;
-                session.WorkflowCount = workflowCount;
-            }
-        }
+        ApplyWorkflowSummaries(sessions);
 
         // Merge lead sessions into their team sessions so subagents and metadata
         // appear on the team row instead of a separate subagent-only row
@@ -185,7 +176,47 @@ public sealed class SessionService
         // task files were removed (either files only or entire directory).
         ApplyAndMergeSnapshots(sessions, discoveredIds);
 
+        ApplyTranscriptRecency(sessions);
+
         return sessions;
+    }
+
+    /// <summary>
+    /// Flags which sessions have Workflow-tool scripts, using a single index lookup per session.
+    /// </summary>
+    private void ApplyWorkflowSummaries(List<SessionInfo> sessions)
+    {
+        if (workflowService is null)
+        {
+            return;
+        }
+
+        foreach (var session in sessions)
+        {
+            var (hasWorkflow, workflowCount) = workflowService.GetWorkflowSummary(session.Id);
+            session.HasWorkflow = hasWorkflow;
+            session.WorkflowCount = workflowCount;
+        }
+    }
+
+    /// <summary>
+    /// Advances each session's <see cref="SessionInfo.ModifiedAt"/> to its transcript's
+    /// last-write time when that is newer. Task files and subagent directories stop changing
+    /// while a conversation keeps going, so without this a long-running session keeps the
+    /// timestamp of whatever last touched its directory and sorts as though abandoned.
+    /// Never moves a timestamp backwards, so a resumed or restored transcript cannot make a
+    /// freshly updated task list look stale.
+    /// </summary>
+    private void ApplyTranscriptRecency(List<SessionInfo> sessions)
+    {
+        foreach (var session in sessions)
+        {
+            var transcriptWriteUtc = activityService.TryGetTranscriptLastWriteUtc(session.Id);
+            if (transcriptWriteUtc.HasValue && transcriptWriteUtc.Value > session.ModifiedAt)
+            {
+                session.ModifiedAt = transcriptWriteUtc.Value;
+            }
+        }
     }
 
     /// <summary>
