@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.19.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.18.0...v1.19.0) (2026-10-12)
+
+
+### New features
+
+* colour ANSI escape sequences in tool output ([19a020a](https://github.com/atc-net/atc-claude-kanban/commit/19a020a83fe23909e30cb894e59d7253522f6f74))
+* jump to any session with Shift+P ([1154d5b](https://github.com/atc-net/atc-claude-kanban/commit/1154d5b9c4ef0d93b3560a8ea70c76e86d330828))
+* price every current Claude model from the published list prices ([c63f4de](https://github.com/atc-net/atc-claude-kanban/commit/c63f4de62d3dd0cfa3f1fe48baa7cd9d460596a3))
+* scroll the sidebar to a session picked with Shift+P ([1d2c4af](https://github.com/atc-net/atc-claude-kanban/commit/1d2c4afcdc7fcd0f899c7cea32e95e1efa954958))
+
+
+### Bug fixes
+
+* **ci:** publish to NuGet with trusted publishing (OIDC) ([dc629e7](https://github.com/atc-net/atc-claude-kanban/commit/dc629e73a706f697289c7480c7d1a6cd63e2fba0))
+* **ci:** update release-please to v5 and pin the GitHub Actions ([94d4154](https://github.com/atc-net/atc-claude-kanban/commit/94d41548e3857b9d1fcc8eb59b70ecc7ea6d1dd2))
+* escape quotes so agent text cannot break out of an attribute ([48a05c2](https://github.com/atc-net/atc-claude-kanban/commit/48a05c29042da0ac1ac7ecfe7acf27ee2e6174f6))
+* harden the editor and folder launch endpoints ([cf1c059](https://github.com/atc-net/atc-claude-kanban/commit/cf1c05963cdc0ab00f1e2e32bb5979ad1772631d))
+* keep the last good board when a refresh fails ([d8985be](https://github.com/atc-net/atc-claude-kanban/commit/d8985be0ce1106fe31c0eb66eaac02615e00497d))
+* name only the blockers a task is still waiting on ([dddfb91](https://github.com/atc-net/atc-claude-kanban/commit/dddfb913bd1e14bbef9540e17893a7d6de59e59f))
+* only request a session plan when the session has one ([a0c1202](https://github.com/atc-net/atc-claude-kanban/commit/a0c12027017e61df4bc1ca1bed5bffaa594d2f0c))
+* order sessions by conversation activity, not directory mtime ([8e6e453](https://github.com/atc-net/atc-claude-kanban/commit/8e6e453105758ddb84c7e8de8286662dfa2ed0c2))
+* pin the browser dependencies and render diagrams in strict mode ([93aa3dc](https://github.com/atc-net/atc-claude-kanban/commit/93aa3dcb15b2609e8b7fac4bd5d203e655b8fc56))
+* pulse the live dot on real activity, not on task state ([72b1cf8](https://github.com/atc-net/atc-claude-kanban/commit/72b1cf8a46d30937ae7739c40ff94c58578302d8))
+* rank a word-boundary match above one buried mid-word ([6bf04e3](https://github.com/atc-net/atc-claude-kanban/commit/6bf04e31930cd6d8caf3912acb8fa7a3f9000df8))
+* replace task files instead of truncating them in place ([ab168e7](https://github.com/atc-net/atc-claude-kanban/commit/ab168e750aedee00abec115b993cdd511ef7131d))
+* resolve the light theme the same way everywhere ([4f9e3cf](https://github.com/atc-net/atc-claude-kanban/commit/4f9e3cfc010f0d5ed9b0e6a9f161a14d6c3aaadf))
+* **scripts:** stop the demo fixture writing a byte-order mark ([1502bfe](https://github.com/atc-net/atc-claude-kanban/commit/1502bfee11c92e2ae7d348275b7355b2cb2a5e55))
+* show a background agent's hand-back as its result ([4c174fc](https://github.com/atc-net/atc-claude-kanban/commit/4c174fc939afb20138c06bd5b923da4cfb1f940c))
+* split Windows project paths on the board header ([f2c266d](https://github.com/atc-net/atc-claude-kanban/commit/f2c266def24f09c6ecafc409791814724fd4eca4))
+* stop bookkeeping transcript entries from masking a live session ([d0dde5e](https://github.com/atc-net/atc-claude-kanban/commit/d0dde5ea3d679ff1c03ff1f970490e32b22b4b96))
+* survive a browser that refuses local storage ([1c1776a](https://github.com/atc-net/atc-claude-kanban/commit/1c1776aae11bef0f6405a3d79d0eb1fdf9f1d0f8))
+* take a team row's recency from the session that is talking ([f906e2a](https://github.com/atc-net/atc-claude-kanban/commit/f906e2afa7e84f9bc6c630f96fd80a58927ef011))
+
 ## [1.18.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.17.0...v1.18.0) (2026-07-27)
 
 
