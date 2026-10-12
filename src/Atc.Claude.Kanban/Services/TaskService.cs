@@ -6,6 +6,12 @@ namespace Atc.Claude.Kanban.Services;
 /// </summary>
 public sealed class TaskService
 {
+    // A replace can fail while another process has the target file open for reading, which on
+    // Windows surfaces as a sharing violation rather than a wait. Retrying briefly covers the
+    // moment Claude Code spends reading the same file.
+    private const int ReplaceAttempts = 10;
+    private const int ReplaceRetryDelayMs = 10;
+
     private static readonly HashSet<string> AllowedUpdateFields = new(StringComparer.Ordinal)
     {
         "subject",
@@ -22,6 +28,9 @@ public sealed class TaskService
     private readonly string claudeDir;
     private readonly SessionService sessionService;
     private readonly JsonSerializerOptions jsonSerializerOptions;
+
+    // Makes each temporary file name unique within this process; see WriteTaskFileAsync.
+    private static int writeSequence;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskService"/> class.
@@ -245,7 +254,7 @@ public sealed class TaskService
             }
 
             var updatedJson = JsonSerializer.Serialize(document, jsonSerializerOptions);
-            await File.WriteAllTextAsync(taskFile, updatedJson, cancellationToken);
+            await WriteTaskFileAsync(taskFile, updatedJson, cancellationToken);
             return JsonSerializer.Deserialize<ClaudeTask>(updatedJson, jsonSerializerOptions);
         }
         catch (IOException)
@@ -300,7 +309,7 @@ public sealed class TaskService
             }
 
             var updatedJson = JsonSerializer.Serialize(task, jsonSerializerOptions);
-            await File.WriteAllTextAsync(taskFile, updatedJson, cancellationToken);
+            await WriteTaskFileAsync(taskFile, updatedJson, cancellationToken);
             return task;
         }
         catch (IOException)
@@ -448,6 +457,73 @@ public sealed class TaskService
         catch (IOException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Writes a task file without ever leaving a half-written file on disk. Claude Code reads
+    /// these files while we write them, and writing in place truncates the file before the new
+    /// content lands, so a reader can catch it empty or cut short. The content goes to a
+    /// uniquely named temporary file beside the target and is then moved over it, so a reader
+    /// sees either the old file or the new one.
+    /// </summary>
+    /// <param name="taskFile">The task file to replace.</param>
+    /// <param name="json">The JSON content to write.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>A task that completes once the file has been replaced.</returns>
+    private static async Task WriteTaskFileAsync(
+        string taskFile,
+        string json,
+        CancellationToken cancellationToken)
+    {
+        var sequence = Interlocked.Increment(ref writeSequence);
+        var tempFile = $"{taskFile}.{Environment.ProcessId}.{sequence}.tmp";
+
+        try
+        {
+            await File.WriteAllTextAsync(tempFile, json, cancellationToken);
+
+            for (var attempt = 1; attempt <= ReplaceAttempts; attempt++)
+            {
+                try
+                {
+                    File.Move(tempFile, taskFile, overwrite: true);
+                    return;
+                }
+                catch (IOException) when (attempt < ReplaceAttempts)
+                {
+                    await Task.Delay(attempt * ReplaceRetryDelayMs, cancellationToken);
+                }
+                catch (UnauthorizedAccessException) when (attempt < ReplaceAttempts)
+                {
+                    await Task.Delay(attempt * ReplaceRetryDelayMs, cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            DeleteIfExists(tempFile);
+        }
+    }
+
+    /// <summary>
+    /// Removes a leftover temporary file, so a failed replace does not litter the task
+    /// directory with files the board would try to read as tasks.
+    /// </summary>
+    /// <param name="path">The file to remove.</param>
+    private static void DeleteIfExists(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            // Best effort: the name is unique, so a leftover cannot collide with a later write.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Same.
         }
     }
 }
