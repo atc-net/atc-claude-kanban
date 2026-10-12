@@ -182,6 +182,37 @@ public sealed class SessionService
     }
 
     /// <summary>
+    /// Copies metadata a team row is missing from its lead session. Uses IsNullOrEmpty so empty
+    /// strings from deserialization are treated as missing too.
+    /// </summary>
+    /// <param name="session">The team session to fill in.</param>
+    /// <param name="lead">The lead session to copy from.</param>
+    private static void InheritLeadMetadata(
+        SessionInfo session,
+        SessionInfo lead)
+    {
+        if (string.IsNullOrEmpty(session.Project))
+        {
+            session.Project = lead.Project;
+        }
+
+        if (string.IsNullOrEmpty(session.Cwd))
+        {
+            session.Cwd = lead.Cwd;
+        }
+
+        if (string.IsNullOrEmpty(session.GitBranch))
+        {
+            session.GitBranch = lead.GitBranch;
+        }
+
+        if (string.IsNullOrEmpty(session.Description))
+        {
+            session.Description = lead.Description;
+        }
+    }
+
+    /// <summary>
     /// Flags which sessions have Workflow-tool scripts, using a single index lookup per session.
     /// </summary>
     private void ApplyWorkflowSummaries(List<SessionInfo> sessions)
@@ -416,27 +447,17 @@ public sealed class SessionService
             session.SubagentCount += lead.SubagentCount;
             session.ActiveSubagentCount += lead.ActiveSubagentCount;
 
-            // Inherit metadata the team session may be missing.
-            // Use IsNullOrEmpty to also catch empty strings from deserialization.
-            if (string.IsNullOrEmpty(session.Project))
+            // A team row is keyed by team name, so it has no transcript of its own and
+            // ApplyTranscriptRecency cannot reach it. The conversation driving the team is the
+            // lead's, and the task-less lead row is about to be removed along with its
+            // timestamp, so take the lead's transcript time here.
+            var leadTranscriptUtc = activityService.TryGetTranscriptLastWriteUtc(teamConfig.LeadSessionId);
+            if (leadTranscriptUtc.HasValue && leadTranscriptUtc.Value > session.ModifiedAt)
             {
-                session.Project = lead.Project;
+                session.ModifiedAt = leadTranscriptUtc.Value;
             }
 
-            if (string.IsNullOrEmpty(session.Cwd))
-            {
-                session.Cwd = lead.Cwd;
-            }
-
-            if (string.IsNullOrEmpty(session.GitBranch))
-            {
-                session.GitBranch = lead.GitBranch;
-            }
-
-            if (string.IsNullOrEmpty(session.Description))
-            {
-                session.Description = lead.Description;
-            }
+            InheritLeadMetadata(session, lead);
 
             // Remove the lead session if it has no tasks (subagent-only entry)
             if (lead.TaskCount == 0)
