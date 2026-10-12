@@ -9131,7 +9131,7 @@
     }
 
     function toggleTheme() {
-      const isCurrentlyLight = document.body.classList.contains('light');
+      const isCurrentlyLight = isLightTheme();
       if (isCurrentlyLight) {
         document.body.classList.remove('light');
         document.body.classList.add('dark-forced');
@@ -9144,12 +9144,26 @@
       updateThemeIcon();
       syncHljsTheme();
       if (typeof mermaid !== 'undefined') {
-        mermaid.initialize({ startOnLoad: false, theme: isCurrentlyLight ? 'dark' : 'default', securityLevel: 'strict' });
+        mermaid.initialize({ startOnLoad: false, theme: isLightTheme() ? 'default' : 'dark', securityLevel: 'strict' });
       }
     }
 
+    // The light class is only set when a theme was chosen explicitly. With no saved
+    // preference the CSS follows prefers-color-scheme, so the class alone does not tell
+    // you which palette is on screen -- every consumer must agree on this answer.
+    function isLightTheme() {
+      if (document.body.classList.contains('light')) return true;
+      if (document.body.classList.contains('dark-forced')) return false;
+      try {
+        const saved = localStorage.getItem('theme');
+        if (saved === 'light') return true;
+        if (saved === 'dark') return false;
+      } catch { /* site data blocked - fall through to the system preference */ }
+      return window.matchMedia('(prefers-color-scheme: light)').matches;
+    }
+
     function syncHljsTheme() {
-      const isLight = document.body.classList.contains('light');
+      const isLight = isLightTheme();
       const dark = document.getElementById('hljs-theme-dark');
       const light = document.getElementById('hljs-theme-light');
       if (dark) dark.disabled = isLight;
@@ -9157,9 +9171,7 @@
     }
 
     function updateThemeIcon() {
-      const saved = localStorage.getItem('theme');
-      const isLight = document.body.classList.contains('light') ||
-        (!saved && window.matchMedia('(prefers-color-scheme: light)').matches);
+      const isLight = isLightTheme();
       document.getElementById('theme-icon-dark').style.display = isLight ? 'none' : 'block';
       document.getElementById('theme-icon-light').style.display = isLight ? 'block' : 'none';
     }
@@ -9676,8 +9688,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       if (typeof mermaid !== 'undefined') {
-        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-        mermaid.initialize({ startOnLoad: false, theme: isDark ? 'dark' : 'default', securityLevel: 'strict' });
+        mermaid.initialize({ startOnLoad: false, theme: isLightTheme() ? 'default' : 'dark', securityLevel: 'strict' });
       }
       if (typeof marked !== 'undefined' && typeof hljs !== 'undefined') {
         const renderer = new marked.Renderer();

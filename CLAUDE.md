@@ -145,6 +145,7 @@ scripts/
 
 - **Delegated event listeners** — use `data-action` attributes, not inline `onclick` handlers
 - **Log gating** — use `log.debug()`/`log.error()` wrapper (only logs on localhost/127.0.0.1)
+- **One light-theme predicate** — `isLightTheme()` is the only correct answer to "which palette is on screen". The `light` class is set only when a theme was chosen explicitly; with no saved preference the CSS follows `prefers-color-scheme`, so a bare `classList.contains('light')` reports dark while the page renders light. Every consumer (theme icon, highlight.js stylesheet swap, mermaid init, the toggle itself) must call it rather than re-deriving
 - **Single file** — all CSS/HTML/JS in `wwwroot/index.html` (deliberate: simplifies embedded resource distribution)
 - **localStorage persistence** — user preferences survive page reloads: theme, view, notifications, archived expanded, message panel open state, collapsed project groups (`collapsedGroups`), pinned sessions (`pinnedSessions`)
 - **View toggle** — Kanban vs Timeline views with `currentView` state; both render on data updates, visibility controlled by `applyView()`
