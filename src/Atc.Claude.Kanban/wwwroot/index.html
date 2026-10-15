@@ -915,6 +915,61 @@
       margin-bottom: 8px;
     }
 
+    /* Latest-activity card: stands in for an empty board when a session works without tasks */
+    .activity-card {
+      padding: 12px 14px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--accent);
+      border-radius: 8px;
+      margin-top: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .activity-card:hover { border-color: var(--accent); }
+
+    .activity-card-title {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-secondary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .activity-row {
+      display: flex;
+      gap: 8px;
+      padding: 4px 0;
+      border-top: 1px solid var(--border);
+      min-width: 0;
+    }
+
+    .activity-row:first-of-type { border-top: none; }
+
+    .activity-row-name {
+      flex-shrink: 0;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .activity-row-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-secondary);
+    }
+
+    .activity-row-time {
+      flex-shrink: 0;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
     /* Task card */
     .task-card {
       padding: 16px;
@@ -5668,6 +5723,7 @@
         updateUrl();
         renderSession();
         fetchSubagents(sessionId);
+        refreshLatestActivity();
         if (messagePanel.classList.contains('visible')) fetchMessages(sessionId);
       } catch (error) {
         log.error('Failed to fetch tasks:', error);
@@ -6276,9 +6332,10 @@
         ? pending.map(renderTaskCard).join('')
         : `<div class="column-empty">${emptyIcon}<div>No pending tasks</div></div>`;
 
+      const activityCard = filtered.length === 0 ? renderLatestActivityCard() : '';
       inProgressTasks.innerHTML = inProgress.length > 0
         ? inProgress.map(renderTaskCard).join('')
-        : `<div class="column-empty">${emptyIcon}<div>No active tasks</div></div>`;
+        : activityCard || `<div class="column-empty">${emptyIcon}<div>No active tasks</div></div>`;
 
       completedTasks.innerHTML = completed.length > 0
         ? completed.map(renderTaskCard).join('')
@@ -6298,6 +6355,62 @@
           selectedSessionId = null;
         }
       }
+    }
+
+    // A session can work for hours without the task tools, which leaves its board empty while
+    // the agent is busy. For a session with no tasks, the In Progress column shows the last few
+    // transcript entries instead, so the board still says what the agent is (or was last) doing.
+    const LATEST_ACTIVITY_LIMIT = 4;
+    let latestActivity = { sessionId: null, messages: [], hash: '' };
+
+    function shouldShowLatestActivity() {
+      if (viewMode !== 'session' || !currentSessionId || ownerFilter) return false;
+      return !currentTasks.some(t => !t.metadata?._internal);
+    }
+
+    async function refreshLatestActivity() {
+      if (!shouldShowLatestActivity()) {
+        if (latestActivity.sessionId) {
+          latestActivity = { sessionId: null, messages: [], hash: '' };
+          renderKanban();
+        }
+        return;
+      }
+      const sessionId = currentSessionId;
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}/messages?limit=${LATEST_ACTIVITY_LIMIT}`);
+        if (!res.ok || sessionId !== currentSessionId) return;
+        const data = await res.json();
+        const messages = (data.messages || data).filter(m => m.type === 'tool_use' || m.type === 'assistant');
+        // The status is in the hash so the card header follows a thinking → idle transition.
+        const status = sessions.find(s => s.id === sessionId)?.activityStatus;
+        const hash = sessionId + status + JSON.stringify(messages.map(m => m.timestamp + m.type));
+        if (hash === latestActivity.hash) return;
+        latestActivity = { sessionId, messages, hash };
+        renderKanban();
+      } catch (err) {
+        log.error('[refreshLatestActivity] failed:', err);
+      }
+    }
+
+    function renderLatestActivityCard() {
+      if (latestActivity.sessionId !== currentSessionId || latestActivity.messages.length === 0) return '';
+      if (!shouldShowLatestActivity()) return '';
+      const rows = latestActivity.messages.slice().reverse().map(msg => {
+        const name = msg.type === 'tool_use' ? (msg.toolName || 'Tool') : 'Assistant';
+        const text = msg.type === 'tool_use' ? toolDetailText(msg) : (msg.text || '').split('\n')[0];
+        return `<div class="activity-row">
+          <span class="activity-row-name">${escapeHtml(name)}</span>
+          <span class="activity-row-text" title="${escapeAttr(stripAnsi(text))}">${escapeHtml(stripAnsi(text))}</span>
+          <span class="activity-row-time">${formatMsgTimestamp(msg.timestamp)}</span>
+        </div>`;
+      }).join('');
+      const session = sessions.find(s => s.id === currentSessionId);
+      const status = session?.activityStatus || 'idle';
+      return `<div class="activity-card" data-action="openMessagePanel" title="Open session log (Shift+L)">
+        <div class="activity-card-title"><span>Latest activity · ${escapeHtml(status)}</span><span>no tasks</span></div>
+        ${rows}
+      </div>`;
     }
 
     function selectTask(taskId, sessionId) {
@@ -8810,7 +8923,9 @@
           const delay = isMetadata ? 2000 : 500;
           refreshTimer = setTimeout(() => {
             if (!isServerConnected) return;
-            fetchSessions(!isMetadata).catch(err => log.error('[SSE] fetchSessions failed:', err));
+            fetchSessions(!isMetadata)
+              .then(refreshLatestActivity)
+              .catch(err => log.error('[SSE] fetchSessions failed:', err));
             if (currentSessionId) {
               fetchTasks(currentSessionId);
               fetchSubagents(currentSessionId);
@@ -10091,7 +10206,7 @@
         _pollMissed = true;
         return;
       }
-      fetchSessions().catch(() => {});
+      fetchSessions().then(refreshLatestActivity).catch(() => {});
     }, 15000);
 
     if (urlState.search) {
@@ -10206,6 +10321,7 @@
 
         // Message panel actions
         case 'toggleMessagePanel': toggleMessagePanel(); break;
+        case 'openMessagePanel': if (!messagePanel.classList.contains('visible')) toggleMessagePanel(); break;
         case 'toggleScratchpad': toggleScratchpad(); break;
         case 'closeScratchpad': closeScratchpad(); break;
         case 'openSessionScratchpad': e.stopPropagation(); openSessionScratchpad(sessionId); break;

@@ -170,4 +170,5 @@ scripts/
 - **Resizable panels** — drag handle on message panel edge, width persists in localStorage
 - **Open-in-editor** — clickable file paths in message log open in VS Code via `POST /api/open-in-editor`
 - **Wake detection** — heartbeat timer detects system sleep (>30s drift) and refreshes stale UI
+- **Latest-activity card** — a session with no tasks shows its last few transcript entries (tool calls / assistant text, via `/api/sessions/{id}/messages?limit=4`) in the In Progress column, since agents often work without the task tools; refreshed by `refreshLatestActivity()` on session switch, SSE refresh and the 15s poll. Clicking it opens the session log
 - **Activity polling** — unconditional 15s poll ensures status transitions are picked up even without SSE events
