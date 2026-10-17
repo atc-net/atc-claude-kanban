@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.19.0...v1.20.0) (2026-10-17)
+
+
+### New features
+
+* show latest activity on the board for sessions without tasks ([d78a874](https://github.com/atc-net/atc-claude-kanban/commit/d78a874335c524432f633fdc9e1f7658784b64d9))
+
 ## [1.19.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.18.0...v1.19.0) (2026-10-12)
 
 
