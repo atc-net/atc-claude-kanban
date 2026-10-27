@@ -789,6 +789,104 @@ public sealed class SessionServiceTests : IDisposable
             cancellationToken);
     }
 
+    private Task WriteRegistryEntryAsync(
+        int pid,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var sessionsDir = Path.Combine(tempDir, "sessions");
+        Directory.CreateDirectory(sessionsDir);
+
+        return File.WriteAllTextAsync(
+            Path.Combine(sessionsDir, $"{pid}.json"),
+            JsonSerializer.Serialize(new { pid, sessionId, kind = "interactive", cwd = "/repo", startedAt = 0L, status = "busy" }),
+            cancellationToken);
+    }
+
+    [Fact]
+    public async Task GetSessions_MarksSessionRunning_WhenRegistryProcessIsAlive()
+    {
+        // Arrange - the registry entry points at this test process, which is alive
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await WriteTaskAsync("session-live", "1", "in_progress", cancellationToken);
+        await WriteRegistryEntryAsync(Environment.ProcessId, "session-live", cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle(s => s.Id == "session-live").Subject.IsRunning.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetSessions_LeavesSessionNotRunning_WhenRegistryProcessHasExited()
+    {
+        // Arrange - a crash leaves the registry file behind with a pid no process has
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await WriteTaskAsync("session-dead", "1", "in_progress", cancellationToken);
+        await WriteRegistryEntryAsync(int.MaxValue, "session-dead", cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        var session = sessions.Should().ContainSingle(s => s.Id == "session-dead").Subject;
+        session.IsRunning.Should().BeFalse();
+        session.InProgress.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetSessions_LeavesSessionNotRunning_WhenAbsentFromRegistry()
+    {
+        // Arrange - a stopped session keeps its unfinished task but has no registry entry
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await WriteTaskAsync("session-gone", "1", "in_progress", cancellationToken);
+        await WriteRegistryEntryAsync(Environment.ProcessId, "some-other-session", cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle(s => s.Id == "session-gone").Subject.IsRunning.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetSessions_MarksTeamRunning_WhenLeadSessionIsInRegistry()
+    {
+        // Arrange - a team card is keyed by team name; its lead session is the running process
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string leadId = "aaaaaaaa-1111-2222-3333-444444444444";
+        await WriteTaskAsync("review-squad", "1", "in_progress", cancellationToken);
+        await WriteTeamConfigAsync(
+            "review-squad",
+            new
+            {
+                name = "review-squad",
+                leadSessionId = leadId,
+                members = new[]
+                {
+                    new { agentId = "team-lead@review-squad", name = "team-lead", agentType = "team-lead", cwd = "/repo" },
+                    new { agentId = "reviewer@review-squad", name = "reviewer", agentType = "general-purpose", cwd = "/repo" },
+                },
+            },
+            cancellationToken);
+        await WriteRegistryEntryAsync(Environment.ProcessId, leadId, cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle(s => s.Id == "review-squad").Subject.IsRunning.Should().BeTrue();
+    }
+
     private Task WriteTaskAsync(
         string sessionId,
         string taskId,
