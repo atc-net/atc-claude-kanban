@@ -5761,6 +5761,14 @@
         if (filterProject) {
           tasks = tasks.filter(t => matchesProjectFilter(t.project));
         }
+        // Before the session list has loaded there is nothing to judge by, so keep every task.
+        if (sessionFilter === 'active' && sessions.length > 0) {
+          const sessionsById = new Map(sessions.map(session => [session.id, session]));
+          tasks = tasks.filter(task => {
+            const session = sessionsById.get(task.sessionId);
+            return session && isShownWhenActiveOnly(session);
+          });
+        }
         currentTasks = tasks;
         updateUrl();
         renderAllTasks();
@@ -5797,8 +5805,29 @@
       applyView();
     }
 
+    // Open tasks count as running work only while a Claude Code process still owns the
+    // session: an agent that stops leaves its tasks pending/in_progress forever.
+    function hasRunningWork(session) {
+      return session.isRunning && (session.inProgress > 0 || session.pending > 0);
+    }
+
+    // The "Active Only" rule before dismissals and staleness are applied.
+    function isActiveOnlyCandidate(session) {
+      const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
+      return session.isCompleted || hasRunningWork(session) || session.hasPlan
+        || session.activeSubagentCount > 0 || (session.activityStatus && session.activityStatus !== 'idle')
+        || (session.modifiedAt && new Date(session.modifiedAt).getTime() > recentCutoff);
+    }
+
+    // Whether "Active Only" shows the session, so the all-tasks board agrees with the sidebar.
+    function isShownWhenActiveOnly(session) {
+      return isActiveOnlyCandidate(session)
+        && !dismissedSessionIds.has(session.id)
+        && !isSessionStale(session);
+    }
+
     function isSessionStale(session) {
-      if (session.inProgress > 0) return false;
+      if (hasRunningWork(session)) return false;
       const modifiedAt = new Date(session.modifiedAt);
       const daysAgo = (Date.now() - modifiedAt.getTime()) / (1000 * 60 * 60 * 24);
       return daysAgo > ARCHIVE_DAYS;
@@ -5925,7 +5954,7 @@
     // Active is wider than live: it also covers a session holding running work, which is what
     // keeps a project section expanded and counted.
     function isSessionActive(session) {
-      return isSessionLive(session) || session.inProgress > 0;
+      return isSessionLive(session) || (session.isRunning && session.inProgress > 0);
     }
 
     // Renders the non-archived sessions grouped by project, with collapsible headers
@@ -6055,12 +6084,7 @@
 
       let filteredSessions = sessions;
       if (sessionFilter === 'active') {
-        const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
-        filteredSessions = filteredSessions.filter(s =>
-          s.isCompleted || s.pending > 0 || s.inProgress > 0 || s.hasPlan
-          || s.activeSubagentCount > 0 || (s.activityStatus && s.activityStatus !== 'idle')
-          || (s.modifiedAt && new Date(s.modifiedAt).getTime() > recentCutoff)
-        );
+        filteredSessions = filteredSessions.filter(isActiveOnlyCandidate);
         filteredSessions = filteredSessions.filter(s => !dismissedSessionIds.has(s.id));
         // Force-include the currently selected session so it stays visible in the sidebar
         if (currentSessionId && !filteredSessions.some(s => s.id === currentSessionId)) {
@@ -9503,6 +9527,7 @@
       if (value === 'active') expandActiveGroups();
       updateUrl();
       renderSessions();
+      if (viewMode === 'all') showAllTasks();
     }
 
     function changeSessionLimit(value) {

@@ -178,7 +178,82 @@ public sealed class SessionService
 
         ApplyTranscriptRecency(sessions);
 
+        await ApplyRunningStateAsync(sessions, cancellationToken);
+
         return sessions;
+    }
+
+    /// <summary>
+    /// Flags the sessions a Claude Code process is still running. A session matches by its own
+    /// id or, for a team card (keyed by team name), by its team's lead session id. A registry
+    /// entry whose process has exited is ignored, so a crash that leaves its file behind does
+    /// not keep the session running forever.
+    /// </summary>
+    private async Task ApplyRunningStateAsync(
+        List<SessionInfo> sessions,
+        CancellationToken cancellationToken)
+    {
+        var liveSessions = await LoadLiveSessionsAsync(cancellationToken);
+#pragma warning disable AsyncFixer02 // In-memory LINQ on an already-awaited list
+        var runningIds = liveSessions
+            .Where(live => live.SessionId is not null && IsProcessAlive(live.Pid))
+            .Select(live => live.SessionId!)
+            .ToHashSet(StringComparer.Ordinal);
+#pragma warning restore AsyncFixer02
+
+        if (runningIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var session in sessions)
+        {
+            if (runningIds.Contains(session.Id))
+            {
+                session.IsRunning = true;
+                continue;
+            }
+
+            if (!session.IsTeam && !session.Id.StartsWith("session-", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var teamConfig = await TryLoadTeamConfigAsync(session.Id, cancellationToken);
+            session.IsRunning = teamConfig?.LeadSessionId is { } leadId && runningIds.Contains(leadId);
+        }
+    }
+
+    /// <summary>
+    /// Returns whether the process with the given id is still running. An entry without a pid
+    /// is trusted, since the registry file alone is the only evidence available.
+    /// </summary>
+    private static bool IsProcessAlive(int? pid)
+    {
+        if (pid is not { } processId || processId <= 0)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            // No process with that id
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (Win32Exception)
+        {
+            // Exists but cannot be inspected (access denied) - it is running
+            return true;
+        }
     }
 
     /// <summary>

@@ -159,6 +159,14 @@ public sealed class SessionInfo
     public string? ActivityStatus { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether a Claude Code process is still running this
+    /// session, per the live-session registry at ~/.claude/sessions/. A stopped session keeps
+    /// its unfinished tasks forever, so open tasks alone do not mean the work is still going.
+    /// </summary>
+    [JsonPropertyName("isRunning")]
+    public bool IsRunning { get; set; }
+
+    /// <summary>
     /// Gets or sets the token usage and cost summary for this session.
     /// </summary>
     [JsonPropertyName("tokenUsage")]

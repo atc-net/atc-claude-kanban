@@ -4,10 +4,17 @@ namespace Atc.Claude.Kanban.Contracts.Models;
 /// A live session entry from Claude Code's session registry at
 /// ~/.claude/sessions/{pid}.json. Used to resolve which live interactive session
 /// owns an auto-created self-team when the team's recorded leadSessionId is a
-/// resumed/ghost id that no longer maps to a discoverable session.
+/// resumed/ghost id that no longer maps to a discoverable session, and to tell which
+/// sessions still have a running process.
 /// </summary>
 public sealed class LiveSession
 {
+    /// <summary>
+    /// Gets or sets the process id of the Claude Code instance that owns the session.
+    /// </summary>
+    [JsonPropertyName("pid")]
+    public int? Pid { get; set; }
+
     /// <summary>
     /// Gets or sets the session identifier.
     /// </summary>
