@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.20.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.0...v1.20.1) (2026-10-27)
+
+
+### Bug fixes
+
+* show a resumed session's current task list ([58c0aa0](https://github.com/atc-net/atc-claude-kanban/commit/58c0aa00259d6df072388fa9cd279fb13fd602bc))
+
 ## [1.20.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.19.0...v1.20.0) (2026-10-17)
 
 
