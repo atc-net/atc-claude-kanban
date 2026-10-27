@@ -661,6 +661,101 @@ public sealed class SessionServiceTests : IDisposable
         card.TaskCount.Should().Be(1);
     }
 
+    [Theory]
+    [InlineData(3, 1)]
+    [InlineData(1, 3)]
+    public async Task GetSessions_PrefersResumedSelfTeamWithTeammatesOverStalePrefixList(
+        int liveTaskCount,
+        int staleTaskCount)
+    {
+        // Arrange — a resumed session: its original list (session-{own prefix}) is stale, and the
+        // list the running process writes to sits under a ghost-led self-team that teammates
+        // have since joined. Only the registry links it back, and it wins regardless of size.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "44444444-4444-4444-8444-444444444444";
+        const string cwd = "/repo/resumed";
+
+        await WriteSessionJsonlAsync(ownerId, "Resumed Owner", cancellationToken);
+        await WriteLiveSessionAsync("4343", ownerId, cwd, startedAt: 3_000_000, cancellationToken);
+        for (var i = 1; i <= staleTaskCount; i++)
+        {
+            await WriteTaskAsync("session-44444444", i.ToString(CultureInfo.InvariantCulture), "completed", cancellationToken);
+        }
+
+        for (var i = 1; i <= liveTaskCount; i++)
+        {
+            await WriteTaskAsync("session-cccccccc", i.ToString(CultureInfo.InvariantCulture), "pending", cancellationToken);
+        }
+
+        await WriteTeamConfigAsync(
+            "session-cccccccc",
+            new
+            {
+                name = "session-cccccccc",
+                leadSessionId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+                createdAt = 3_000_400L,
+                members = new[]
+                {
+                    new { agentId = "team-lead@session-cccccccc", name = "team-lead", agentType = "team-lead", cwd },
+                    new { agentId = "helper@session-cccccccc", name = "helper", agentType = "general-purpose", cwd },
+                },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+        var taskDir = await service.GetCustomTaskDirAsync(ownerId, cancellationToken);
+
+        // Assert
+        sessions.Should().NotContain(s => s.Id == "session-cccccccc" || s.Id == "session-44444444");
+        var owner = sessions.Should().ContainSingle(s => s.Id == ownerId).Subject;
+        owner.TaskCount.Should().Be(liveTaskCount);
+        owner.Pending.Should().Be(liveTaskCount);
+        owner.Completed.Should().Be(0);
+        taskDir.Should().Be(Path.GetFullPath(Path.Combine(tempDir, "tasks", "session-cccccccc")));
+    }
+
+    [Fact]
+    public async Task GetSessions_DoesNotMergeNamedTeamIntoSessionBootedAlongsideIt()
+    {
+        // Arrange — a user-named team created in the same cwd within the boot window of a live
+        // session. Only Claude Code's own session-{prefix} teams may be bridged to a session.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "55555555-5555-4555-8555-555555555555";
+        const string cwd = "/repo/named";
+
+        await WriteSessionJsonlAsync(sessionId, "Neighbour", cancellationToken);
+        await WriteLiveSessionAsync("4444", sessionId, cwd, startedAt: 4_000_000, cancellationToken);
+        await WriteTaskAsync("review-squad", "1", "pending", cancellationToken);
+        await WriteTeamConfigAsync(
+            "review-squad",
+            new
+            {
+                name = "review-squad",
+                leadSessionId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+                createdAt = 4_000_300L,
+                members = new[]
+                {
+                    new { agentId = "team-lead@review-squad", name = "team-lead", agentType = "team-lead", cwd },
+                    new { agentId = "reviewer@review-squad", name = "reviewer", agentType = "general-purpose", cwd },
+                },
+            },
+            cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+        var taskDir = await service.GetCustomTaskDirAsync(sessionId, cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle(s => s.Id == "review-squad");
+        sessions.Should().ContainSingle(s => s.Id == sessionId).Subject.TaskCount.Should().Be(0);
+        taskDir.Should().BeNull();
+    }
+
     private Task WriteSessionJsonlAsync(
         string sessionId,
         string aiTitle,

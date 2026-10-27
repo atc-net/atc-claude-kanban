@@ -621,13 +621,35 @@ public sealed class SessionService
             return false;
         }
 
-        var namedSession = teamConfig.Name is { } name
-                           && name.StartsWith("session-", StringComparison.Ordinal);
+        var namedSession = IsSessionNamedTeam(teamConfig);
         var soleLead = teamConfig.Members.Count == 0
                        || (teamConfig.Members.Count == 1
                            && string.Equals(teamConfig.Members[0]?.AgentType, "team-lead", StringComparison.Ordinal));
         return namedSession && soleLead;
     }
+
+    /// <summary>
+    /// Determines whether a team config is one Claude Code created for a session itself
+    /// (named session-{id prefix}) rather than a team the user named. Unlike
+    /// <see cref="IsAutoSelfTeam"/> this stays true after teammates join, because joining does
+    /// not change which session owns the list.
+    /// </summary>
+    /// <param name="teamConfig">The loaded team configuration, or null.</param>
+    /// <returns><c>true</c> when the team is named after a session; otherwise <c>false</c>.</returns>
+    private static bool IsSessionNamedTeam(
+        [NotNullWhen(true)] TeamConfig? teamConfig)
+        => teamConfig?.Name is { } name
+           && name.StartsWith("session-", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Determines whether a team's leadSessionId names no session with a transcript — the id a
+    /// resumed session was given for its list while it keeps writing its original transcript.
+    /// </summary>
+    /// <param name="teamConfig">The loaded team configuration.</param>
+    /// <returns><c>true</c> when the lead id has no transcript; otherwise <c>false</c>.</returns>
+    private bool HasGhostLead(TeamConfig teamConfig)
+        => teamConfig.LeadSessionId is not { } leadId
+           || activityService.TryGetTranscriptLastWriteUtc(leadId) is null;
 
     private async Task<(List<ClaudeTask> Tasks, DateTime LatestModified)> ReadTaskFilesAsync(
         string[] taskFiles,
@@ -1187,7 +1209,9 @@ public sealed class SessionService
     /// a session's tasks under a per-session self-team list (tasks/session-{id}/), so a live
     /// session's own tasks/{id}/ dir is often empty while the real tasks sit under a team dir
     /// it owns. Returns the owning team task directory (the one with the most tasks when a
-    /// session owns several), or null when there is nothing to redirect to.
+    /// session owns several), or null when there is nothing to redirect to. A resumed session
+    /// writes to a fresh list under a ghost-led self-team, so a list linked to it through the
+    /// live-session registry wins over its original, now stale, prefix-derived list.
     /// </summary>
     /// <param name="sessionId">The session identifier to resolve tasks for.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -1205,43 +1229,10 @@ public sealed class SessionService
         }
 
         var tasksRoot = Path.GetFullPath(Path.Combine(claudeDir, "tasks"));
-        IReadOnlyList<LiveSession>? liveSessions = null;
-        string? bestDir = null;
-        var bestCount = -1;
-
-        foreach (var teamDir in Directory.GetDirectories(teamsDir))
+        var (bestDir, bestCount, bridgedDir) = await FindOwnedTeamTaskDirsAsync(sessionId, teamsDir, tasksRoot, cancellationToken);
+        if (bridgedDir is not null)
         {
-            var teamName = Path.GetFileName(teamDir);
-            var teamConfig = await TryLoadTeamConfigAsync(teamName, cancellationToken);
-            if (teamConfig is null)
-            {
-                continue;
-            }
-
-            var owns = string.Equals(teamConfig.LeadSessionId, sessionId, StringComparison.Ordinal);
-            if (!owns && IsAutoSelfTeam(teamConfig))
-            {
-                liveSessions ??= await LoadLiveSessionsAsync(cancellationToken);
-                owns = string.Equals(ResolveSelfTeamOwnerId(teamConfig, liveSessions), sessionId, StringComparison.Ordinal);
-            }
-
-            if (!owns)
-            {
-                continue;
-            }
-
-            var teamTaskDir = Path.GetFullPath(Path.Combine(tasksRoot, teamName));
-            if (!PathHelper.IsUnderDirectory(teamTaskDir, tasksRoot) || !Directory.Exists(teamTaskDir))
-            {
-                continue;
-            }
-
-            var count = Directory.GetFiles(teamTaskDir, "*.json").Length;
-            if (count > bestCount)
-            {
-                bestCount = count;
-                bestDir = teamTaskDir;
-            }
+            return bridgedDir;
         }
 
         // Prefix-derived self-team dir: Claude Code names a session's own list
@@ -1253,6 +1244,67 @@ public sealed class SessionService
         }
 
         return bestDir;
+    }
+
+    /// <summary>
+    /// Scans the team configs for task directories a session owns: by leadSessionId (the one
+    /// with the most tasks wins) and, separately, through the live-session registry for a
+    /// session-named team whose lead is a ghost (the list a resumed session writes to).
+    /// </summary>
+    private async Task<(string? BestDir, int BestCount, string? BridgedDir)> FindOwnedTeamTaskDirsAsync(
+        string sessionId,
+        string teamsDir,
+        string tasksRoot,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<LiveSession>? liveSessions = null;
+        string? bestDir = null;
+        var bestCount = -1;
+        string? bridgedDir = null;
+        var bridgedCount = -1;
+
+        foreach (var teamDir in Directory.GetDirectories(teamsDir))
+        {
+            var teamName = Path.GetFileName(teamDir);
+            var teamConfig = await TryLoadTeamConfigAsync(teamName, cancellationToken);
+            if (teamConfig is null)
+            {
+                continue;
+            }
+
+            var owns = string.Equals(teamConfig.LeadSessionId, sessionId, StringComparison.Ordinal);
+            var bridged = false;
+            if (!owns && IsSessionNamedTeam(teamConfig) && HasGhostLead(teamConfig))
+            {
+                liveSessions ??= await LoadLiveSessionsAsync(cancellationToken);
+                bridged = string.Equals(ResolveSelfTeamOwnerId(teamConfig, liveSessions), sessionId, StringComparison.Ordinal);
+            }
+
+            if (!owns && !bridged)
+            {
+                continue;
+            }
+
+            var teamTaskDir = Path.GetFullPath(Path.Combine(tasksRoot, teamName));
+            if (!PathHelper.IsUnderDirectory(teamTaskDir, tasksRoot) || !Directory.Exists(teamTaskDir))
+            {
+                continue;
+            }
+
+            var count = Directory.GetFiles(teamTaskDir, "*.json").Length;
+            if (bridged && count > bridgedCount)
+            {
+                bridgedCount = count;
+                bridgedDir = teamTaskDir;
+            }
+            else if (!bridged && count > bestCount)
+            {
+                bestCount = count;
+                bestDir = teamTaskDir;
+            }
+        }
+
+        return (bestDir, bestCount, bridgedDir);
     }
 
     /// <summary>
@@ -1293,7 +1345,9 @@ public sealed class SessionService
     /// the tasks to the owning card (the one with the most tasks wins) and removes the
     /// duplicate. Owner resolution order: the team's leadSessionId, the UUID whose prefix the
     /// dir name carries, then the live session matched by cwd and boot time (a resumed session
-    /// keeps writing to the original team's list under a new id).
+    /// writes to a fresh list under a ghost-led self-team, which teammates may since have
+    /// joined). That registry-linked list is the one the running session uses, so its counts
+    /// replace the owner's outright instead of competing on size with the stale original.
     /// </summary>
     private async Task MergeSelfTeamCardsAsync(
         List<SessionInfo> sessions,
@@ -1307,6 +1361,7 @@ public sealed class SessionService
 
         IReadOnlyList<LiveSession>? liveSessions = null;
         var toRemove = new HashSet<SessionInfo>();
+        var bridgedOwners = new HashSet<SessionInfo>();
 
         foreach (var session in sessions)
         {
@@ -1319,14 +1374,12 @@ public sealed class SessionService
             var teamConfig = await TryLoadTeamConfigAsync(session.Id, cancellationToken);
 
             var owner = ResolveOwnerCard(session, prefix, teamConfig, byId);
-            if (owner is null && teamConfig is not null && IsAutoSelfTeam(teamConfig))
+            var bridged = false;
+            if (owner is null && IsSessionNamedTeam(teamConfig))
             {
                 liveSessions ??= await LoadLiveSessionsAsync(cancellationToken);
                 var ownerId = ResolveSelfTeamOwnerId(teamConfig, liveSessions);
-                if (ownerId is not null)
-                {
-                    byId.TryGetValue(ownerId, out owner);
-                }
+                bridged = ownerId is not null && byId.TryGetValue(ownerId, out owner);
             }
 
             if (owner is null || ReferenceEquals(owner, session))
@@ -1334,7 +1387,16 @@ public sealed class SessionService
                 continue;
             }
 
-            AttachRicherTaskCounts(owner, session);
+            if (bridged)
+            {
+                CopyTaskCounts(owner, session);
+                bridgedOwners.Add(owner);
+            }
+            else if (!bridgedOwners.Contains(owner))
+            {
+                AttachRicherTaskCounts(owner, session);
+            }
+
             toRemove.Add(session);
         }
 
@@ -1387,11 +1449,19 @@ public sealed class SessionService
         SessionInfo owner,
         SessionInfo selfTeam)
     {
-        if (selfTeam.TaskCount <= owner.TaskCount)
+        if (selfTeam.TaskCount > owner.TaskCount)
         {
-            return;
+            CopyTaskCounts(owner, selfTeam);
         }
+    }
 
+    /// <summary>
+    /// Copies the self-team card's task counts onto the owner card.
+    /// </summary>
+    private static void CopyTaskCounts(
+        SessionInfo owner,
+        SessionInfo selfTeam)
+    {
         owner.TaskCount = selfTeam.TaskCount;
         owner.Pending = selfTeam.Pending;
         owner.InProgress = selfTeam.InProgress;
