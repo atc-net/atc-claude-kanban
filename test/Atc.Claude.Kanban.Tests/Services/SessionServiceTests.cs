@@ -717,6 +717,27 @@ public sealed class SessionServiceTests : IDisposable
         taskDir.Should().Be(Path.GetFullPath(Path.Combine(tempDir, "tasks", "session-cccccccc")));
     }
 
+    [Fact]
+    public async Task GetSessions_HidesEmptyOrphanTaskList()
+    {
+        // Arrange — a session-{prefix} list left empty with nothing to tie it to a session: no
+        // task files, no team config, and no transcript whose id carries the prefix. A
+        // session-named list that still holds tasks keeps its card.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Directory.CreateDirectory(Path.Combine(tempDir, "tasks", "session-eeeeeeee"));
+        await File.WriteAllTextAsync(Path.Combine(tempDir, "tasks", "session-eeeeeeee", ".highwatermark"), "19", cancellationToken);
+        await WriteTaskAsync("session-ffffffff", "1", "pending", cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().NotContain(s => s.Id == "session-eeeeeeee");
+        sessions.Should().ContainSingle(s => s.Id == "session-ffffffff");
+    }
+
     [Theory]
     [InlineData(11, true, true)]
     [InlineData(9, true, false)]
