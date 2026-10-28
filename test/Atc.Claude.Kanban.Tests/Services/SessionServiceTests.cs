@@ -336,6 +336,65 @@ public sealed class SessionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetSessions_ShowsLatestGitBranch_WhenSessionSwitchesBranch()
+    {
+        // Arrange - a short session that starts on a feature branch and moves to main
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-branch-switch";
+        var projectDir = Path.Combine(tempDir, "projects", "p");
+        Directory.CreateDirectory(projectDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, $"{sessionId}.jsonl"),
+            string.Join(
+                '\n',
+                JsonSerializer.Serialize(new { type = "user", cwd = "/repo", gitBranch = "feature/old", message = new { role = "user", content = "Hi" } }),
+                JsonSerializer.Serialize(new { type = "user", cwd = "/repo", gitBranch = "main", message = new { role = "user", content = "Merged" } })),
+            cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle().Which.GitBranch.Should().Be("main");
+    }
+
+    [Fact]
+    public async Task GetSessions_ShowsLatestGitBranch_WhenSwitchIsBeyondHeadWindow()
+    {
+        // Arrange - a long session whose branch switch only the tail scan can reach, with a
+        // sessions-index.json entry still recording the branch it started on
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string sessionId = "session-branch-tail";
+        var projectDir = Path.Combine(tempDir, "projects", "p");
+        Directory.CreateDirectory(projectDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(projectDir, "sessions-index.json"),
+            JsonSerializer.Serialize(new { originalPath = "/repo", entries = new[] { new { sessionId, projectPath = "/repo", gitBranch = "feature/old" } } }),
+            cancellationToken);
+
+        var builder = new System.Text.StringBuilder();
+        for (var i = 0; i < 400; i++)
+        {
+            builder.AppendLine(JsonSerializer.Serialize(new { type = "user", cwd = "/repo", gitBranch = "feature/old", message = new { role = "user", content = $"filler line {i} with padding to grow the file well beyond the tail-read window" } }));
+        }
+
+        builder.AppendLine(JsonSerializer.Serialize(new { type = "user", cwd = "/repo", gitBranch = "main", message = new { role = "user", content = "Merged" } }));
+        builder.Append(JsonSerializer.Serialize(new { type = "last-prompt", lastPrompt = "done" }));
+
+        await File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), builder.ToString(), cancellationToken);
+
+        var service = CreateService();
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+
+        // Assert
+        sessions.Should().ContainSingle().Which.GitBranch.Should().Be("main");
+    }
+
+    [Fact]
     public async Task GetSessions_PreservesProgressAfterTaskFilesRemoved()
     {
         // Arrange — create a session with 3 tasks, then remove the task files
