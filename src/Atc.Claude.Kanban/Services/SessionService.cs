@@ -925,18 +925,20 @@ public sealed class SessionService
 
         existing.Slug ??= metadata.Slug;
         existing.CustomTitle ??= metadata.CustomTitle;
-        existing.GitBranch ??= metadata.GitBranch;
 
         if (isShadow)
         {
-            // Shadow contributes scalars only — preserve any previously resolved project/cwd.
+            // Shadow contributes scalars only — preserve any previously resolved project/cwd/branch.
             existing.ProjectPath ??= candidateProject;
+            existing.GitBranch ??= metadata.GitBranch;
             return;
         }
 
-        // Strong entry — let its project/cwd take precedence over earlier siblings.
+        // Strong entry — let its project/cwd/branch take precedence over earlier siblings
+        // and over sessions-index.json, which records the branch a session started on.
         existing.ProjectPath = candidateProject ?? existing.ProjectPath;
         existing.Cwd = metadata.LatestCwd ?? existing.Cwd;
+        existing.GitBranch = metadata.GitBranch ?? existing.GitBranch;
 
         // Goal is direct-assigned (not guarded) so a met/cleared goal propagates as
         // null rather than sticking to a stale value from an earlier scan.
@@ -946,8 +948,8 @@ public sealed class SessionService
     /// <summary>
     /// Scans a session JSONL file to extract metadata. The head scan reads up to
     /// 250 lines to find slug, parent session, and custom title. A tail scan then
-    /// captures the most recent cwd so sessions that change directory mid-run
-    /// surface the current cwd rather than the original.
+    /// captures the most recent cwd and git branch, so a session that changes directory
+    /// or switches branch mid-run shows where it is now rather than where it started.
     /// </summary>
     private static async Task<JsonlMetadata> TryReadJsonlMetadataAsync(
         string jsonlFile,
@@ -977,11 +979,7 @@ public sealed class SessionService
                     break;
                 }
 
-                if (string.IsNullOrWhiteSpace(line))
-                {
-                    continue;
-                }
-
+                // Blank and partial lines are skipped by ExtractJsonlFields' '{' guard.
                 ExtractJsonlFields(line, ref firstCwd, ref latestCwd, ref gitBranch, ref goal, ref slug, ref parentSessionId, ref customTitle, ref aiTitle, ref agentName);
             }
         }
@@ -990,12 +988,13 @@ public sealed class SessionService
             // Skip on error — metadata is best-effort
         }
 
-        // A /goal is often set deep in a session (past the 250-line head window), so the
-        // tail value supersedes the head; latestCwd likewise tracks a late cwd switch.
+        // A /goal is often set deep in a session (past the 250-line head window), so the tail
+        // value supersedes the head; latestCwd and gitBranch likewise track a late switch.
         if (fileLength > MetadataTailReadSize)
         {
-            var (tailCwd, tailGoal, sawGoal) = await TryReadLatestCwdAndGoalFromTailAsync(jsonlFile, fileLength, cancellationToken);
+            var (tailCwd, tailBranch, tailGoal, sawGoal) = await TryReadTailMetadataAsync(jsonlFile, fileLength, cancellationToken);
             latestCwd = tailCwd ?? latestCwd;
+            gitBranch = tailBranch ?? gitBranch;
             if (sawGoal)
             {
                 goal = tailGoal;
@@ -1015,18 +1014,19 @@ public sealed class SessionService
     }
 
     /// <summary>
-    /// Reads the tail of a session JSONL file and returns the most recent cwd value
-    /// and the most recent /goal event found. <c>SawGoal</c> is true when any goal
+    /// Reads the tail of a session JSONL file and returns the most recent cwd and git
+    /// branch values and the most recent /goal event found. <c>SawGoal</c> is true when any goal
     /// event (set, met, or clear) appears in the tail, in which case <c>Goal</c> is
     /// the value to apply (null for a met/cleared goal); false means the tail carries
     /// no goal event and the head value should be kept.
     /// </summary>
-    private static async Task<(string? Cwd, string? Goal, bool SawGoal)> TryReadLatestCwdAndGoalFromTailAsync(
+    private static async Task<(string? Cwd, string? GitBranch, string? Goal, bool SawGoal)> TryReadTailMetadataAsync(
         string jsonlFile,
         long fileLength,
         CancellationToken cancellationToken)
     {
         string? cwd = null;
+        string? gitBranch = null;
         string? goal = null;
         var sawGoal = false;
 
@@ -1041,7 +1041,7 @@ public sealed class SessionService
             var tail = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
 
             // First (partial) line is discarded — the seek likely lands mid-line.
-            // Iterate newest-first so the first cwd/goal event found is the most recent.
+            // Iterate newest-first so the first cwd/branch/goal event found is the most recent.
             var lines = tail.Split('\n');
             for (var i = lines.Length - 1; i >= 1; i--)
             {
@@ -1051,30 +1051,9 @@ public sealed class SessionService
                     continue;
                 }
 
-                try
+                if (ApplyTailLine(line, ref cwd, ref gitBranch, ref goal, ref sawGoal))
                 {
-                    using var doc = JsonDocument.Parse(line);
-                    var root = doc.RootElement;
-
-                    if (cwd is null && root.TryGetProperty("cwd", out var cwdEl) && !string.IsNullOrEmpty(cwdEl.GetString()))
-                    {
-                        cwd = cwdEl.GetString();
-                    }
-
-                    if (!sawGoal && TryExtractGoalFromLine(root, out var goalValue))
-                    {
-                        goal = goalValue;
-                        sawGoal = true;
-                    }
-
-                    if (cwd is not null && sawGoal)
-                    {
-                        break;
-                    }
-                }
-                catch (JsonException)
-                {
-                    // Skip malformed lines
+                    break;
                 }
             }
         }
@@ -1083,7 +1062,47 @@ public sealed class SessionService
             // Skip on error — tail scan is best-effort
         }
 
-        return (cwd, goal, sawGoal);
+        return (cwd, gitBranch, goal, sawGoal);
+    }
+
+    /// <summary>
+    /// Fills in whichever of cwd, git branch and goal a newest-first tail line carries and is
+    /// still missing. Returns true once all three are known, so the scan can stop.
+    /// </summary>
+    private static bool ApplyTailLine(
+        string line,
+        ref string? cwd,
+        ref string? gitBranch,
+        ref string? goal,
+        ref bool sawGoal)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
+
+            if (cwd is null && root.TryGetProperty("cwd", out var cwdEl) && !string.IsNullOrEmpty(cwdEl.GetString()))
+            {
+                cwd = cwdEl.GetString();
+            }
+
+            if (gitBranch is null && root.TryGetProperty("gitBranch", out var branchEl) && !string.IsNullOrEmpty(branchEl.GetString()))
+            {
+                gitBranch = branchEl.GetString();
+            }
+
+            if (!sawGoal && TryExtractGoalFromLine(root, out var goalValue))
+            {
+                goal = goalValue;
+                sawGoal = true;
+            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed lines
+        }
+
+        return cwd is not null && gitBranch is not null && sawGoal;
     }
 
     /// <summary>
@@ -1123,7 +1142,8 @@ public sealed class SessionService
                 }
             }
 
-            if (gitBranch is null && root.TryGetProperty("gitBranch", out var branchEl))
+            // Last-write-wins: a session can switch branch, and the latest one is where it is now.
+            if (root.TryGetProperty("gitBranch", out var branchEl) && !string.IsNullOrEmpty(branchEl.GetString()))
             {
                 gitBranch = branchEl.GetString();
             }
