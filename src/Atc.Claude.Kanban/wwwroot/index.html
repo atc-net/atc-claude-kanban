@@ -5093,6 +5093,16 @@
     const knownSessions = new Map(); // client-side persistence until page refresh
     const completedTasksCache = []; // tasks preserved from sessions that completed
 
+    // Status history per session, read from the transcript by /api/sessions/{id}/task-timeline:
+    // sessionId -> Map(taskId -> { createdAt, segments: [{ start, end }] }). The timeline draws
+    // from whatever is here and redraws when a fetch brings something new, so opening it
+    // never waits on the network.
+    const taskTimelines = new Map();
+    const taskTimelineHashes = new Map();
+    const taskTimelinesInFlight = new Set();
+    const taskTimelinesStale = new Set();
+    let timelineDrawScheduled = false;
+
     function getUrlState() {
       const params = new URLSearchParams(window.location.search);
       return {
@@ -9373,15 +9383,6 @@
       }
     }
 
-    // Status history per session, read from the transcript by /api/sessions/{id}/task-timeline:
-    // sessionId -> Map(taskId -> { createdAt, segments: [{ start, end }] }). The timeline draws
-    // from whatever is here and re-renders when a fetch brings something new, so opening it
-    // never waits on the network.
-    const taskTimelines = new Map();
-    const taskTimelineHashes = new Map();
-    const taskTimelinesInFlight = new Set();
-    const taskTimelinesStale = new Set();
-
     function refreshTaskTimelines(sessionIds) {
       for (const sessionId of sessionIds) {
         if (taskTimelinesInFlight.has(sessionId)) {
@@ -9399,7 +9400,7 @@
             if (taskTimelineHashes.get(sessionId) === hash) return;
             taskTimelineHashes.set(sessionId, hash);
             taskTimelines.set(sessionId, new Map(tasks.map(entry => [entry.taskId, entry])));
-            if (currentView === 'timeline') renderTimeline();
+            scheduleTimelineDraw();
           })
           .catch(error => log.debug('[timeline] fetch failed', error))
           .finally(() => {
@@ -9409,10 +9410,21 @@
       }
     }
 
+    // Only draws: a fetch landing must not start more fetches, and a burst of them (one per
+    // session in the all-tasks view) collapses into a single redraw
+    function scheduleTimelineDraw() {
+      if (timelineDrawScheduled) return;
+      timelineDrawScheduled = true;
+      requestAnimationFrame(() => {
+        timelineDrawScheduled = false;
+        if (currentView === 'timeline') drawTimeline();
+      });
+    }
+
     // Each stretch the task spent in progress, in ms. The transcript records the runs, but the
     // task file has the final say on the current status: a change made outside the transcript
     // (from this board, or by a teammate) opens or closes the last run at the file's last write.
-    function timelineSegmentsFor(task, entry) {
+    function timelineSegmentsFor(task, entry, session) {
       const updated = Date.parse(task.updatedAt || task.createdAt);
       const segments = (entry?.segments ?? []).map(segment => ({
         start: Date.parse(segment.start),
@@ -9424,6 +9436,14 @@
         if (!last || last.end !== null) segments.push({ start: updated, end: null });
       } else if (last && last.end === null) {
         last.end = Math.max(last.start, updated);
+      }
+
+      // A run only goes on while its session does. An agent that stops leaves its task
+      // in_progress for good, so past the session's last activity the run is over, not growing
+      const open = segments[segments.length - 1];
+      if (open && open.end === null && !session?.isRunning) {
+        open.end = Math.max(open.start, Date.parse(session?.modifiedAt || task.updatedAt || task.createdAt));
+        open.abandoned = true;
       }
 
       // Completed with no recorded run: the file times are the best guess there is
@@ -9456,19 +9476,30 @@
       parts.push(`started ${clock(segments[0].start)}`);
       const last = segments[segments.length - 1];
       if (last.end !== null && task.status === 'completed') parts.push(`finished ${clock(last.end)}`);
+      if (last.abandoned) parts.push(`session stopped ${clock(last.end)}`);
       if (!recorded) parts.push('approximate');
       return parts.join(' · ');
     }
 
+    function timelineTasks() {
+      const tasks = currentTasks.filter(t => !t.metadata?._internal);
+      return ownerFilter ? tasks.filter(t => t.owner === ownerFilter) : tasks;
+    }
+
+    function timelineSessionIdOf(task) {
+      return task.sessionId || currentSessionId;
+    }
+
     function renderTimeline() {
+      refreshTaskTimelines([...new Set(timelineTasks().map(timelineSessionIdOf).filter(Boolean))]);
+      drawTimeline();
+    }
+
+    function drawTimeline() {
       const axisEl = document.getElementById('timeline-axis');
       const rowsEl = document.getElementById('timeline-rows');
 
-      let filtered = currentTasks.filter(t => !t.metadata?._internal);
-      if (ownerFilter) {
-        filtered = filtered.filter(t => t.owner === ownerFilter);
-      }
-
+      const filtered = timelineTasks();
       if (filtered.length === 0) {
         axisEl.innerHTML = '';
         rowsEl.innerHTML = `
@@ -9481,17 +9512,16 @@
         return;
       }
 
-      const sessionIdOf = task => task.sessionId || currentSessionId;
-      refreshTaskTimelines([...new Set(filtered.map(sessionIdOf).filter(Boolean))]);
-
       const now = Date.now();
+      const sessionsById = new Map(sessions.map(session => [session.id, session]));
       const items = filtered.map(task => {
-        const entry = taskTimelines.get(sessionIdOf(task))?.get(task.id);
+        const sessionId = timelineSessionIdOf(task);
+        const entry = taskTimelines.get(sessionId)?.get(task.id);
         const createdAt = entry?.createdAt || task.createdAt;
         return {
           task,
           created: createdAt ? Date.parse(createdAt) : null,
-          segments: timelineSegmentsFor(task, entry),
+          segments: timelineSegmentsFor(task, entry, sessionsById.get(sessionId)),
           recorded: (entry?.segments.length ?? 0) > 0
         };
       }).filter(item => item.segments.length > 0 || item.created !== null);
@@ -9544,7 +9574,7 @@
           : segments.map(segment => {
               const left = position(segment.start);
               const width = Math.max(position(segment.end ?? now) - left, 0.5);
-              const segmentClass = segment.end === null ? 'in-progress' : closedClass;
+              const segmentClass = segment.end === null ? 'in-progress' : segment.abandoned ? 'stopped' : closedClass;
               return `<div class="timeline-bar ${segmentClass}" style="left: ${left}%; width: ${width}%"></div>`;
             }).join('');
 
@@ -9552,7 +9582,7 @@
         row.className = 'timeline-row';
         row.dataset.action = 'showTaskDetail';
         row.dataset.taskId = task.id;
-        row.dataset.sessionId = sessionIdOf(task);
+        row.dataset.sessionId = timelineSessionIdOf(task);
         row.dataset.title = task.subject;
         row.dataset.detail = describeTimelineTask(task, created, segments, recorded, now);
         row.style.cursor = 'pointer';
