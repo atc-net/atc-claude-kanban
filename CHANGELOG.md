@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.21.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.2...v1.21.0) (2026-10-28)
+
+
+### New features
+
+* add a task timeline endpoint built from transcript status changes ([2b5d096](https://github.com/atc-net/atc-claude-kanban/commit/2b5d096794838c498e9b75fa607eb99b855b6627))
+* draw timeline bars from when tasks ran, not when files changed ([ab43b79](https://github.com/atc-net/atc-claude-kanban/commit/ab43b794864cd68a42754f4be2737609fcc18829))
+
+
+### Bug fixes
+
+* stop timeline runs at the session's last activity once it has stopped ([cb934d1](https://github.com/atc-net/atc-claude-kanban/commit/cb934d1dbcc6f93609ea1bd594f6855880500ed1))
+
 ## [1.20.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.1...v1.20.2) (2026-10-28)
 
 
