@@ -641,6 +641,186 @@ public sealed class SessionActivityService
         }
     }
 
+    /// <summary>
+    /// Returns whether a session's transcript records a successful TaskCreate issued after the
+    /// given time. A task list directory changes whenever a task is created in it, so a create
+    /// issued after the directory last changed went to a different list. The transcript is
+    /// scanned backwards and stops at the first entry older than <paramref name="afterUtc"/>; the
+    /// result is cached per transcript, and a grown transcript only has its new part scanned.
+    /// </summary>
+    /// <param name="sessionId">The session identifier.</param>
+    /// <param name="afterUtc">Only creates issued after this time count.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><c>true</c> when such a create exists; otherwise <c>false</c>.</returns>
+    public async Task<bool> HasTaskCreateAfterAsync(
+        string sessionId,
+        DateTime afterUtc,
+        CancellationToken cancellationToken = default)
+    {
+        var jsonlPath = FindSessionJsonlPath(sessionId);
+        if (jsonlPath is null)
+        {
+            return false;
+        }
+
+        var cacheKey = $"task-create:{jsonlPath}";
+        var floor = 0L;
+        if (cache.TryGetValue(cacheKey, out CachedTaskCreateScan? cached) &&
+            cached is not null &&
+            cached.AfterUtc == afterUtc)
+        {
+            if (cached.Found)
+            {
+                return true;
+            }
+
+            floor = cached.ScannedLength;
+        }
+
+        try
+        {
+            var (found, scannedLength) = await ScanForTaskCreateAfterAsync(jsonlPath, floor, afterUtc, cancellationToken);
+            cache.Set(cacheKey, new CachedTaskCreateScan(afterUtc, scannedLength, found), TimeSpan.FromMinutes(10));
+            return found;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Scans a transcript backwards from its last complete line down to <paramref name="floor"/>,
+    /// returning whether a successful TaskCreate issued after <paramref name="afterUtc"/> was
+    /// found and the offset up to which the transcript has now been covered. A tool result comes
+    /// after its tool_use, so success is collected first and matched when the call is reached.
+    /// </summary>
+    private static async Task<(bool Found, long ScannedLength)> ScanForTaskCreateAfterAsync(
+        string filePath,
+        long floor,
+        DateTime afterUtc,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var position = stream.Length;
+        var scannedLength = -1L;
+        var succeededIds = new HashSet<string>(StringComparer.Ordinal);
+        var carry = Array.Empty<byte>();
+
+        while (position > floor)
+        {
+            var size = (int)System.Math.Min(TailReadSize, position - floor);
+            position -= size;
+            stream.Seek(position, SeekOrigin.Begin);
+
+            var buffer = new byte[size + carry.Length];
+            await stream.ReadExactlyAsync(buffer.AsMemory(0, size), cancellationToken);
+            carry.CopyTo(buffer, size);
+
+            var end = buffer.Length;
+            for (var i = buffer.Length - 1; i >= 0; i--)
+            {
+                if (buffer[i] != (byte)'\n')
+                {
+                    continue;
+                }
+
+                // The text after the transcript's last newline may be a line still being written
+                if (scannedLength < 0)
+                {
+                    scannedLength = position + i + 1;
+                }
+                else if (InspectForTaskCreate(buffer.AsSpan(i + 1, end - i - 1), afterUtc, succeededIds) is { } verdict)
+                {
+                    return (verdict, scannedLength);
+                }
+
+                end = i;
+            }
+
+            carry = buffer[..end];
+        }
+
+        // The region's first line starts at the floor, which is always a line boundary
+        if (scannedLength >= 0 && InspectForTaskCreate(carry, afterUtc, succeededIds) is { } firstVerdict)
+        {
+            return (firstVerdict, scannedLength);
+        }
+
+        return (false, scannedLength < 0 ? floor : scannedLength);
+    }
+
+    /// <summary>
+    /// Inspects one transcript line: <c>false</c> once the line is older than
+    /// <paramref name="afterUtc"/> (the scan can stop), <c>true</c> for a TaskCreate call whose
+    /// result succeeded, and null to keep scanning.
+    /// </summary>
+    private static bool? InspectForTaskCreate(
+        ReadOnlySpan<byte> line,
+        DateTime afterUtc,
+        HashSet<string> succeededIds)
+    {
+        if (line.IsEmpty || line[0] != (byte)'{')
+        {
+            return null;
+        }
+
+        try
+        {
+            var reader = new Utf8JsonReader(line);
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("timestamp", out var timestampElement) ||
+                !timestampElement.TryGetDateTime(out var timestamp))
+            {
+                return null;
+            }
+
+            if (timestamp.ToUniversalTime() <= afterUtc)
+            {
+                return false;
+            }
+
+            if (!root.TryGetProperty("message", out var message) ||
+                !message.TryGetProperty("content", out var content) ||
+                content.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var createSucceeded = root.TryGetProperty("toolUseResult", out var toolUseResult) &&
+                                  toolUseResult.ValueKind == JsonValueKind.Object &&
+                                  toolUseResult.TryGetProperty("task", out _);
+
+            foreach (var block in content.EnumerateArray())
+            {
+                var blockType = block.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
+                if (createSucceeded &&
+                    blockType == "tool_result" &&
+                    block.TryGetProperty("tool_use_id", out var resultId) &&
+                    resultId.GetString() is { } id)
+                {
+                    succeededIds.Add(id);
+                }
+                else if (blockType == "tool_use" &&
+                         block.TryGetProperty("name", out var name) &&
+                         name.GetString() == "TaskCreate" &&
+                         block.TryGetProperty("id", out var useId) &&
+                         useId.GetString() is { } toolUseId &&
+                         succeededIds.Contains(toolUseId))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // A malformed line carries no evidence either way
+        }
+
+        return null;
+    }
+
     private string? FindSessionJsonlPath(string sessionId)
     {
         var projectsDir = Path.Combine(claudeDir, "projects");
@@ -668,4 +848,9 @@ public sealed class SessionActivityService
     private sealed record CachedTokenUsage(
         SessionTokenUsage Usage,
         DateTime LastModifiedUtc);
+
+    private sealed record CachedTaskCreateScan(
+        DateTime AfterUtc,
+        long ScannedLength,
+        bool Found);
 }

@@ -1313,12 +1313,48 @@ public sealed class SessionService
         // Prefix-derived self-team dir: Claude Code names a session's own list
         // session-{first-8-hex-of-id}. Covers the config-less case the teams scan misses.
         var (prefixDir, prefixCount) = ResolvePrefixTaskDir(sessionId, tasksRoot);
-        if (prefixDir is not null && prefixCount > bestCount)
+        if (prefixDir is null)
         {
-            bestDir = prefixDir;
+            return bestDir;
         }
 
-        return bestDir;
+        var prefixIsBest = string.Equals(bestDir, prefixDir, StringComparison.OrdinalIgnoreCase);
+        if (!prefixIsBest && prefixCount <= bestCount)
+        {
+            return bestDir;
+        }
+
+        if (await IsPrefixListSupersededAsync(sessionId, prefixDir, cancellationToken))
+        {
+            return prefixIsBest ? null : bestDir;
+        }
+
+        return prefixDir;
+    }
+
+    /// <summary>
+    /// Determines whether a session's own prefix-derived list has been superseded: its
+    /// transcript records a successful TaskCreate issued after the list last changed, so that
+    /// task went to another list. A resumed session writes to a fresh list, and once it ends
+    /// nothing else on disk links it back, so this is what keeps the original list from
+    /// resurfacing as the session's current tasks.
+    /// </summary>
+    private async Task<bool> IsPrefixListSupersededAsync(
+        string sessionId,
+        string prefixDir,
+        CancellationToken cancellationToken)
+    {
+        DateTime changedUtc;
+        try
+        {
+            changedUtc = Directory.GetLastWriteTimeUtc(prefixDir);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+
+        return await activityService.HasTaskCreateAfterAsync(sessionId, changedUtc, cancellationToken);
     }
 
     /// <summary>
@@ -1467,7 +1503,8 @@ public sealed class SessionService
                 CopyTaskCounts(owner, session);
                 bridgedOwners.Add(owner);
             }
-            else if (!bridgedOwners.Contains(owner))
+            else if (!bridgedOwners.Contains(owner) &&
+                     !await IsOwnSupersededPrefixListAsync(owner, session, prefix, cancellationToken))
             {
                 AttachRicherTaskCounts(owner, session);
             }
@@ -1479,6 +1516,24 @@ public sealed class SessionService
         {
             sessions.RemoveAll(toRemove.Contains);
         }
+    }
+
+    /// <summary>
+    /// Determines whether a session-{prefix} card is the owner's own prefix-derived list and
+    /// that list has been superseded, in which case its stale tasks must not land on the owner.
+    /// </summary>
+    private async Task<bool> IsOwnSupersededPrefixListAsync(
+        SessionInfo owner,
+        SessionInfo selfTeam,
+        string prefix,
+        CancellationToken cancellationToken)
+    {
+        var isOwnPrefix = owner.Id.Length > prefix.Length &&
+                          owner.Id[prefix.Length] == '-' &&
+                          owner.Id.StartsWith(prefix, StringComparison.Ordinal);
+
+        return isOwnPrefix &&
+               await IsPrefixListSupersededAsync(owner.Id, Path.Combine(claudeDir, "tasks", selfTeam.Id), cancellationToken);
     }
 
     /// <summary>
