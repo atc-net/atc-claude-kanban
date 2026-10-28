@@ -21,25 +21,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<SseClientManager>();
 
-        services.AddSingleton(sp => new SubagentService(
-            claudeDir,
-            sp.GetRequiredService<IMemoryCache>()));
-
-        services.AddSingleton(sp => new MessageService(
-            claudeDir,
-            sp.GetRequiredService<IMemoryCache>()));
-
-        services.AddSingleton(sp => new SessionActivityService(
-            claudeDir,
-            sp.GetRequiredService<IMemoryCache>()));
-
-        services.AddSingleton(sp => new ToolStatsService(
-            claudeDir,
-            sp.GetRequiredService<IMemoryCache>()));
-
-        services.AddSingleton(sp => new UsageService(
-            sp.GetRequiredService<SessionActivityService>(),
-            sp.GetRequiredService<SubagentService>()));
+        AddTranscriptServices(services, claudeDir);
 
         services.AddSingleton(sp => new WorkflowService(
             claudeDir,
@@ -98,6 +80,36 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILogger<UpdateCheckService>>()));
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers the services that read session and subagent JSONL transcripts.
+    /// </summary>
+    private static void AddTranscriptServices(
+        IServiceCollection services,
+        string claudeDir)
+    {
+        services.AddSingleton(sp => new SubagentService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
+        services.AddSingleton(sp => new MessageService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
+        services.AddSingleton(sp => new SessionActivityService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
+        services.AddSingleton(sp => new ToolStatsService(
+            claudeDir,
+            sp.GetRequiredService<IMemoryCache>()));
+
+        services.AddSingleton(new TaskTimelineService(claudeDir));
+
+        services.AddSingleton(sp => new UsageService(
+            sp.GetRequiredService<SessionActivityService>(),
+            sp.GetRequiredService<SubagentService>()));
     }
 
     private static bool IsUpdateCheckSuppressed()
