@@ -717,6 +717,51 @@ public sealed class SessionServiceTests : IDisposable
         taskDir.Should().Be(Path.GetFullPath(Path.Combine(tempDir, "tasks", "session-cccccccc")));
     }
 
+    [Theory]
+    [InlineData(11, true, true)]
+    [InlineData(9, true, false)]
+    [InlineData(11, false, false)]
+    public async Task GetSessions_DropsPrefixList_WhenTranscriptCreatedTasksElsewhereAfterIt(
+        int createHourUtc,
+        bool createSucceeded,
+        bool expectSuperseded)
+    {
+        // Arrange — an ended session (no registry entry, no team config left) whose own
+        // session-{prefix} list last changed at 10:00. A successful TaskCreate in its transcript
+        // after that went to another list (it was resumed), so the prefix list is stale.
+        var cancellationToken = TestContext.Current.CancellationToken;
+        const string ownerId = "66666666-6666-4666-8666-666666666666";
+        var listChangedUtc = new DateTime(2026, 1, 1, 10, 0, 0, DateTimeKind.Utc);
+        var createUtc = new DateTime(2026, 1, 1, createHourUtc, 0, 0, DateTimeKind.Utc);
+
+        await WriteTaskAsync("session-66666666", "1", "pending", cancellationToken);
+        await WriteTaskAsync("session-66666666", "2", "in_progress", cancellationToken);
+        var prefixDir = Path.Combine(tempDir, "tasks", "session-66666666");
+        Directory.SetLastWriteTimeUtc(prefixDir, listChangedUtc);
+        Directory.CreateDirectory(Path.Combine(tempDir, "teams"));
+        await WriteTaskCreateTranscriptAsync(ownerId, createUtc, createSucceeded, cancellationToken);
+
+        var service = new SessionService(tempDir, cache, jsonSerializerOptions, subagentService, new SessionActivityService(tempDir, cache));
+
+        // Act
+        var sessions = await service.GetSessionsAsync(cancellationToken: cancellationToken);
+        var taskDir = await service.GetCustomTaskDirAsync(ownerId, cancellationToken);
+
+        // Assert
+        sessions.Should().NotContain(s => s.Id == "session-66666666");
+        var owner = sessions.Should().ContainSingle(s => s.Id == ownerId).Subject;
+        if (expectSuperseded)
+        {
+            owner.TaskCount.Should().Be(0);
+            taskDir.Should().BeNull();
+        }
+        else
+        {
+            owner.TaskCount.Should().Be(2);
+            taskDir.Should().Be(Path.GetFullPath(prefixDir));
+        }
+    }
+
     [Fact]
     public async Task GetSessions_DoesNotMergeNamedTeamIntoSessionBootedAlongsideIt()
     {
@@ -767,6 +812,57 @@ public sealed class SessionServiceTests : IDisposable
             "\n",
             JsonSerializer.Serialize(new { type = "user", cwd = "/repo", message = new { role = "user", content = "Hi" } }),
             JsonSerializer.Serialize(new { type = "ai-title", aiTitle }));
+
+        return File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
+    }
+
+    private Task WriteTaskCreateTranscriptAsync(
+        string sessionId,
+        DateTime createUtc,
+        bool succeeded,
+        CancellationToken cancellationToken)
+    {
+        var projectDir = Path.Combine(tempDir, "projects", "proj");
+        Directory.CreateDirectory(projectDir);
+
+        var toolUse = new
+        {
+            type = "assistant",
+            timestamp = createUtc.ToString("O", CultureInfo.InvariantCulture),
+            message = new
+            {
+                role = "assistant",
+                content = new object[] { new { type = "tool_use", id = "toolu_create", name = "TaskCreate", input = new { subject = "Next" } } },
+            },
+        };
+        object toolResult = succeeded
+            ? new
+            {
+                type = "user",
+                timestamp = createUtc.AddSeconds(1).ToString("O", CultureInfo.InvariantCulture),
+                message = new { role = "user", content = new object[] { new { type = "tool_result", tool_use_id = "toolu_create", content = "Task #3 created successfully: Next" } } },
+                toolUseResult = new { task = new { id = "3", subject = "Next" } },
+            }
+            : new
+            {
+                type = "user",
+                timestamp = createUtc.AddSeconds(1).ToString("O", CultureInfo.InvariantCulture),
+                message = new { role = "user", content = new object[] { new { type = "tool_result", tool_use_id = "toolu_create", content = "Error: invalid input", is_error = true } } },
+                toolUseResult = "Error: invalid input",
+            };
+        var reply = new
+        {
+            type = "assistant",
+            timestamp = createUtc.AddMinutes(5).ToString("O", CultureInfo.InvariantCulture),
+            message = new { role = "assistant", content = new object[] { new { type = "text", text = "Done." } } },
+        };
+
+        var jsonl = string.Join(
+            "\n",
+            JsonSerializer.Serialize(new { type = "user", cwd = "/repo", timestamp = "2026-01-01T08:00:00.000Z", message = new { role = "user", content = "Hi" } }),
+            JsonSerializer.Serialize(toolUse),
+            JsonSerializer.Serialize(toolResult),
+            JsonSerializer.Serialize(reply)) + "\n";
 
         return File.WriteAllTextAsync(Path.Combine(projectDir, $"{sessionId}.jsonl"), jsonl, cancellationToken);
     }
