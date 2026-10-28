@@ -2816,6 +2816,23 @@
       background: var(--success);
     }
 
+    .timeline-bar.stopped {
+      background: var(--text-muted);
+      opacity: 0.6;
+    }
+
+    /* A task not started yet: a faint mark where it was created */
+    .timeline-dot {
+      position: absolute;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      margin-top: -4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      opacity: 0.45;
+    }
+
     .timeline-tooltip {
       display: none;
       position: fixed;
@@ -9356,6 +9373,93 @@
       }
     }
 
+    // Status history per session, read from the transcript by /api/sessions/{id}/task-timeline:
+    // sessionId -> Map(taskId -> { createdAt, segments: [{ start, end }] }). The timeline draws
+    // from whatever is here and re-renders when a fetch brings something new, so opening it
+    // never waits on the network.
+    const taskTimelines = new Map();
+    const taskTimelineHashes = new Map();
+    const taskTimelinesInFlight = new Set();
+    const taskTimelinesStale = new Set();
+
+    function refreshTaskTimelines(sessionIds) {
+      for (const sessionId of sessionIds) {
+        if (taskTimelinesInFlight.has(sessionId)) {
+          // Something changed mid-request; fetch once more when it lands
+          taskTimelinesStale.add(sessionId);
+          continue;
+        }
+
+        taskTimelinesInFlight.add(sessionId);
+        fetch(`/api/sessions/${sessionId}/task-timeline`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            const tasks = data?.tasks ?? [];
+            const hash = JSON.stringify(tasks);
+            if (taskTimelineHashes.get(sessionId) === hash) return;
+            taskTimelineHashes.set(sessionId, hash);
+            taskTimelines.set(sessionId, new Map(tasks.map(entry => [entry.taskId, entry])));
+            if (currentView === 'timeline') renderTimeline();
+          })
+          .catch(error => log.debug('[timeline] fetch failed', error))
+          .finally(() => {
+            taskTimelinesInFlight.delete(sessionId);
+            if (taskTimelinesStale.delete(sessionId)) refreshTaskTimelines([sessionId]);
+          });
+      }
+    }
+
+    // Each stretch the task spent in progress, in ms. The transcript records the runs, but the
+    // task file has the final say on the current status: a change made outside the transcript
+    // (from this board, or by a teammate) opens or closes the last run at the file's last write.
+    function timelineSegmentsFor(task, entry) {
+      const updated = Date.parse(task.updatedAt || task.createdAt);
+      const segments = (entry?.segments ?? []).map(segment => ({
+        start: Date.parse(segment.start),
+        end: segment.end ? Date.parse(segment.end) : null
+      }));
+
+      const last = segments[segments.length - 1];
+      if (task.status === 'in_progress') {
+        if (!last || last.end !== null) segments.push({ start: updated, end: null });
+      } else if (last && last.end === null) {
+        last.end = Math.max(last.start, updated);
+      }
+
+      // Completed with no recorded run: the file times are the best guess there is
+      if (task.status === 'completed' && segments.length === 0 && task.createdAt) {
+        segments.push({ start: Date.parse(task.createdAt), end: updated });
+      }
+
+      return segments;
+    }
+
+    function formatTimelineDuration(ms) {
+      if (ms < 1000) return 'just started';
+      if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+      if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
+      const h = Math.floor(ms / 3600000);
+      const m = Math.round((ms % 3600000) / 60000);
+      return `${h}h ${m}m`;
+    }
+
+    function describeTimelineTask(task, created, segments, recorded, now) {
+      const clock = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const status = task.status.replace('_', ' ');
+      if (segments.length === 0) {
+        return created ? `${status} · created ${clock(created)} · not started` : status;
+      }
+
+      const worked = segments.reduce((sum, segment) => sum + ((segment.end ?? now) - segment.start), 0);
+      const parts = [status, `worked ${formatTimelineDuration(worked)}`];
+      if (segments.length > 1) parts.push(`${segments.length} runs`);
+      parts.push(`started ${clock(segments[0].start)}`);
+      const last = segments[segments.length - 1];
+      if (last.end !== null && task.status === 'completed') parts.push(`finished ${clock(last.end)}`);
+      if (!recorded) parts.push('approximate');
+      return parts.join(' · ');
+    }
+
     function renderTimeline() {
       const axisEl = document.getElementById('timeline-axis');
       const rowsEl = document.getElementById('timeline-rows');
@@ -9377,8 +9481,22 @@
         return;
       }
 
-      const tasksWithTime = filtered.filter(t => t.createdAt);
-      if (tasksWithTime.length === 0) {
+      const sessionIdOf = task => task.sessionId || currentSessionId;
+      refreshTaskTimelines([...new Set(filtered.map(sessionIdOf).filter(Boolean))]);
+
+      const now = Date.now();
+      const items = filtered.map(task => {
+        const entry = taskTimelines.get(sessionIdOf(task))?.get(task.id);
+        const createdAt = entry?.createdAt || task.createdAt;
+        return {
+          task,
+          created: createdAt ? Date.parse(createdAt) : null,
+          segments: timelineSegmentsFor(task, entry),
+          recorded: (entry?.segments.length ?? 0) > 0
+        };
+      }).filter(item => item.segments.length > 0 || item.created !== null);
+
+      if (items.length === 0) {
         axisEl.innerHTML = '';
         rowsEl.innerHTML = `
           <div class="timeline-empty">
@@ -9390,16 +9508,23 @@
         return;
       }
 
-      tasksWithTime.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+      // Work in the order it started; tasks not started yet follow in id order
+      const taskNumber = task => Number.parseInt(task.id, 10) || Number.MAX_SAFE_INTEGER;
+      items.sort((a, b) => {
+        const aStart = a.segments[0]?.start ?? Infinity;
+        const bStart = b.segments[0]?.start ?? Infinity;
+        return aStart - bStart || taskNumber(a.task) - taskNumber(b.task);
+      });
 
-      const minTime = new Date(tasksWithTime[0].createdAt).getTime();
-      const maxTime = Math.max(
-        ...tasksWithTime.map(t => new Date(t.updatedAt || t.createdAt).getTime()),
-        Date.now()
-      );
-      const totalSpan = maxTime - minTime || 1;
+      // The axis spans what is drawn, running on to now only while something is in progress
+      const marks = items.flatMap(item => item.segments.length > 0
+        ? item.segments.flatMap(segment => [segment.start, segment.end ?? now])
+        : [item.created]);
+      const minTime = Math.min(...marks);
+      const maxTime = Math.max(...marks);
+      const totalSpan = maxTime - minTime || 60000;
+      const position = time => ((time - minTime) / totalSpan) * 100;
 
-      // Render axis labels
       const labelCount = 5;
       axisEl.innerHTML = '';
       for (let i = 0; i < labelCount; i++) {
@@ -9410,32 +9535,30 @@
         axisEl.appendChild(label);
       }
 
-      // Render rows
       rowsEl.innerHTML = '';
-      for (const task of tasksWithTime) {
-        const created = new Date(task.createdAt).getTime();
-        const updated = new Date(task.updatedAt || task.createdAt).getTime();
-        const left = ((created - minTime) / totalSpan) * 100;
-        const width = Math.max(((updated - created) / totalSpan) * 100, 0.5);
-        const statusClass = task.status.replace('_', '-');
+      for (const { task, created, segments, recorded } of items) {
+        // Finished runs read as done unless the task went back to pending
+        const closedClass = task.status === 'pending' ? 'stopped' : 'completed';
+        const marksHtml = segments.length === 0
+          ? `<div class="timeline-dot" style="left: clamp(0px, calc(${position(created)}% - 4px), calc(100% - 8px))"></div>`
+          : segments.map(segment => {
+              const left = position(segment.start);
+              const width = Math.max(position(segment.end ?? now) - left, 0.5);
+              const segmentClass = segment.end === null ? 'in-progress' : closedClass;
+              return `<div class="timeline-bar ${segmentClass}" style="left: ${left}%; width: ${width}%"></div>`;
+            }).join('');
 
         const row = document.createElement('div');
         row.className = 'timeline-row';
         row.dataset.action = 'showTaskDetail';
         row.dataset.taskId = task.id;
-        row.dataset.sessionId = task.sessionId || currentSessionId;
+        row.dataset.sessionId = sessionIdOf(task);
         row.dataset.title = task.subject;
-        row.dataset.created = task.createdAt;
-        row.dataset.updated = task.updatedAt || task.createdAt;
-        row.dataset.status = task.status;
+        row.dataset.detail = describeTimelineTask(task, created, segments, recorded, now);
         row.style.cursor = 'pointer';
         row.innerHTML = `
           <span class="timeline-label" title="${escapeHtml(task.subject)}">#${escapeHtml(task.id)} ${escapeHtml(task.subject)}</span>
-          <div class="timeline-bar-container">
-            <div class="timeline-bar ${statusClass}"
-                 style="left: ${left}%; width: ${width}%">
-            </div>
-          </div>`;
+          <div class="timeline-bar-container">${marksHtml}</div>`;
 
         row.addEventListener('mouseenter', showTimelineTooltip);
         row.addEventListener('mouseleave', hideTimelineTooltip);
@@ -9464,26 +9587,7 @@
       const timeEl = document.getElementById('tooltip-time');
 
       titleEl.textContent = row.dataset.title;
-
-      const created = new Date(row.dataset.created);
-      const updated = new Date(row.dataset.updated);
-      const duration = updated - created;
-      const status = row.dataset.status.replace('_', ' ');
-
-      let durationStr;
-      if (duration < 1000) {
-        durationStr = 'just started';
-      } else if (duration < 60000) {
-        durationStr = `${Math.round(duration / 1000)}s`;
-      } else if (duration < 3600000) {
-        durationStr = `${Math.round(duration / 60000)}m`;
-      } else {
-        const h = Math.floor(duration / 3600000);
-        const m = Math.round((duration % 3600000) / 60000);
-        durationStr = `${h}h ${m}m`;
-      }
-
-      timeEl.textContent = `${status} · ${durationStr} · ${created.toLocaleTimeString()}`;
+      timeEl.textContent = row.dataset.detail;
       tooltip.classList.add('visible');
 
       tooltip.style.left = `${e.clientX + 12}px`;
@@ -10232,6 +10336,9 @@
         return;
       }
       fetchSessions().then(refreshLatestActivity).catch(() => {});
+      // Running bars grow toward now, and a status change that only reached the transcript
+      // still shows up; the render also refetches the timeline
+      if (currentView === 'timeline') renderTimeline();
     }, 15000);
 
     if (urlState.search) {
