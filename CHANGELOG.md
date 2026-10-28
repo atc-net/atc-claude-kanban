@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.20.2](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.1...v1.20.2) (2026-10-28)
+
+
+### Bug fixes
+
+* hide empty task lists that belong to no session ([f1b99db](https://github.com/atc-net/atc-claude-kanban/commit/f1b99dbfc0bc49cced115d0f6db3058ab23857ed))
+* ignore stopped sessions' leftover tasks in "Active Only" ([cf1fa38](https://github.com/atc-net/atc-claude-kanban/commit/cf1fa3876a1f578e1fc3b99e06ef5bdeaee2d128))
+* keep a resumed session's stale task list hidden after it ends ([83daecd](https://github.com/atc-net/atc-claude-kanban/commit/83daecd2dac21457949c727eb762bbbed30e3e36))
+* show a session's current git branch, not the one it started on ([3e528a1](https://github.com/atc-net/atc-claude-kanban/commit/3e528a124715a0bb61dbc50bf64d1082592a7131))
+
 ## [1.20.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.0...v1.20.1) (2026-10-27)
 
 
