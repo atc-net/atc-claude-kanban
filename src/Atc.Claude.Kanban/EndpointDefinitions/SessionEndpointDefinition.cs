@@ -61,6 +61,12 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
             .WithName("GetUsage")
             .WithDescription("Retrieve token/cost usage for a session and its subagents.")
             .WithSummary("Retrieve usage breakdown for a session.");
+
+        group
+            .MapGet("/{sessionId}/task-timeline", GetTaskTimeline)
+            .WithName("GetTaskTimeline")
+            .WithDescription("Retrieve when each task went in progress and when it left it, from the session's JSONL transcript.")
+            .WithSummary("Retrieve task status history for a session.");
     }
 
     internal static async Task<Ok<IReadOnlyList<SessionInfo>>> GetSessions(
@@ -175,5 +181,16 @@ public sealed class SessionEndpointDefinition : IEndpointDefinition
         return usage is null
             ? TypedResults.NotFound()
             : TypedResults.Ok(usage);
+    }
+
+    internal static async Task<Results<Ok<TaskTimelineResponse>, NotFound>> GetTaskTimeline(
+        [FromServices] TaskTimelineService taskTimelineService,
+        [AsParameters] SessionIdParameters parameters,
+        CancellationToken cancellationToken)
+    {
+        var timeline = await taskTimelineService.GetTaskTimelineAsync(parameters.SessionId, cancellationToken);
+        return timeline is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(timeline);
     }
 }

@@ -12,7 +12,7 @@ A .NET 10 dotnet tool that serves a real-time Kanban dashboard for monitoring Cl
 # Build (Release mode enforces all analyzer rules as errors)
 dotnet build -c Release
 
-# Run tests (115 tests across 11 test classes)
+# Run tests (287 tests across 17 test classes)
 dotnet test
 
 # Run the dashboard locally
@@ -34,7 +34,8 @@ src/Atc.Claude.Kanban/
   CliOptions.cs                 # Parsed CLI argument record
   EndpointDefinitions/          # Atc.Rest.MinimalApi IEndpointDefinition implementations
     SessionEndpointDefinition   # /api/sessions, /api/sessions/{id}, /api/sessions/{id}/agents, /api/sessions/{id}/messages,
-                                #   /api/sessions/{id}/messages/{uuid}/image/{blockIndex}, /api/sessions/{id}/tool-stats, /api/sessions/{id}/usage
+                                #   /api/sessions/{id}/messages/{uuid}/image/{blockIndex}, /api/sessions/{id}/tool-stats, /api/sessions/{id}/usage,
+                                #   /api/sessions/{id}/task-timeline
     TaskEndpointDefinition      # /api/tasks/all, PUT/DELETE/POST task operations
     TeamEndpointDefinition      # /api/teams/{name}
     ProjectEndpointDefinition   # /api/projects
@@ -61,6 +62,7 @@ src/Atc.Claude.Kanban/
     MessageService              # JSONL tail-reading for session/subagent conversation messages
     SessionActivityService      # Activity status (thinking/waiting/idle/error) + token usage (incl. latest-turn context size) from JSONL
     ToolStatsService            # Per-session tool-call aggregation (success/failed/rejected, output-impact) from JSONL
+    TaskTimelineService         # Per-task in-progress segments from TaskCreate/TaskUpdate results, incremental JSONL scan
     UsageService                # Per-participant token/cost breakdown (lead session + each subagent), composes SessionActivityService + SubagentService
     ClaudeDirectoryWatcher      # BackgroundService with 4 FileSystemWatchers (extension-filtered)
     SseClientManager            # SSE client connection manager (singleton)
@@ -75,7 +77,7 @@ test/Atc.Claude.Kanban.Tests/
   Helpers/                      # PathHelper, MockHttpMessageHandler
   Services/                     # SessionService, TaskService, TeamService, SubagentService,
                                 # MessageService, SessionActivityService, PlanService,
-                                # SseClientManager, UpdateCheckService, ToolStatsService, UsageService tests
+                                # SseClientManager, UpdateCheckService, ToolStatsService, UsageService, TaskTimelineService tests
 scripts/
   seed-demo-fixture.ps1         # Materializes a synthetic ~/.claude tree for reproducible README screenshots (run with --dir)
 ```
@@ -95,6 +97,7 @@ scripts/
 - **Context-window size** — the latest turn's prompt tokens (`SessionTokenUsage.ContextTokens` = input + cache_read + cache_creation of the last `usage` block, overwritten per turn). The model's window size isn't in the transcript, so the frontend infers it: 200K, or 1M once context exceeds 200K
 - **Per-participant usage** — `UsageService` composes the lead session's usage with each subagent's transcript usage (`SessionActivityService.GetTokenUsageForPathAsync`) for the Session Usage modal. Usage is bucketed per model so a session that switches models mid-run (e.g. Opus 4.7→4.8) is priced per model and shows a `models[]` breakdown under the participant row
 - **Tool statistics** — `ToolStatsService` scans the session JSONL once, correlating `tool_use` with `tool_result`; "rejected" is detected from the line-level `toolUseResult` string (not the block content)
+- **Task timeline** — `TaskTimelineService` reads the line-level `toolUseResult` of task tool results: `{success, taskId, statusChange:{from,to}}` for updates and `{task:{id,subject}}` for creates, stamped with the line's `timestamp`. Entering `in_progress` opens a segment and leaving it closes it, so a reopened task gets one segment per run. Lines are byte-filtered for `"statusChange"` / `"toolUseResult":{"task":` before parsing, and each transcript keeps its scan state (offset + histories) so later calls read only appended bytes; a 40MB transcript scans cold in ~60ms, then ~1ms
 
 ## Known Pitfalls
 
@@ -118,6 +121,7 @@ scripts/
 - **Only conversation entries may decide activity status** — Claude Code appends bookkeeping entries after every turn (`attachment`, `last-prompt`, `ai-title`, `mode`, `permission-mode`, `atis-latch`…), so the last line of a live transcript is almost never a conversation entry. `IsStatusSignalType` allowlists `assistant`/`user`/`progress`; reading the newest line of any type reported every running session as `idle`. Keep it an allowlist — a denylist breaks again the next time a new sidecar type appears
 - **In-flight work stays live for the full 60s idle window** — a model turn pauses longer than the 15s thinking threshold between transcript writes, and the frontend polls activity on a similar interval, so classifying only inside the shorter window made a busy session flicker to `idle`. A finished `text` answer is the exception: it reads `waiting` only under 15s, then goes quiet
 - **Session recency comes from the transcript** — `ModifiedAt` is advanced to the transcript's last-write time wherever that is newer (`ApplyTranscriptRecency`), because task files and subagent directories stop changing while a conversation continues. It never moves backwards, so a resumed transcript cannot make a fresh task list look stale. The sidebar requests only the 20 most recent and filters by project client-side, so a stale timestamp hides a session entirely
+- **Task ids are reused** — Claude Code numbers a refilled list from 1 again, and a resumed session's new list does too, so a TaskCreate result resets that id's timeline history (and `deleted` drops it). A create result has only `id` + `subject`; a `task` object with a `status` is a read and must not reset anything. Failed updates (`success:false`) are ignored
 - **Message panel tool result correlation** — `tool_use.id` from assistant messages is matched to `tool_result.tool_use_id` from user messages in a single-pass JSONL scan
 - **Auto-update** — `UpdateCheckService` (BackgroundService) checks NuGet flat container API on startup with 24h cache at `{LocalApplicationData}/atc-claude-kanban/update-check.json`. Suppressed by `ATC_NO_UPDATE_CHECK=1`, `--no-update-check`, or CI env vars (`CI`, `TF_BUILD`, `GITHUB_ACTIONS`). SSE broadcasts `version-update` notifications; `SseClientManager` replays pending version-update to late-connecting clients via `pendingVersionUpdate` field
 - **Context tokens are latest-turn, not cumulative** — `ContextTokens` is overwritten per `usage` block so it ends on the most recent turn; the cumulative `InputTokens`/`CacheReadTokens` totals are much larger (cache read repeats the context every turn) and must NOT be used for the context-window bar
