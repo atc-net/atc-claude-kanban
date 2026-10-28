@@ -176,6 +176,10 @@ public sealed class SessionService
         // task files were removed (either files only or entire directory).
         ApplyAndMergeSnapshots(sessions, discoveredIds);
 
+        // Runs after the snapshot step so a list whose tasks were just removed still shows
+        // the completed progress restored from its snapshot.
+        RemoveEmptyOrphanTaskLists(sessions);
+
         ApplyTranscriptRecency(sessions);
 
         await ApplyRunningStateAsync(sessions, cancellationToken);
@@ -356,6 +360,38 @@ public sealed class SessionService
                 RestoreCompletedProgress(snapshot, snapshot);
                 sessions.Add(snapshot);
             }
+        }
+    }
+
+    /// <summary>
+    /// Removes cards for session-{prefix} task lists that hold nothing and belong to nobody: no
+    /// task files, no team config, and no owner (the self-team merge already folded every list
+    /// whose owner resolves). Claude Code leaves such a directory behind whenever a list is
+    /// emptied, typically the list a resumed session wrote to under an id with no transcript,
+    /// and keeps only its .lock and .highwatermark files, so the card would show an empty board.
+    /// Only Claude Code's own list naming (session- plus 8 hex digits) qualifies.
+    /// </summary>
+    private void RemoveEmptyOrphanTaskLists(List<SessionInfo> sessions)
+        => sessions.RemoveAll(session =>
+            IsSelfTeamListName(session.Id) &&
+            session is { TaskCount: 0, IsTeam: false, SubagentCount: 0 } &&
+            !File.Exists(Path.Combine(claudeDir, "teams", session.Id, "config.json")) &&
+            IsTaskDirEmpty(Path.Combine(claudeDir, "tasks", session.Id)));
+
+    private static bool IsSelfTeamListName(string id)
+        => id.Length == "session-".Length + 8 &&
+           id.StartsWith("session-", StringComparison.Ordinal) &&
+           !id.AsSpan("session-".Length).ContainsAnyExcept("0123456789abcdef");
+
+    private static bool IsTaskDirEmpty(string taskDir)
+    {
+        try
+        {
+            return !Directory.Exists(taskDir) || Directory.GetFiles(taskDir, "*.json").Length == 0;
+        }
+        catch (IOException)
+        {
+            return false;
         }
     }
 
