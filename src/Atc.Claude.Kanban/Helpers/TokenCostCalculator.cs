@@ -13,9 +13,9 @@ public static class TokenCostCalculator
     /// </summary>
     /// <remarks>
     /// A cache read is not a fixed fraction of the input price across the lineup. Most models
-    /// charge a tenth of input, but Opus 5.5 and Sonnet 5.5 charge a twentieth and Fable 5.1
-    /// and Mythos 5.1 charge a fortieth, so every entry carries its own figure instead of
-    /// sharing one multiplier.
+    /// charge a tenth of input, but Opus 5.5 and Sonnet 5.5 charge a twentieth and Fable 5.1,
+    /// Mythos 5.1, Fable 5.2 and Mythos 5.2 charge a fortieth, so every entry carries its own
+    /// figure instead of sharing one multiplier.
     /// <para>
     /// Transcripts record cache creation as a single number and never say whether it was a
     /// five-minute or a one-hour write, so the five-minute price is used throughout. A one-hour
@@ -30,6 +30,8 @@ public static class TokenCostCalculator
     /// </remarks>
     private static readonly (string Match, ModelPricing Pricing)[] Prices =
     [
+        ("fable-5-2", new ModelPricing(8.00, 10.00, 0.20, 40.00)),
+        ("mythos-5-2", new ModelPricing(8.00, 10.00, 0.20, 40.00)),
         ("fable-5-1", new ModelPricing(10.00, 12.50, 0.25, 50.00)),
         ("mythos-5-1", new ModelPricing(10.00, 12.50, 0.25, 50.00)),
         ("fable-5", new ModelPricing(10.00, 12.50, 1.00, 50.00)),
@@ -67,8 +69,8 @@ public static class TokenCostCalculator
     /// </summary>
     private static readonly (string Family, ModelPricing Pricing)[] FamilyFallbacks =
     [
-        ("fable", new ModelPricing(10.00, 12.50, 0.25, 50.00)),
-        ("mythos", new ModelPricing(10.00, 12.50, 0.25, 50.00)),
+        ("fable", new ModelPricing(8.00, 10.00, 0.20, 40.00)),
+        ("mythos", new ModelPricing(8.00, 10.00, 0.20, 40.00)),
         ("opus", new ModelPricing(4.00, 5.00, 0.20, 20.00)),
         ("sonnet", new ModelPricing(2.00, 2.50, 0.10, 10.00)),
         ("haiku", new ModelPricing(0.10, 0.125, 0.01, 0.50)),
