@@ -7,6 +7,8 @@ namespace Atc.Claude.Kanban.Tests.Helpers;
 public sealed class TokenCostCalculatorTests
 {
     [Theory]
+    [InlineData("claude-fable-5-2", 8.0)]
+    [InlineData("claude-mythos-5-2", 8.0)]
     [InlineData("claude-fable-5-1", 10.0)]
     [InlineData("claude-mythos-5-1", 10.0)]
     [InlineData("claude-fable-5", 10.0)]
@@ -42,6 +44,8 @@ public sealed class TokenCostCalculatorTests
     }
 
     [Theory]
+    [InlineData("claude-fable-5-2", 40.0)]
+    [InlineData("claude-mythos-5-2", 40.0)]
     [InlineData("claude-fable-5-1", 50.0)]
     [InlineData("claude-opus-5-5", 20.0)]
     [InlineData("claude-opus-5", 25.0)]
@@ -69,6 +73,8 @@ public sealed class TokenCostCalculatorTests
     }
 
     [Theory]
+    [InlineData("claude-fable-5-2", 0.20)]
+    [InlineData("claude-mythos-5-2", 0.20)]
     [InlineData("claude-fable-5-1", 0.25)]
     [InlineData("claude-fable-5", 1.0)]
     [InlineData("claude-opus-5-5", 0.20)]
@@ -98,6 +104,7 @@ public sealed class TokenCostCalculatorTests
     }
 
     [Theory]
+    [InlineData("claude-fable-5-2", 10.00)]
     [InlineData("claude-fable-5-1", 12.50)]
     [InlineData("claude-opus-5-5", 5.00)]
     [InlineData("claude-opus-4-8", 6.25)]
@@ -126,6 +133,7 @@ public sealed class TokenCostCalculatorTests
     [InlineData("claude-opus-5-5", 0.05)]
     [InlineData("claude-sonnet-5-5", 0.05)]
     [InlineData("claude-fable-5-1", 0.025)]
+    [InlineData("claude-fable-5-2", 0.025)]
     [InlineData("claude-opus-4-8", 0.10)]
     [InlineData("claude-sonnet-4-6", 0.10)]
     [InlineData("claude-haiku-4-5", 0.10)]
@@ -162,6 +170,21 @@ public sealed class TokenCostCalculatorTests
     }
 
     [Fact]
+    public void Calculate_DoesNotPriceFable52AsFable5()
+    {
+        // Arrange - "claude-fable-5-2" contains "fable-5" too, and Fable 5 reads its cache at
+        // five times what Fable 5.2 does.
+        var fable52 = Kanban.Helpers.TokenCostCalculator.Calculate(
+            0, 0, 0, 1_000_000, "claude-fable-5-2");
+        var fable5 = Kanban.Helpers.TokenCostCalculator.Calculate(
+            0, 0, 0, 1_000_000, "claude-fable-5");
+
+        // Assert
+        fable52.Should().BeApproximately(0.20, 1e-9);
+        fable5.Should().BeApproximately(1.00, 1e-9);
+    }
+
+    [Fact]
     public void Calculate_ChargesRetiredOpusAtItsOwnHigherPrice()
     {
         // Arrange - Opus 4 and 4.1 cost three times what 4.5 and later do, so treating every
@@ -180,7 +203,8 @@ public sealed class TokenCostCalculatorTests
     [InlineData("claude-opus-9-9", 4.0, 20.0)]
     [InlineData("claude-sonnet-9-9", 2.0, 10.0)]
     [InlineData("claude-haiku-9-9", 0.10, 0.50)]
-    [InlineData("claude-fable-9-9", 10.0, 50.0)]
+    [InlineData("claude-fable-9-9", 8.0, 40.0)]
+    [InlineData("claude-mythos-9-9", 8.0, 40.0)]
     public void Calculate_FallsBackToTheCurrentModelOfAKnownFamily(
         string model,
         double expectedInputCost,
