@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.1](https://github.com/atc-net/atc-claude-kanban/compare/v1.21.0...v1.21.1) (2026-11-10)
+
+
+### Bug fixes
+
+* price Fable 5.2 and Mythos 5.2 at their own list prices ([d6a1a73](https://github.com/atc-net/atc-claude-kanban/commit/d6a1a73767c66923e230dd06a76cc3a90f00fe73))
+
 ## [1.21.0](https://github.com/atc-net/atc-claude-kanban/compare/v1.20.2...v1.21.0) (2026-10-28)
 
 
